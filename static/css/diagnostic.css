@@ -275,3 +275,279 @@ footer {
         font-size: 12px;
     }
 } 
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* Header Styles */
+header {
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 500;
+    flex: 1;
+}
+
+.status-indicator {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    margin-left: 20px;
+}
+
+.uptime, .timestamp {
+    font-size: 14px;
+    color: #666;
+    margin-left: 20px;
+}
+
+/* Diagnostic Grid */
+.diagnostic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.diagnostic-card {
+    background-color: white;
+    border-radius: 5px;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.full-width {
+    grid-column: 1 / -1;
+}
+
+/* Component Status Colors */
+.healthy {
+    border-left: 4px solid #4caf50;
+}
+
+.warning {
+    border-left: 4px solid #ff9800;
+}
+
+.degraded {
+    border-left: 4px solid #ff9800;
+}
+
+.critical, .error {
+    border-left: 4px solid #f44336;
+}
+
+.unknown {
+    border-left: 4px solid #9e9e9e;
+}
+
+/* Status Indicator Elements */
+.status-indicator.healthy {
+    background-color: #4caf50;
+}
+
+.status-indicator.warning {
+    background-color: #ff9800;
+}
+
+.status-indicator.degraded {
+    background-color: #ff9800;
+}
+
+.status-indicator.critical, .status-indicator.error {
+    background-color: #f44336;
+}
+
+.status-indicator.unknown {
+    background-color: #9e9e9e;
+}
+
+.component-status {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 15px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+}
+
+.component-status.healthy {
+    background-color: #4caf50;
+}
+
+.component-status.warning {
+    background-color: #ff9800;
+}
+
+.component-status.degraded {
+    background-color: #ff9800;
+}
+
+.component-status.critical, .component-status.error {
+    background-color: #f44336;
+}
+
+.component-status.unknown {
+    background-color: #9e9e9e;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.status-dot.healthy {
+    background-color: #4caf50;
+}
+
+.status-dot.warning {
+    background-color: #ff9800;
+}
+
+.status-dot.degraded {
+    background-color: #ff9800;
+}
+
+.status-dot.critical, .status-dot.error {
+    background-color: #f44336;
+}
+
+.status-dot.unknown {
+    background-color: #9e9e9e;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 15px;
+}
+
+th {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 2px solid #ddd;
+    font-weight: 500;
+}
+
+td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.transactions-table th, .transactions-table td {
+    font-size: 13px;
+    padding: 6px 8px;
+}
+
+tr.error {
+    background-color: rgba(244, 67, 54, 0.1);
+}
+
+tr.warning {
+    background-color: rgba(255, 152, 0, 0.1);
+}
+
+/* Memory Gauge */
+.memory-gauge {
+    height: 20px;
+    width: 100%;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.memory-bar {
+    height: 100%;
+    background-color: #2196f3;
+    text-align: center;
+    color: white;
+    font-size: 12px;
+    line-height: 20px;
+    transition: width 0.5s;
+}
+
+/* When memory usage is high (>80%), change color */
+.memory-bar[style*="width: 8"], 
+.memory-bar[style*="width: 9"], 
+.memory-bar[style*="width: 100"] {
+    background-color: #f44336;
+}
+
+/* Footer */
+footer {
+    margin-top: 30px;
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.actions {
+    margin-bottom: 15px;
+}
+
+.button {
+    display: inline-block;
+    background-color: #e0e0e0;
+    color: #333;
+    padding: 8px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    margin: 0 5px;
+}
+
+.button.primary {
+    background-color: #2196f3;
+    color: white;
+}
+
+/* Responsive Styling */
+@media (max-width: 768px) {
+    .diagnostic-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .status-indicator, .uptime, .timestamp {
+        margin-left: 0;
+        margin-top: 10px;
+    }
+    
+    .transactions-table {
+        font-size: 12px;
+    }
+} 

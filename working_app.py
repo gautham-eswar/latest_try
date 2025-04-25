@@ -442,10 +442,16 @@ def create_app():
     
     @app.route('/api/health')
     def health():
-        """Basic health check that always returns 200."""
+        """Health check endpoint"""
         return jsonify({
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat()
+            "status": "ok",
+            "uptime": str(datetime.now() - APP_START_TIME),
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0",
+            "components": {
+                "app": "healthy",
+                "file_system": "healthy" if os.path.exists(UPLOAD_FOLDER) and os.path.exists(OUTPUT_FOLDER) else "error"
+            }
         })
     
     @app.route('/api/upload', methods=['POST'])
@@ -672,60 +678,17 @@ def create_app():
     
     @app.route('/diagnostic/diagnostics')
     def diagnostics():
-        """Display detailed system diagnostics"""
+        """Diagnostic dashboard with system metrics"""
         system_info = get_system_info()
-        components = get_component_status()
+        component_status = get_component_status()
         
-        # Determine overall system status
-        overall_status = "healthy"
-        for component in components.values():
-            if component["status"] == "error":
-                overall_status = "error"
-                break
-            elif component["status"] == "warning" and overall_status != "error":
-                overall_status = "warning"
-        
-        # Mock transactions for display
-        transactions = [
-            {
-                "id": "tx_001",
-                "method": "GET",
-                "path": "/api/health",
-                "status_code": 200,
-                "duration_ms": 5,
-                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
-            },
-            {
-                "id": "tx_002",
-                "method": "GET",
-                "path": "/status",
-                "status_code": 200,
-                "duration_ms": 15,
-                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
-            }
-        ]
-        
-        # Environment variables for display (with sensitive data masked)
-        env_vars = {
-            "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "True"),
-            "OPENAI_API_KEY": "sk-*********************" if OPENAI_API_KEY else "Not set",
-            "SUPABASE_URL": os.environ.get("SUPABASE_URL", "Not set"),
-            "SUPABASE_KEY": "sk-*********************" if os.environ.get("SUPABASE_KEY") else "Not set",
-            "MAX_CONTENT_LENGTH": os.environ.get("MAX_CONTENT_LENGTH", "16777216"),
-            "CORS_ORIGINS": os.environ.get("CORS_ORIGINS", "*"),
-            "LOG_LEVEL": os.environ.get("LOG_LEVEL", "DEBUG")
-        }
-        
-        return render_template('diagnostics.html',
-                              title="Resume Optimizer - Diagnostics",
-                              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                              system_status=overall_status,
-                              uptime=get_uptime(),
-                              version="0.1.0",
-                              components=components,
-                              system_info=system_info,
-                              transactions=transactions,
-                              env_vars=env_vars)
+        return render_template('diagnostics.html', 
+                             system_info=system_info,
+                             component_status=component_status,
+                             uptime=get_uptime(),
+                             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                             timestamp_5_min_ago=(datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S"),
+                             env_vars={k: "***" if k.lower().find("key") >= 0 else v for k, v in os.environ.items()})
     
     return app
 
@@ -759,3 +722,4 @@ if __name__ == '__main__':
         logger.critical(f"Failed to start application: {str(e)}")
         logger.exception(e)
         sys.exit(1) 
+ 

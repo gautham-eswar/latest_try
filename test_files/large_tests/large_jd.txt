@@ -87,3 +87,91 @@ Location: San Francisco, CA (Hybrid - 3 days in office, 2 days remote)
 Salary Range: $160,000 - $220,000 DOE plus equity
 
 Quantum Computing Solutions Inc. is an equal opportunity employer. We celebrate diversity and are committed to creating an inclusive environment for all employees. We do not discriminate based on race, religion, color, national origin, gender, sexual orientation, age, marital status, veteran status, or disability status. 
+Quantum Computing Solutions Inc.
+
+About Us:
+Quantum Computing Solutions Inc. is a pioneering technology company at the forefront of artificial intelligence and quantum computing innovations. Our AI Platform team builds cutting-edge machine learning infrastructure used by Fortune 500 companies to solve their most complex business challenges. We're a team of passionate engineers and scientists dedicated to pushing the boundaries of what's possible with machine learning and artificial intelligence. Our culture values innovation, technical excellence, and continuous learning.
+
+Position Overview:
+We are seeking an exceptional Senior Machine Learning Engineer to join our AI Platform team. In this role, you will design, develop, and optimize advanced machine learning systems that power our core product offerings. You will work on challenging problems in distributed computing, real-time inference, and automated machine learning pipelines. This is a unique opportunity to make a significant impact on our platform's architecture and capabilities while working with some of the brightest minds in the industry.
+
+Key Responsibilities:
+• Architecture & Development (40%):
+  - Design and implement scalable, production-grade machine learning systems and infrastructure
+  - Develop high-performance, distributed training pipelines for complex deep learning models
+  - Create efficient model serving architectures that support high-throughput, low-latency inference
+  - Optimize machine learning models for production deployment across various hardware accelerators (GPUs, TPUs)
+  - Build automated feature engineering and model selection systems
+
+• Research & Innovation (25%):
+  - Research and implement state-of-the-art machine learning techniques and algorithms
+  - Develop novel approaches to solve complex problems in computer vision, NLP, and time-series forecasting
+  - Explore cutting-edge techniques in areas such as reinforcement learning, graph neural networks, and self-supervised learning
+  - Collaborate with our research team to transition academic innovations into production systems
+  - Stay current with the latest developments in machine learning and artificial intelligence
+
+• MLOps & Infrastructure (20%):
+  - Design and implement robust MLOps pipelines for continuous training, evaluation, and deployment
+  - Build monitoring systems to track model performance, data drift, and system health
+  - Develop tools for model explainability, fairness assessment, and bias detection
+  - Implement efficient data pipelines that can process terabytes of structured and unstructured data
+  - Create developer tools that improve team productivity and code quality
+
+• Leadership & Collaboration (15%):
+  - Mentor junior engineers and data scientists, providing technical guidance and code reviews
+  - Collaborate with cross-functional teams to understand business requirements and translate them into technical solutions
+  - Contribute to architectural decisions and technical roadmap planning
+  - Document best practices, design patterns, and system architectures
+  - Represent the team in technical discussions with stakeholders and executive leadership
+
+Required Qualifications:
+• Technical Skills:
+  - Advanced proficiency in Python and at least one compiled language (C++, Java, or Rust)
+  - Deep expertise in machine learning frameworks (TensorFlow, PyTorch, JAX)
+  - Extensive experience with distributed computing frameworks (Spark, Dask, Ray)
+  - Strong knowledge of cloud platforms (AWS, GCP, or Azure) and containerization (Docker, Kubernetes)
+  - Solid understanding of data structures, algorithms, and software engineering principles
+  - Experience with modern MLOps tools and practices (MLflow, Kubeflow, or equivalent)
+  - Proficiency with SQL and NoSQL databases
+  - Familiarity with CI/CD practices and tools
+
+• Experience & Education:
+  - Bachelor's degree in Computer Science, Engineering, Mathematics, or related field (Master's or PhD preferred)
+  - 5+ years of professional experience in machine learning engineering or related roles
+  - Proven track record of designing and implementing production machine learning systems at scale
+  - Experience with large-scale data processing and distributed systems
+  - History of solving complex technical challenges with innovative approaches
+
+• Personal Attributes:
+  - Strong problem-solving abilities and analytical thinking
+  - Excellent communication skills, both verbal and written
+  - Self-motivated with the ability to work independently and in a team environment
+  - Passion for learning and staying current with the latest technological developments
+  - Attention to detail and commitment to code quality and testing
+
+Preferred Qualifications:
+• PhD in Machine Learning, Computer Science, or related field
+• Experience with deep reinforcement learning, generative models, or graph neural networks
+• Contributions to open-source machine learning projects or research publications
+• Knowledge of specialized hardware for ML (GPUs, TPUs, FPGAs)
+• Experience with optimization techniques for large-scale models (quantization, pruning, distillation)
+• Familiarity with AutoML systems and neural architecture search
+• Experience with federated learning and privacy-preserving machine learning techniques
+• Background in high-performance computing or real-time systems
+• Knowledge of RESTful API design and microservices architecture
+• Experience with streaming data processing (Kafka, Flink, or similar)
+
+What We Offer:
+• Competitive salary and equity package
+• Comprehensive health, dental, and vision benefits
+• Generous vacation policy and flexible work arrangements
+• Professional development budget for conferences, courses, and certifications
+• State-of-the-art equipment and tools
+• Collaborative and innovative work environment
+• Opportunity to work on cutting-edge technology with real-world impact
+• Career growth and leadership opportunities
+
+Location: San Francisco, CA (Hybrid - 3 days in office, 2 days remote)
+Salary Range: $160,000 - $220,000 DOE plus equity
+
+Quantum Computing Solutions Inc. is an equal opportunity employer. We celebrate diversity and are committed to creating an inclusive environment for all employees. We do not discriminate based on race, religion, color, national origin, gender, sexual orientation, age, marital status, veteran status, or disability status. 

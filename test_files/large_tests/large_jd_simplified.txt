@@ -36,3 +36,40 @@ Preferred Qualifications:
 
 Location: San Francisco, CA (Hybrid)
 Salary Range: $160,000 - $220,000 DOE plus equity 
+Quantum Computing Solutions Inc.
+
+About Us:
+Quantum Computing Solutions Inc. is a pioneering technology company at the forefront of artificial intelligence and quantum computing innovations. Our AI Platform team builds cutting-edge machine learning infrastructure used by Fortune 500 companies to solve their most complex business challenges.
+
+Position Overview:
+We are seeking an exceptional Senior Machine Learning Engineer to join our AI Platform team. In this role, you will design, develop, and optimize advanced machine learning systems that power our core product offerings. You will work on challenging problems in distributed computing, real-time inference, and automated machine learning pipelines.
+
+Key Responsibilities:
+• Design and implement scalable, production-grade machine learning systems and infrastructure
+• Develop high-performance, distributed training pipelines for complex deep learning models
+• Create efficient model serving architectures that support high-throughput, low-latency inference
+• Research and implement state-of-the-art machine learning techniques and algorithms
+• Design and implement robust MLOps pipelines for continuous training, evaluation, and deployment
+• Build monitoring systems to track model performance, data drift, and system health
+• Mentor junior engineers and data scientists, providing technical guidance and code reviews
+• Collaborate with cross-functional teams to understand business requirements
+
+Required Qualifications:
+• Advanced proficiency in Python and at least one compiled language (C++, Java, or Rust)
+• Deep expertise in machine learning frameworks (TensorFlow, PyTorch, JAX)
+• Extensive experience with distributed computing frameworks (Spark, Dask, Ray)
+• Strong knowledge of cloud platforms (AWS, GCP, or Azure) and containerization (Docker, Kubernetes)
+• Experience with modern MLOps tools and practices (MLflow, Kubeflow, or equivalent)
+• Bachelor's degree in Computer Science, Engineering, Mathematics, or related field (Master's or PhD preferred)
+• 5+ years of professional experience in machine learning engineering or related roles
+• Proven track record of designing and implementing production machine learning systems at scale
+
+Preferred Qualifications:
+• PhD in Machine Learning, Computer Science, or related field
+• Experience with deep reinforcement learning, generative models, or graph neural networks
+• Contributions to open-source machine learning projects or research publications
+• Knowledge of specialized hardware for ML (GPUs, TPUs, FPGAs)
+• Experience with optimization techniques for large-scale models (quantization, pruning, distillation)
+
+Location: San Francisco, CA (Hybrid)
+Salary Range: $160,000 - $220,000 DOE plus equity 

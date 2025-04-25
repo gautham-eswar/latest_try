@@ -1,11 +1,19 @@
-# Flask and web components
-flask==2.3.3
-flask_cors==4.0.0
-werkzeug==2.3.7
-gunicorn==21.2.0
-python-dotenv==1.0.0
-httpx==0.24.1
+# Minimal required dependencies for Resume Optimizer
 
-# Utilities
-uuid==1.30
-python-dateutil==2.8.2 
+# Web Framework & Server
+flask==2.2.3
+gunicorn==23.0.0
+Werkzeug==2.2.3
+flask-cors==3.0.10
+
+# Environment & Configuration
+python-dotenv==1.0.0
+
+# API Client
+requests==2.31.0
+
+# System Monitoring
+psutil==5.9.5
+
+# Utility Libraries
+jinja2==3.1.2 

@@ -82,3 +82,86 @@
     </div>
 </body>
 </html> 
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .status-healthy { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">System Status</h5>
+                    <small>Last updated: {{ timestamp }}</small>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="display-4 mb-2 status-{{ system_status }}">
+                            {% if system_status == 'healthy' %}✓{% elif system_status == 'warning' %}⚠️{% else %}✗{% endif %}
+                        </div>
+                        <h5>Overall Status</h5>
+                        <p>{{ system_status|title }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="display-4 mb-2">
+                            {{ uptime }}
+                        </div>
+                        <h5>Uptime</h5>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="display-4 mb-2">
+                            {{ version }}
+                        </div>
+                        <h5>Version</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Component Status</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped m-0">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>Status</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for name, component in components.items() %}
+                        <tr>
+                            <td>{{ name|title }}</td>
+                            <td>
+                                <span class="badge bg-{{ component.status }} text-white">
+                                    {{ component.status|upper }}
+                                </span>
+                            </td>
+                            <td>{{ component.message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <a href="/diagnostic/diagnostics" class="btn btn-primary">Detailed Diagnostics</a>
+            <a href="/" class="btn btn-secondary">Back to API</a>
+        </div>
+    </div>
+</body>
+</html> 

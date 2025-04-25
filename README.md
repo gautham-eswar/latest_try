@@ -1,442 +1,72 @@
-# Resume-O: Resume Optimization System
+# Resume Optimizer
 
-An AI-powered resume optimization system that helps users tailor their resumes to specific job descriptions for improved matching and higher chances of interview selection.
+A web application that optimizes resumes based on job descriptions using AI.
 
-## Table of Contents
+## Features
 
-- [System Overview](#system-overview)
-- [Architecture](#architecture)
-- [Key Components](#key-components)
-- [API Documentation](#api-documentation)
-- [Data Flow](#data-flow)
-- [Development Setup](#development-setup)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
-- [Troubleshooting](#troubleshooting)
+- Resume parsing (PDF, DOCX, TXT)
+- Keyword extraction from job descriptions
+- Semantic matching between resume skills and job requirements
+- Resume enhancement suggestions
+- Enhanced resume generation in multiple formats
 
-## System Overview
+## Setup
 
-Resume-O is a comprehensive resume processing pipeline that leverages AI to optimize resumes for specific job opportunities. The system:
+### Local Development
 
-1. Parses resumes from various formats (PDF, DOCX, TXT)
-2. Extracts structured data including skills, experience, and education
-3. Analyzes job descriptions to identify key requirements and qualifications
-4. Performs semantic matching between resume content and job requirements
-5. Enhances resumes by highlighting relevant experience and skills
-6. Generates optimized resumes in multiple formats (JSON, LaTeX, PDF)
-
-The entire system is built as a modular Flask application with RESTful APIs, diagnostic capabilities, and extensive validation mechanisms.
-
-## Architecture
-
-The system follows a layered architecture:
-
-1. **Web Layer**: Flask application providing REST API endpoints
-2. **Service Layer**: Core business logic and pipeline orchestration
-3. **Data Layer**: Database access and in-memory fallback storage
-4. **Integration Layer**: OpenAI API integration for NLP processing
-
-### System Design Diagram
-
-```
-┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-│ Client        │     │ Flask App     │     │ Database      │
-│ (Web Browser/ │────▶│ (API          │────▶│ (Supabase/    │
-│  API Client)  │     │  Endpoints)   │     │  In-Memory)   │
-└───────────────┘     └───────┬───────┘     └───────────────┘
-                              │
-                              ▼
-┌───────────────┐     ┌───────────────┐     ┌───────────────┐
-│ PDF Generator │◀────│ Core Pipeline │────▶│ OpenAI API    │
-│ (LaTeX/PDF    │     │ (Processing   │     │ (NLP/AI       │
-│  Output)      │     │  Logic)       │     │  Processing)  │
-└───────────────┘     └───────────────┘     └───────────────┘
-```
-
-## Key Components
-
-### 1. Resume Parser (`resume_parser.py`)
-
-The resume parser is responsible for extracting structured data from various resume formats. It:
-- Processes PDF, DOCX, and TXT formats
-- Extracts personal information, education, work experience, and skills
-- Normalizes data into a consistent JSON structure
-- Handles various resume layouts and formatting styles
-
-### 2. Semantic Matcher (`semantic_matcher.py`)
-
-The semantic matcher analyzes the relationship between resume content and job requirements:
-- Extracts key requirements from job descriptions
-- Calculates relevance scores for each section of the resume
-- Identifies gaps in skills or experience
-- Suggests optimization strategies
-
-### 3. API Adapter (`api_adapter.py`)
-
-This component orchestrates the entire resume optimization pipeline:
-- Manages the sequence of processing steps
-- Handles error recovery and fallback strategies
-- Provides transaction tracking for diagnostics
-- Implements retry logic for external API calls
-
-### 4. PDF Generator (`pdf_generator.py`)
-
-Responsible for creating output documents in various formats:
-- Generates LaTeX files for professional formatting
-- Converts optimized resume data to PDF format
-- Implements fallback mechanisms when LaTeX is unavailable
-- Supports customizable templates
-
-### 5. Validation Strategy (`validation_strategy.py`)
-
-Implements a comprehensive validation framework:
-- Validates input files for format and content
-- Ensures resume and job description data meets quality standards
-- Provides detailed validation reports with errors and warnings
-- Supports validation chains for complex validation sequences
-
-### 6. Diagnostic System (`diagnostic_system.py`)
-
-Monitors system health and performance:
-- Tracks API request/response metrics
-- Monitors component status and performance
-- Provides a diagnostic dashboard for system monitoring
-- Logs detailed information for troubleshooting
-
-### 7. Database Interface (`database.py` and `in_memory_db.py`)
-
-Manages data persistence:
-- Stores resume data, job descriptions, and optimization results
-- Implements an in-memory fallback for development or when Supabase is unavailable
-- Tracks transaction history and processing status
-- Provides simple CRUD operations for application data
-
-## API Documentation
-
-### Resume Upload
-
-```
-POST /api/upload
-Content-Type: multipart/form-data
-
-file=@resume.pdf
-```
-
-Response:
-```json
-{
-  "resume_id": "resume_1745215385_ba8f615c",
-  "original_filename": "resume.pdf",
-  "status": "success",
-  "message": "Resume uploaded and parsed successfully"
-}
-```
-
-### Resume Optimization
-
-```
-POST /api/optimize
-Content-Type: application/json
-
-{
-  "resume_id": "resume_1745215385_ba8f615c",
-  "job_description": "Looking for a software engineer with 5+ years of experience in Python and web development..."
-}
-```
-
-Response:
-```json
-{
-  "resume_id": "resume_1745215385_ba8f615c",
-  "status": "success",
-  "message": "Resume optimized successfully",
-  "match_score": 0.85,
-  "optimization_summary": {
-    "highlighted_skills": ["Python", "Web Development"],
-    "suggested_improvements": ["Add more detail about database experience"]
-  }
-}
-```
-
-### Resume Download
-
-```
-GET /api/download/{resume_id}/{format}
-```
-
-Supported formats: `json`, `latex`, `pdf`
-
-Response: The optimized resume in the requested format.
-
-### Health Check
-
-```
-GET /api/health
-```
-
-Response:
-```json
-{
-  "status": "healthy",
-  "uptime": "12h 5m 30s",
-  "components": {
-    "database": "connected",
-    "openai_api": "available",
-    "pdf_generator": "available"
-  },
-  "timestamp": "2025-04-23T05:20:09.166Z"
-}
-```
-
-### Diagnostics Dashboard
-
-```
-GET /diagnostic/diagnostics
-```
-
-Response: HTML page with system diagnostics and performance metrics.
-
-## Data Flow
-
-1. **Upload Flow**:
-   - Client uploads resume file
-   - System validates file format and content
-   - Resume parser extracts structured data
-   - Structured data is stored in database
-   - Resume ID is returned to client
-
-2. **Optimization Flow**:
-   - Client sends resume ID and job description
-   - System retrieves resume data from database
-   - Semantic matcher analyzes job requirements
-   - Optimization algorithms enhance resume content
-   - Enhanced resume is stored in database
-   - Optimization summary is returned to client
-
-3. **Download Flow**:
-   - Client requests optimized resume in specific format
-   - System retrieves enhanced resume data
-   - PDF generator creates requested format
-   - Formatted resume is returned to client
-
-## Development Setup
-
-### Prerequisites
-
-- Python 3.10+ (3.12/3.13 recommended)
-- Flask and dependencies
-- LaTeX (optional, for PDF generation)
-- OpenAI API key
-- Supabase account (optional, for database)
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/gautham-eswar/latest_try.git
-   cd resume-o
-   ```
-
+1. Clone the repository
 2. Create a virtual environment:
-   ```bash
-   python3 -m venv simple-venv
+   ```
+   python -m venv simple-venv
    source simple-venv/bin/activate  # On Windows: simple-venv\Scripts\activate
    ```
-
 3. Install dependencies:
-   ```bash
+   ```
    pip install -r requirements.txt
    ```
-
 4. Set up environment variables:
-   Create a `.env` file:
    ```
-   OPENAI_API_KEY=your_openai_api_key_here
-   SUPABASE_URL=your_supabase_url_here  # Optional
-   SUPABASE_KEY=your_supabase_key_here  # Optional
-   PORT=8085  # Default port (use a port other than 5000 on macOS)
-   DEBUG=true
+   export OPENAI_API_KEY=your_openai_api_key
+   export FLASK_ENV=development
+   ```
+5. Run the application:
+   ```
+   python working_app.py
    ```
 
-5. Choose the appropriate application to run:
-   - For development with simplified dependencies:
-     ```bash
-     python3 working_app.py --port 8085 --debug
-     ```
-   - For testing with minimal dependencies:
-     ```bash
-     python3 simple_app.py --port 8085
-     ```
-   - For production with full features:
-     ```bash
-     python3 app.py --port 8085
-     ```
+### Docker
 
-   > **Note**: On macOS, port 5000 is used by AirPlay. Use an alternative port like 8085.
+1. Build and run using Docker:
+   ```
+   docker build -t resume-optimizer .
+   docker run -p 8080:8080 -e OPENAI_API_KEY=your_openai_api_key resume-optimizer
+   ```
 
-6. Access the application:
-   - API: http://localhost:8085/api/health
-   - Diagnostics: http://localhost:8085/diagnostic/diagnostics
+2. Or use Docker Compose:
+   ```
+   export OPENAI_API_KEY=your_openai_api_key
+   docker-compose up
+   ```
+
+## API Endpoints
+
+- `POST /api/upload`: Upload a resume file
+- `POST /api/optimize`: Optimize a resume with a job description
+- `GET /api/resume/:id`: Get a resume by ID
+- `GET /api/resume/:id/download`: Download an enhanced resume
 
 ## Testing
 
-### Test Scripts
-
-- `test_resume_processing.py`: Validates core resume processing functionality
-- `test_pipeline.py`: Tests the full optimization pipeline
-- `large_input_test.py`: Performance testing with larger inputs
-
-### Running Tests
-
-```bash
-# Run basic tests
-python3 test_resume_processing.py
-
-# Test full pipeline with sample resume
-python3 test_pipeline.py --resume test_files/sample_resume.pdf --job test_files/sample_job.txt
-
-# Performance testing
-python3 large_input_test.py --iterations 10
+Run the test suite:
+```
+python test_resume_processing.py
 ```
 
-### Validation Framework
-
-The system includes a comprehensive validation framework in `validation_strategy.py` that can be used to validate system components:
-
-```python
-from validation_strategy import ValidationFactory
-
-# Create and run resume validation
-resume_chain = ValidationFactory.create_resume_validation_chain()
-is_valid = resume_chain.validate(resume_data)
-report = resume_chain.get_report()
+Performance testing with large inputs:
+```
+python large_input_test.py
 ```
 
-## Deployment
+## Diagnostics
 
-For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
-
-### Quick Deployment Steps:
-
-1. Set up a Render web service
-2. Connect to GitHub repository
-3. Configure environment variables
-4. Set build command: `pip install -r requirements.txt`
-5. Set start command: `python app.py --port $PORT`
-
-## File Structure
-
-```
-resume-o/
-├── app.py                 # Main application entry point
-├── working_app.py         # Simplified app for testing
-├── api_adapter.py         # API integration logic
-├── resume_parser.py       # Resume parsing functionality
-├── semantic_matcher.py    # Semantic matching algorithms
-├── pdf_generator.py       # PDF generation utilities
-├── validation_strategy.py # Data validation strategies
-├── diagnostic_system.py   # Monitoring and diagnostics
-├── database.py            # Database interface
-├── in_memory_db.py        # Fallback database
-├── production_checklist.py # Production readiness checks
-├── templates/             # HTML templates for UI
-│   └── diagnostics.html   # Diagnostics dashboard
-├── test_files/            # Sample files for testing
-│   ├── resumes/           # Sample resumes
-│   └── job_descriptions/  # Sample job descriptions
-├── tests/                 # Test scripts
-│   ├── test_resume_processing.py
-│   ├── test_pipeline.py
-│   └── large_input_test.py
-├── requirements.txt       # Python dependencies
-└── DEPLOYMENT.md          # Deployment guide
-```
-
-## Contributing
-
-For collaborative development, we recommend the following workflow:
-
-1. Create a feature branch from main:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. Make your changes and test locally
-
-3. Verify changes with validation script:
-   ```bash
-   python production_checklist.py --verify
-   ```
-
-4. Commit and push your changes:
-   ```bash
-   git add .
-   git commit -m "Add feature description"
-   git push origin feature/your-feature-name
-   ```
-
-5. Create a pull request on GitHub
-
-### Collaborative Workflow
-
-Multiple developers can work on the same repository by:
-1. Using separate feature branches
-2. Regular communication about changes
-3. Code reviews through pull requests
-4. Resolving merge conflicts promptly
-
-For larger teams, consider:
-1. Using a fork-and-pull-request model
-2. Setting up CI/CD pipelines for automated testing
-3. Regular code freeze periods for integration
-4. Detailed documentation of API changes
-
-## Troubleshooting
-
-### Common Issues
-
-#### Port 5000 Already in Use (macOS)
-On macOS, port 5000 is used by AirPlay. Use an alternative port:
-```bash
-python3 working_app.py --port 8085
-```
-
-#### Command Not Found: Python
-The `python` command may not be available. Use `python3` instead:
-```bash
-python3 working_app.py --port 8085
-```
-
-#### Missing Dependencies
-If you get a "No module named X" error, install the missing dependency:
-```bash
-pip install httpx flask flask-cors psutil
-```
-
-For all dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-#### OpenAI API Authentication Failures
-If you see "OpenAI API authentication failed", check:
-1. Your API key in the `.env` file is correct
-2. The API key has sufficient permissions and budget
-3. You're not hitting rate limits
-
-#### Python Version Compatibility
-Some modules may have issues with specific Python versions. 
-This application works best with Python 3.10+ (ideally 3.12 or 3.13).
-
-#### Date/Time Module Errors
-If you encounter errors with `datetime.datetime` or `datetime.timedelta`, ensure you're importing correctly:
-```python
-from datetime import datetime, timedelta
-```
-
-#### Debugging Module Import Errors
-For detailed import errors, run with debug mode:
-```bash
-python3 working_app.py --port 8085 --debug
-```
+Access the diagnostics dashboard at `/diagnostics` to monitor system performance and pipeline status.

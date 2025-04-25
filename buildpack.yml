@@ -1,0 +1,10 @@
+python:
+  version: 3.9
+  
+apt:
+  packages:
+    - texlive-latex-base
+    - texlive-fonts-recommended
+    - texlive-fonts-extra
+    - texlive-latex-extra
+    - build-essential 

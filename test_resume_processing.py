@@ -1,629 +1,501 @@
-#!/usr/bin/env python3
-"""
-Resume Processing System Test Script
-This script validates the resume processing implementation with test data and specific component tests.
-"""
-
+#!/usr/bin/env python
 import os
 import sys
 import time
-import unittest
 import json
-import io
-import tempfile
-import random
-import string
+import unittest
 import logging
-from datetime import datetime
+import requests
+import subprocess
+import tempfile
+import shutil
+from io import BytesIO
+from typing import Dict, List, Any, Tuple, Optional
 from pathlib import Path
-from contextlib import contextmanager
 from unittest.mock import patch, MagicMock
 
-# Set up basic logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('test_resume_processing')
 
-# Constants for test configuration
-TEST_DIR = Path(tempfile.mkdtemp(prefix='resume_test_'))
-SUCCESS_THRESHOLD = 70  # Success rate below this percentage will fail tests
+# Constants for testing
+BASE_URL = os.environ.get('TEST_API_URL', 'http://localhost:8080')
+TEST_FILES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_files')
+RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_results')
 
+# Create directories if they don't exist
+os.makedirs(TEST_FILES_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
-class TimedTestResult(unittest.TextTestResult):
-    """Custom test result class that tracks execution time for each test."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.test_timings = {}
-        self._start_time = 0
-        
-    def startTest(self, test):
-        self._start_time = time.time()
-        super().startTest(test)
-        
-    def addSuccess(self, test):
-        elapsed = time.time() - self._start_time
-        self.test_timings[test.id()] = elapsed
-        logger.info(f"✅ PASS: {test.id()} ({elapsed:.3f}s)")
-        super().addSuccess(test)
-        
-    def addFailure(self, test, err):
-        elapsed = time.time() - self._start_time
-        self.test_timings[test.id()] = elapsed
-        logger.error(f"❌ FAIL: {test.id()} ({elapsed:.3f}s)")
-        logger.error(f"Error: {err[1]}")
-        super().addFailure(test, err)
-        
-    def addError(self, test, err):
-        elapsed = time.time() - self._start_time
-        self.test_timings[test.id()] = elapsed
-        logger.error(f"⚠️ ERROR: {test.id()} ({elapsed:.3f}s)")
-        logger.error(f"Error: {err[1]}")
-        super().addError(test, err)
-
-
-class TimedTextTestRunner(unittest.TextTestRunner):
-    """Custom test runner that uses our TimedTestResult."""
-    
-    def __init__(self, *args, **kwargs):
-        kwargs['resultclass'] = TimedTestResult
-        super().__init__(*args, **kwargs)
-        
-    def run(self, test):
-        result = super().run(test)
-        total_time = sum(result.test_timings.values())
-        print(f"\nTotal test execution time: {total_time:.3f} seconds")
-        return result
-
-
-@contextmanager
-def measure_time(operation_name):
-    """Context manager to measure and log execution time of operations."""
-    start_time = time.time()
-    try:
-        yield
-    finally:
-        elapsed = time.time() - start_time
-        logger.info(f"{operation_name} completed in {elapsed:.3f} seconds")
-
-
-def generate_sample_pdf():
-    """Generate a minimal sample PDF resume for testing."""
-    try:
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import letter
-        
-        pdf_path = TEST_DIR / "sample_resume.pdf"
-        
-        # Create a PDF with minimal resume content
-        c = canvas.Canvas(str(pdf_path), pagesize=letter)
-        
-        # Add resume content
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(72, 750, "Sample Test Resume")
-        
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(72, 720, "Contact Information")
-        c.setFont("Helvetica", 10)
-        c.drawString(72, 705, "Email: test@example.com")
-        c.drawString(72, 690, "Phone: 555-123-4567")
-        
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(72, 660, "Skills")
-        c.setFont("Helvetica", 10)
-        c.drawString(72, 645, "Python, JavaScript, Flask, Data Analysis, Machine Learning")
-        
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(72, 615, "Experience")
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(72, 600, "Software Engineer - ABC Company")
-        c.setFont("Helvetica", 10)
-        c.drawString(72, 585, "2020-2023")
-        c.drawString(72, 570, "Developed web applications using Python and Flask")
-        c.drawString(72, 555, "Implemented machine learning algorithms for data analysis")
-        
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(72, 525, "Education")
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(72, 510, "Bachelor of Science in Computer Science")
-        c.setFont("Helvetica", 10)
-        c.drawString(72, 495, "XYZ University, 2016-2020")
-        
-        c.save()
-        logger.info(f"Generated sample PDF resume at {pdf_path}")
-        return pdf_path
-    except ImportError:
-        logger.error("Could not import reportlab - cannot generate test PDF")
-        return None
-
-
-def generate_sample_docx():
-    """Generate a minimal sample DOCX resume for testing."""
-    try:
-        from docx import Document
-        from docx.shared import Pt
-        
-        docx_path = TEST_DIR / "sample_resume.docx"
-        doc = Document()
-        
-        # Add title
-        title = doc.add_heading("Sample Test Resume", 0)
-        
-        # Add contact information
-        doc.add_heading("Contact Information", level=2)
-        contact = doc.add_paragraph()
-        contact.add_run("Email: test@example.com\nPhone: 555-123-4567")
-        
-        # Add skills
-        doc.add_heading("Skills", level=2)
-        skills = doc.add_paragraph()
-        skills.add_run("Python, JavaScript, Flask, Data Analysis, Machine Learning")
-        
-        # Add experience
-        doc.add_heading("Experience", level=2)
-        company = doc.add_paragraph()
-        company.add_run("Software Engineer - ABC Company\n").bold = True
-        company.add_run("2020-2023\n")
-        company.add_run("• Developed web applications using Python and Flask\n")
-        company.add_run("• Implemented machine learning algorithms for data analysis")
-        
-        # Add education
-        doc.add_heading("Education", level=2)
-        education = doc.add_paragraph()
-        education.add_run("Bachelor of Science in Computer Science\n").bold = True
-        education.add_run("XYZ University, 2016-2020")
-        
-        # Save the document
-        doc.save(str(docx_path))
-        logger.info(f"Generated sample DOCX resume at {docx_path}")
-        return docx_path
-    except ImportError:
-        logger.error("Could not import python-docx - cannot generate test DOCX")
-        return None
-
-
-def generate_job_description():
-    """Generate a sample job description file with relevant keywords."""
-    job_desc_path = TEST_DIR / "sample_job_description.txt"
-    job_description = """
-    Job Title: Senior Python Developer
-    
-    Company: Tech Innovations Inc.
-    
-    Job Description:
-    We are seeking an experienced Python developer with strong Flask background to join our team.
-    The ideal candidate will have experience developing web applications, implementing data analysis
-    algorithms, and working with cloud services.
-    
-    Requirements:
-    - 3+ years of experience with Python development
-    - Strong knowledge of Flask, FastAPI, or Django
-    - Experience with RESTful API design and implementation
-    - Familiarity with machine learning libraries such as TensorFlow or PyTorch
-    - Database knowledge (PostgreSQL, MongoDB)
-    - Experience with AWS or other cloud providers
-    - BS in Computer Science or related field
-    - Excellent problem-solving and communication skills
-    
-    Responsibilities:
-    - Design and implement new features for our data processing platform
-    - Optimize existing algorithms for better performance
-    - Work with the ML team to integrate machine learning models
-    - Maintain and improve the existing codebase
-    - Participate in code reviews and architectural discussions
-    
-    Benefits:
-    - Competitive salary and benefits package
-    - Flexible work hours
-    - Remote work options
-    - Professional development opportunities
-    """
-    
-    with open(job_desc_path, "w") as f:
-        f.write(job_description)
-        
-    logger.info(f"Generated sample job description at {job_desc_path}")
-    return job_desc_path
-
-
-def setup_test_environment():
-    """Set up the test environment with sample files."""
-    logger.info("Setting up test environment...")
-    
-    environment = {
-        "pdf_resume": generate_sample_pdf(),
-        "docx_resume": generate_sample_docx(),
-        "job_description": generate_job_description(),
-        "test_dir": TEST_DIR
-    }
-    
-    # Create output directory for generated files
-    output_dir = TEST_DIR / "output"
-    output_dir.mkdir(exist_ok=True)
-    environment["output_dir"] = output_dir
-    
-    # Create a malformed PDF for error testing
-    malformed_pdf = TEST_DIR / "malformed.pdf"
-    with open(malformed_pdf, "w") as f:
-        f.write("This is not a real PDF file, just text with a PDF extension.")
-    environment["malformed_pdf"] = malformed_pdf
-    
-    logger.info(f"Test environment set up at {TEST_DIR}")
-    return environment
-
-
-def cleanup_test_environment(env):
-    """Clean up the test environment."""
-    import shutil
-    try:
-        shutil.rmtree(env["test_dir"])
-        logger.info(f"Cleaned up test directory {env['test_dir']}")
-    except Exception as e:
-        logger.error(f"Failed to clean up test directory: {e}")
-
-
-class ResumeProcessingTestCase(unittest.TestCase):
-    """Test case for the resume processing system."""
+class TestResumeProcessing(unittest.TestCase):
+    """Test suite for resume processing functionality"""
     
     @classmethod
     def setUpClass(cls):
-        """Set up the test environment once for all tests."""
-        cls.env = setup_test_environment()
+        """Setup test environment before all tests"""
+        cls.server_process = None
+        cls.generate_test_data()
+        cls.start_server()
         
-        # Import necessary modules for testing
-        try:
-            # Add directory to path if needed
-            sys.path.insert(0, os.path.abspath("./resume-o"))
-            
-            # Import application and modules
-            from app import create_app
-            from database import Database
-            # Import other required modules
-            logger.info("Successfully imported required modules")
-            
-            # Create a test Flask app
-            cls.app = create_app(testing=True)
-            cls.client = cls.app.test_client()
-            cls.app_context = cls.app.app_context()
-            cls.app_context.push()
-            
-        except ImportError as e:
-            logger.error(f"Failed to import required modules: {e}")
-            raise
-    
     @classmethod
     def tearDownClass(cls):
-        """Clean up after all tests."""
-        if hasattr(cls, 'app_context'):
-            cls.app_context.pop()
-        cleanup_test_environment(cls.env)
-    
-    def test_010_app_initialization(self):
-        """Test that the application initializes correctly."""
-        with measure_time("App initialization test"):
-            self.assertIsNotNone(self.app, "Flask app should be created")
-            self.assertTrue(self.app.config['TESTING'], "App should be in testing mode")
-    
-    def test_020_file_upload_endpoint(self):
-        """Test the file upload endpoint."""
-        with measure_time("File upload test"):
-            if not self.env.get("pdf_resume"):
-                self.skipTest("PDF test file not available")
+        """Clean up test environment after all tests"""
+        cls.stop_server()
+        
+    @classmethod
+    def generate_test_data(cls):
+        """Generate sample test data for testing"""
+        # Create minimal PDF resume
+        cls.create_minimal_pdf()
+        
+        # Create minimal DOCX resume
+        cls.create_minimal_docx()
+        
+        # Create sample job description
+        cls.create_sample_job_description()
+        
+    @classmethod
+    def create_minimal_pdf(cls):
+        """Create a minimal PDF resume for testing"""
+        try:
+            from reportlab.pdfgen import canvas
+            
+            pdf_path = os.path.join(TEST_FILES_DIR, 'minimal_resume.pdf')
+            c = canvas.Canvas(pdf_path)
+            c.drawString(100, 750, "Sample Resume")
+            c.drawString(100, 730, "John Doe")
+            c.drawString(100, 710, "Software Engineer")
+            c.drawString(100, 690, "Skills: Python, JavaScript, Machine Learning")
+            c.drawString(100, 670, "Experience: 5 years at Tech Company")
+            c.save()
+            logger.info(f"Created minimal PDF resume at {pdf_path}")
+            return pdf_path
+        except ImportError:
+            logger.warning("ReportLab not installed, skipping PDF generation")
+            # Create a test file indicating PDF would be here
+            with open(os.path.join(TEST_FILES_DIR, 'minimal_resume.txt'), 'w') as f:
+                f.write("This is a placeholder for a PDF resume")
+            return None
+            
+    @classmethod
+    def create_minimal_docx(cls):
+        """Create a minimal DOCX resume for testing"""
+        try:
+            from docx import Document
+            
+            docx_path = os.path.join(TEST_FILES_DIR, 'minimal_resume.docx')
+            document = Document()
+            document.add_heading('Sample Resume', 0)
+            document.add_paragraph('John Doe')
+            document.add_paragraph('Software Engineer')
+            document.add_paragraph('Skills: Python, JavaScript, Machine Learning')
+            document.add_paragraph('Experience: 5 years at Tech Company')
+            document.save(docx_path)
+            logger.info(f"Created minimal DOCX resume at {docx_path}")
+            return docx_path
+        except ImportError:
+            logger.warning("python-docx not installed, skipping DOCX generation")
+            # Create a test file indicating DOCX would be here
+            with open(os.path.join(TEST_FILES_DIR, 'minimal_resume.txt'), 'w') as f:
+                f.write("This is a placeholder for a DOCX resume")
+            return None
+            
+    @classmethod
+    def create_sample_job_description(cls):
+        """Create a sample job description with relevant keywords"""
+        job_desc_path = os.path.join(TEST_FILES_DIR, 'sample_job_description.txt')
+        with open(job_desc_path, 'w') as f:
+            f.write("""
+            Senior Software Engineer
+            
+            Requirements:
+            - 5+ years of experience in software development
+            - Proficient in Python and JavaScript
+            - Experience with machine learning and AI
+            - Strong problem-solving skills
+            - Experience with cloud platforms (AWS, GCP)
+            
+            Responsibilities:
+            - Develop and maintain high-quality software
+            - Work with cross-functional teams to design and implement features
+            - Optimize code for performance and scalability
+            - Mentor junior engineers
+            """)
+        logger.info(f"Created sample job description at {job_desc_path}")
+        return job_desc_path
+        
+    @classmethod
+    def start_server(cls):
+        """Start the resume processing server for testing"""
+        if os.environ.get('SKIP_SERVER_START', '0') == '1':
+            logger.info("Skipping server start as requested by environment variable")
+            return
+            
+        try:
+            logger.info("Starting server...")
+            # Start server with subprocess
+            cls.server_process = subprocess.Popen(
+                ["python", "app.py", "--port", "8080", "--test-mode"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            # Wait for server to start
+            time.sleep(3)
+            # Check if server is running
+            try:
+                response = requests.get(f"{BASE_URL}/api/health")
+                if response.status_code == 200:
+                    logger.info("Server started successfully")
+                else:
+                    logger.warning(f"Server health check returned status code {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Server health check failed: {e}")
+        except Exception as e:
+            logger.error(f"Failed to start server: {e}")
+            
+    @classmethod
+    def stop_server(cls):
+        """Stop the resume processing server after testing"""
+        if cls.server_process is not None:
+            logger.info("Stopping server...")
+            cls.server_process.terminate()
+            cls.server_process.wait(timeout=5)
+            logger.info("Server stopped")
+            
+    def setUp(self):
+        """Set up test environment before each test"""
+        self.start_time = time.time()
+        self.test_results = {}
+        
+    def tearDown(self):
+        """Clean up test environment after each test"""
+        duration = time.time() - self.start_time
+        test_name = self._testMethodName
+        self.test_results[test_name] = {
+            'duration': duration,
+            'status': 'PASS' if not self._outcome.errors[-1][1] else 'FAIL'
+        }
+        logger.info(f"Test {test_name} completed in {duration:.2f} seconds with status {self.test_results[test_name]['status']}")
+        
+    def test_health_endpoint(self):
+        """Test the health endpoint is working"""
+        try:
+            response = requests.get(f"{BASE_URL}/api/health")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('status', data)
+            self.assertEqual(data['status'], 'ok')
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Health endpoint check failed: {e}")
+            
+    def test_file_upload(self):
+        """Test file upload functionality"""
+        # Get resume file
+        resume_path = os.path.join(TEST_FILES_DIR, 'minimal_resume.txt')
+        if not os.path.exists(resume_path):
+            resume_path = self._find_available_resume()
+            
+        if not resume_path:
+            self.skipTest("No resume file available for testing")
+            
+        try:
+            with open(resume_path, 'rb') as f:
+                files = {'resume': (os.path.basename(resume_path), f, self._get_mime_type(resume_path))}
+                response = requests.post(f"{BASE_URL}/api/upload", files=files)
                 
-            with open(self.env["pdf_resume"], "rb") as pdf:
-                response = self.client.post(
-                    "/api/upload",
-                    data={
-                        "file": (pdf, "sample_resume.pdf"),
-                    },
-                    content_type="multipart/form-data"
-                )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('resume_id', data)
+            self.assertIsNotNone(data['resume_id'])
+            return data['resume_id']
+        except requests.exceptions.RequestException as e:
+            self.fail(f"File upload failed: {e}")
             
-            self.assertEqual(response.status_code, 200, f"Upload failed with status {response.status_code}")
-            data = json.loads(response.data)
-            self.assertIn("resume_id", data, "Response should contain resume_id")
-            self.assertIn("parsed_data", data, "Response should contain parsed_data")
+    def test_resume_parser(self):
+        """Test resume parser component"""
+        resume_id = self.test_file_upload()
+        
+        try:
+            response = requests.get(f"{BASE_URL}/api/parse/{resume_id}")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('parsed_data', data)
+            self.assertIsNotNone(data['parsed_data'])
+            parsed_data = data['parsed_data']
             
-            # Store resume_id for later tests
-            self.__class__.resume_id = data["resume_id"]
-    
-    def test_030_resume_parsing(self):
-        """Test resume parsing functionality."""
-        with measure_time("Resume parsing test"):
-            if not self.env.get("pdf_resume"):
-                self.skipTest("PDF test file not available")
+            # Verify basic resume structure
+            self.assertIn('contact_info', parsed_data)
+            self.assertIn('skills', parsed_data)
+            
+            return resume_id, parsed_data
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Resume parsing failed: {e}")
+            
+    def test_keyword_extraction(self):
+        """Test keyword extraction component"""
+        # Upload job description
+        job_desc_path = os.path.join(TEST_FILES_DIR, 'sample_job_description.txt')
+        
+        try:
+            with open(job_desc_path, 'rb') as f:
+                files = {'job_description': (os.path.basename(job_desc_path), f, 'text/plain')}
+                response = requests.post(f"{BASE_URL}/api/extract-keywords", files=files)
+                
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('keywords', data)
+            self.assertIsInstance(data['keywords'], list)
+            self.assertGreater(len(data['keywords']), 0)
+            
+            return data['keywords']
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Keyword extraction failed: {e}")
+            
+    def test_semantic_matching(self):
+        """Test semantic matching component"""
+        resume_id, _ = self.test_resume_parser()
+        keywords = self.test_keyword_extraction()
+        
+        try:
+            response = requests.post(
+                f"{BASE_URL}/api/match/{resume_id}",
+                json={'keywords': keywords}
+            )
+            
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('matching_score', data)
+            self.assertIsInstance(data['matching_score'], (int, float))
+            self.assertGreaterEqual(data['matching_score'], 0)
+            self.assertLessEqual(data['matching_score'], 1)
+            
+            return resume_id, data['matching_score']
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Semantic matching failed: {e}")
+            
+    def test_resume_enhancement(self):
+        """Test resume enhancement component"""
+        resume_id, _ = self.test_semantic_matching()
+        
+        try:
+            response = requests.post(
+                f"{BASE_URL}/api/optimize/{resume_id}",
+                json={'target_score': 0.9}
+            )
+            
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('optimized_resume_id', data)
+            self.assertIsNotNone(data['optimized_resume_id'])
+            
+            return data['optimized_resume_id']
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Resume enhancement failed: {e}")
+            
+    def test_pdf_generation(self):
+        """Test PDF generation component"""
+        optimized_resume_id = self.test_resume_enhancement()
+        
+        try:
+            response = requests.get(f"{BASE_URL}/api/download/{optimized_resume_id}/pdf")
+            
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers['Content-Type'], 'application/pdf')
+            
+            # Save the PDF to a file for manual inspection
+            pdf_path = os.path.join(RESULTS_DIR, f"{optimized_resume_id}.pdf")
+            with open(pdf_path, 'wb') as f:
+                f.write(response.content)
+                
+            logger.info(f"Generated PDF saved to {pdf_path}")
+            
+            return pdf_path
+        except requests.exceptions.RequestException as e:
+            self.fail(f"PDF generation failed: {e}")
+            
+    def test_integrated_pipeline(self):
+        """Test the entire resume processing pipeline"""
+        # 1. Upload resume
+        resume_path = self._find_available_resume()
+        if not resume_path:
+            self.skipTest("No resume file available for testing")
+            
+        try:
+            # Upload resume
+            with open(resume_path, 'rb') as f:
+                files = {'resume': (os.path.basename(resume_path), f, self._get_mime_type(resume_path))}
+                upload_response = requests.post(f"{BASE_URL}/api/upload", files=files)
+                
+            self.assertEqual(upload_response.status_code, 200)
+            resume_id = upload_response.json()['resume_id']
+            
+            # Upload job description
+            job_desc_path = os.path.join(TEST_FILES_DIR, 'sample_job_description.txt')
+            with open(job_desc_path, 'rb') as f:
+                files = {'job_description': (os.path.basename(job_desc_path), f, 'text/plain')}
+                keywords_response = requests.post(f"{BASE_URL}/api/extract-keywords", files=files)
+                
+            self.assertEqual(keywords_response.status_code, 200)
+            keywords = keywords_response.json()['keywords']
+            
+            # Match keywords with resume
+            match_response = requests.post(
+                f"{BASE_URL}/api/match/{resume_id}",
+                json={'keywords': keywords}
+            )
+            
+            self.assertEqual(match_response.status_code, 200)
+            match_score = match_response.json()['matching_score']
+            
+            # Optimize resume
+            optimize_response = requests.post(
+                f"{BASE_URL}/api/optimize/{resume_id}",
+                json={'target_score': 0.9, 'keywords': keywords}
+            )
+            
+            self.assertEqual(optimize_response.status_code, 200)
+            optimized_resume_id = optimize_response.json()['optimized_resume_id']
+            
+            # Download in different formats
+            formats = ['pdf', 'docx', 'txt', 'json']
+            for fmt in formats:
+                download_response = requests.get(f"{BASE_URL}/api/download/{optimized_resume_id}/{fmt}")
+                
+                self.assertEqual(download_response.status_code, 200)
+                
+                # Save the file
+                output_path = os.path.join(RESULTS_DIR, f"{optimized_resume_id}.{fmt}")
+                with open(output_path, 'wb') as f:
+                    f.write(download_response.content)
+                    
+                logger.info(f"Generated {fmt.upper()} saved to {output_path}")
+                
+            return {
+                'resume_id': resume_id,
+                'optimized_resume_id': optimized_resume_id,
+                'match_score': match_score
+            }
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Integrated pipeline failed: {e}")
+            
+    def test_error_handling_invalid_file(self):
+        """Test error handling for invalid file formats"""
+        # Create a temporary invalid file
+        with tempfile.NamedTemporaryFile(suffix='.xyz') as tmp:
+            tmp.write(b"This is an invalid file format")
+            tmp.flush()
             
             try:
-                # Import the parser directly
-                from resume_parser import parse_resume
+                with open(tmp.name, 'rb') as f:
+                    files = {'resume': (os.path.basename(tmp.name), f, 'application/octet-stream')}
+                    response = requests.post(f"{BASE_URL}/api/upload", files=files)
+                    
+                self.assertNotEqual(response.status_code, 200)
+                data = response.json()
+                self.assertIn('error', data)
+            except requests.exceptions.RequestException as e:
+                self.fail(f"Request failed: {e}")
                 
-                result = parse_resume(self.env["pdf_resume"])
-                self.assertIsNotNone(result, "Parsed result should not be None")
-                self.assertIn("contact", result, "Parsed data should contain contact information")
-                self.assertIn("skills", result, "Parsed data should contain skills")
-                self.assertIn("experience", result, "Parsed data should contain experience")
-                self.assertIn("education", result, "Parsed data should contain education")
-            except ImportError:
-                # Try through API if direct import fails
-                with open(self.env["pdf_resume"], "rb") as pdf:
-                    response = self.client.post(
-                        "/api/upload",
-                        data={
-                            "file": (pdf, "sample_resume.pdf"),
-                        },
-                        content_type="multipart/form-data"
-                    )
-                
-                self.assertEqual(response.status_code, 200, f"Upload failed with status {response.status_code}")
-                data = json.loads(response.data)
-                self.assertIn("parsed_data", data, "Response should contain parsed_data")
-    
-    def test_040_keyword_extraction(self):
-        """Test keyword extraction from job description."""
-        with measure_time("Keyword extraction test"):
-            if not self.env.get("job_description"):
-                self.skipTest("Job description test file not available")
+    def test_error_handling_missing_file(self):
+        """Test error handling for missing files"""
+        try:
+            response = requests.post(f"{BASE_URL}/api/upload")
+            self.assertNotEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('error', data)
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Request failed: {e}")
             
-            try:
-                # Import the keyword extractor directly
-                from keyword_extractor import extract_keywords
-                
-                with open(self.env["job_description"], "r") as f:
-                    job_text = f.read()
-                
-                keywords = extract_keywords(job_text)
-                self.assertIsNotNone(keywords, "Keywords should not be None")
-                self.assertGreater(len(keywords), 0, "Should extract at least some keywords")
-                
-                # Check for expected keywords in the sample job description
-                expected_keywords = ["python", "flask", "machine learning", "data"]
-                for keyword in expected_keywords:
-                    self.assertTrue(
-                        any(keyword.lower() in kw.lower() for kw in keywords),
-                        f"Expected keyword '{keyword}' not found in extracted keywords"
-                    )
-            except ImportError:
-                # Try through API if direct import fails
-                with open(self.env["job_description"], "r") as f:
-                    job_text = f.read()
-                
-                response = self.client.post(
-                    "/api/extract-keywords",
-                    json={"text": job_text}
-                )
-                
-                self.assertEqual(response.status_code, 200, f"Keyword extraction failed with status {response.status_code}")
-                data = json.loads(response.data)
-                self.assertIn("keywords", data, "Response should contain keywords")
-                self.assertGreater(len(data["keywords"]), 0, "Should extract at least some keywords")
-    
-    def test_050_semantic_matching(self):
-        """Test semantic matching between resume and job description."""
-        with measure_time("Semantic matching test"):
-            if not hasattr(self.__class__, "resume_id"):
-                self.skipTest("Resume ID from previous test not available")
-            
-            if not self.env.get("job_description"):
-                self.skipTest("Job description test file not available")
-            
-            with open(self.env["job_description"], "r") as f:
-                job_text = f.read()
-            
-            response = self.client.post(
-                "/api/match",
-                json={
-                    "resume_id": self.__class__.resume_id,
-                    "job_description": job_text
-                }
-            )
-            
-            self.assertEqual(response.status_code, 200, f"Matching failed with status {response.status_code}")
-            data = json.loads(response.data)
-            self.assertIn("match_score", data, "Response should contain match_score")
-            self.assertIn("missing_keywords", data, "Response should contain missing_keywords")
-            self.assertIn("matching_keywords", data, "Response should contain matching_keywords")
-    
-    def test_060_resume_enhancement(self):
-        """Test resume enhancement based on job description."""
-        with measure_time("Resume enhancement test"):
-            if not hasattr(self.__class__, "resume_id"):
-                self.skipTest("Resume ID from previous test not available")
-            
-            if not self.env.get("job_description"):
-                self.skipTest("Job description test file not available")
-            
-            with open(self.env["job_description"], "r") as f:
-                job_text = f.read()
-            
-            response = self.client.post(
-                "/api/optimize",
-                json={
-                    "resume_id": self.__class__.resume_id,
-                    "job_description": job_text,
-                    "enhancement_level": "moderate"
-                }
-            )
-            
-            self.assertEqual(response.status_code, 200, f"Enhancement failed with status {response.status_code}")
-            data = json.loads(response.data)
-            self.assertIn("enhanced_resume_id", data, "Response should contain enhanced_resume_id")
-            self.assertIn("enhancements", data, "Response should contain enhancements")
-            
-            # Store enhanced_resume_id for later tests
-            self.__class__.enhanced_resume_id = data["enhanced_resume_id"]
-    
-    def test_070_pdf_generation(self):
-        """Test PDF generation from enhanced resume."""
-        with measure_time("PDF generation test"):
-            if not hasattr(self.__class__, "enhanced_resume_id"):
-                self.skipTest("Enhanced resume ID from previous test not available")
-            
-            response = self.client.get(
-                f"/api/download/{self.__class__.enhanced_resume_id}/pdf"
-            )
-            
-            self.assertEqual(response.status_code, 200, f"PDF download failed with status {response.status_code}")
-            self.assertEqual(response.mimetype, "application/pdf", "Response should be a PDF")
-            
-            # Save the generated PDF for inspection
-            output_path = self.env["output_dir"] / "enhanced_resume.pdf"
-            with open(output_path, "wb") as f:
-                f.write(response.data)
-            
-            logger.info(f"Generated enhanced PDF saved to {output_path}")
-    
-    def test_080_docx_generation(self):
-        """Test DOCX generation from enhanced resume."""
-        with measure_time("DOCX generation test"):
-            if not hasattr(self.__class__, "enhanced_resume_id"):
-                self.skipTest("Enhanced resume ID from previous test not available")
-            
-            response = self.client.get(
-                f"/api/download/{self.__class__.enhanced_resume_id}/docx"
-            )
-            
-            self.assertEqual(response.status_code, 200, f"DOCX download failed with status {response.status_code}")
-            self.assertEqual(
-                response.mimetype, 
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-                "Response should be a DOCX"
-            )
-            
-            # Save the generated DOCX for inspection
-            output_path = self.env["output_dir"] / "enhanced_resume.docx"
-            with open(output_path, "wb") as f:
-                f.write(response.data)
-            
-            logger.info(f"Generated enhanced DOCX saved to {output_path}")
-    
-    def test_090_error_handling_malformed_file(self):
-        """Test error handling for malformed files."""
-        with measure_time("Malformed file error handling test"):
-            if not self.env.get("malformed_pdf"):
-                self.skipTest("Malformed PDF test file not available")
-                
-            with open(self.env["malformed_pdf"], "rb") as pdf:
-                response = self.client.post(
-                    "/api/upload",
-                    data={
-                        "file": (pdf, "malformed.pdf"),
-                    },
-                    content_type="multipart/form-data"
-                )
-            
-            self.assertNotEqual(response.status_code, 200, "Should reject malformed file")
-            self.assertEqual(response.status_code, 400, "Should return 400 Bad Request for malformed file")
-    
-    def test_100_error_handling_missing_params(self):
-        """Test error handling for missing parameters."""
-        with measure_time("Missing parameters error handling test"):
-            response = self.client.post(
-                "/api/optimize",
-                json={
-                    # Missing resume_id
-                    "job_description": "Sample job description"
-                }
-            )
-            
-            self.assertNotEqual(response.status_code, 200, "Should reject request with missing parameters")
-            self.assertEqual(response.status_code, 400, "Should return 400 Bad Request for missing parameters")
-    
-    def test_110_pipeline_end_to_end(self):
-        """Test the complete resume processing pipeline end to end."""
-        with measure_time("End-to-end pipeline test"):
-            if not self.env.get("pdf_resume") or not self.env.get("job_description"):
-                self.skipTest("Test files not available")
-            
-            # Step 1: Upload resume
-            with open(self.env["pdf_resume"], "rb") as pdf:
-                response1 = self.client.post(
-                    "/api/upload",
-                    data={
-                        "file": (pdf, "sample_resume.pdf"),
-                    },
-                    content_type="multipart/form-data"
-                )
-            
-            self.assertEqual(response1.status_code, 200, f"Upload failed with status {response1.status_code}")
-            data1 = json.loads(response1.data)
-            resume_id = data1["resume_id"]
-            
-            # Step 2: Get job description
-            with open(self.env["job_description"], "r") as f:
-                job_text = f.read()
-            
-            # Step 3: Optimize resume
-            response2 = self.client.post(
-                "/api/optimize",
-                json={
-                    "resume_id": resume_id,
-                    "job_description": job_text,
-                    "enhancement_level": "moderate"
-                }
-            )
-            
-            self.assertEqual(response2.status_code, 200, f"Enhancement failed with status {response2.status_code}")
-            data2 = json.loads(response2.data)
-            enhanced_resume_id = data2["enhanced_resume_id"]
-            
-            # Step 4: Download in PDF format
-            response3 = self.client.get(
-                f"/api/download/{enhanced_resume_id}/pdf"
-            )
-            
-            self.assertEqual(response3.status_code, 200, f"PDF download failed with status {response3.status_code}")
-            
-            # Step 5: Download in DOCX format
-            response4 = self.client.get(
-                f"/api/download/{enhanced_resume_id}/docx"
-            )
-            
-            self.assertEqual(response4.status_code, 200, f"DOCX download failed with status {response4.status_code}")
-            
-            # Step 6: Download in LaTeX format
-            response5 = self.client.get(
-                f"/api/download/{enhanced_resume_id}/latex"
-            )
-            
-            self.assertEqual(response5.status_code, 200, f"LaTeX download failed with status {response5.status_code}")
-            
-            logger.info("Successfully completed end-to-end pipeline test")
-
-
-if __name__ == "__main__":
-    try:
-        print("=" * 80)
-        print(f"Resume Processing System Test - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 80)
+    def test_error_handling_invalid_resume_id(self):
+        """Test error handling for invalid resume ID"""
+        invalid_id = "non_existent_id_12345"
         
-        # Check if test environment can be set up
-        test_env = setup_test_environment()
-        if not test_env["pdf_resume"] and not test_env["docx_resume"]:
-            logger.error("Failed to generate test files. Please install reportlab and python-docx packages.")
-            sys.exit(1)
-        cleanup_test_environment(test_env)
+        try:
+            response = requests.get(f"{BASE_URL}/api/parse/{invalid_id}")
+            self.assertNotEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('error', data)
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Request failed: {e}")
+            
+    def test_error_handling_broken_component(self):
+        """Test error handling for broken component simulation"""
+        # Use a special endpoint that simulates a component failure
+        try:
+            response = requests.get(f"{BASE_URL}/api/test/simulate-failure")
+            self.assertNotEqual(response.status_code, 200)
+            data = response.json()
+            self.assertIn('error', data)
+        except requests.exceptions.RequestException as e:
+            self.fail(f"Request failed: {e}")
+            
+    def _find_available_resume(self) -> Optional[str]:
+        """Find an available resume file for testing"""
+        file_types = ['.pdf', '.docx', '.txt']
+        for ext in file_types:
+            path = os.path.join(TEST_FILES_DIR, f'minimal_resume{ext}')
+            if os.path.exists(path):
+                return path
+        return None
         
-        # Run the tests
-        test_suite = unittest.TestLoader().loadTestsFromTestCase(ResumeProcessingTestCase)
-        result = TimedTextTestRunner(verbosity=2).run(test_suite)
+    def _get_mime_type(self, filepath: str) -> str:
+        """Get MIME type for a file"""
+        ext = os.path.splitext(filepath)[1].lower()
+        if ext == '.pdf':
+            return 'application/pdf'
+        elif ext == '.docx':
+            return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        elif ext == '.txt':
+            return 'text/plain'
+        else:
+            return 'application/octet-stream'
+            
+    def export_test_results(self):
+        """Export test results to a JSON file"""
+        output_path = os.path.join(RESULTS_DIR, f"test_results_{int(time.time())}.json")
+        with open(output_path, 'w') as f:
+            json.dump(self.test_results, f, indent=4)
+        logger.info(f"Test results exported to {output_path}")
+        return output_path
         
-        # Display summary
-        print("\n" + "=" * 80)
-        print(f"SUMMARY: Ran {result.testsRun} tests")
-        print(f"SUCCESS: {result.testsRun - len(result.failures) - len(result.errors)} tests")
-        print(f"FAILURES: {len(result.failures)} tests")
-        print(f"ERRORS: {len(result.errors)} tests")
+def main():
+    """Run the test suite and generate a report"""
+    # Parse command line arguments
+    import argparse
+    parser = argparse.ArgumentParser(description='Test resume processing functionality')
+    parser.add_argument('--skip-server', action='store_true', help='Skip starting the server')
+    parser.add_argument('--generate-data-only', action='store_true', help='Only generate test data without running tests')
+    parser.add_argument('--test-file', type=str, help='Run a specific test file')
+    args = parser.parse_args()
+    
+    if args.skip_server:
+        os.environ['SKIP_SERVER_START'] = '1'
         
-        # Exit with appropriate code
-        sys.exit(len(result.failures) + len(result.errors))
+    if args.generate_data_only:
+        TestResumeProcessing.generate_test_data()
+        logger.info("Test data generation completed")
+        return
         
-    except KeyboardInterrupt:
-        print("\nTest interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\nUnexpected error during test execution: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1) 
+    # Run the tests
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestResumeProcessing)
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    
+    # Export test results
+    test_case = TestResumeProcessing()
+    test_case.test_results = {
+        'summary': {
+            'tests': result.testsRun,
+            'failures': len(result.failures),
+            'errors': len(result.errors),
+            'skipped': len(result.skipped),
+            'success_rate': (result.testsRun - len(result.failures) - len(result.errors)) / result.testsRun if result.testsRun > 0 else 0
+        }
+    }
+    test_case.export_test_results()
+    
+if __name__ == '__main__':
+    main() 
