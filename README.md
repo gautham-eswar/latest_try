@@ -13,6 +13,7 @@ An AI-powered resume optimization system that helps users tailor their resumes t
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
+- [Troubleshooting](#troubleshooting)
 
 ## System Overview
 
@@ -223,7 +224,7 @@ Response: HTML page with system diagnostics and performance metrics.
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.10+ (3.12/3.13 recommended)
 - Flask and dependencies
 - LaTeX (optional, for PDF generation)
 - OpenAI API key
@@ -239,7 +240,7 @@ Response: HTML page with system diagnostics and performance metrics.
 
 2. Create a virtual environment:
    ```bash
-   python -m venv simple-venv
+   python3 -m venv simple-venv
    source simple-venv/bin/activate  # On Windows: simple-venv\Scripts\activate
    ```
 
@@ -249,16 +250,30 @@ Response: HTML page with system diagnostics and performance metrics.
    ```
 
 4. Set up environment variables:
-   ```bash
-   export OPENAI_API_KEY="your_openai_api_key"
-   export SUPABASE_URL="your_supabase_url"  # Optional
-   export SUPABASE_KEY="your_supabase_key"  # Optional
+   Create a `.env` file:
+   ```
+   OPENAI_API_KEY=your_openai_api_key_here
+   SUPABASE_URL=your_supabase_url_here  # Optional
+   SUPABASE_KEY=your_supabase_key_here  # Optional
+   PORT=8085  # Default port (use a port other than 5000 on macOS)
+   DEBUG=true
    ```
 
-5. Run the application:
-   ```bash
-   python working_app.py --port 8085 --debug
-   ```
+5. Choose the appropriate application to run:
+   - For development with simplified dependencies:
+     ```bash
+     python3 working_app.py --port 8085 --debug
+     ```
+   - For testing with minimal dependencies:
+     ```bash
+     python3 simple_app.py --port 8085
+     ```
+   - For production with full features:
+     ```bash
+     python3 app.py --port 8085
+     ```
+
+   > **Note**: On macOS, port 5000 is used by AirPlay. Use an alternative port like 8085.
 
 6. Access the application:
    - API: http://localhost:8085/api/health
@@ -276,13 +291,13 @@ Response: HTML page with system diagnostics and performance metrics.
 
 ```bash
 # Run basic tests
-python test_resume_processing.py
+python3 test_resume_processing.py
 
 # Test full pipeline with sample resume
-python test_pipeline.py --resume test_files/sample_resume.pdf --job test_files/sample_job.txt
+python3 test_pipeline.py --resume test_files/sample_resume.pdf --job test_files/sample_job.txt
 
 # Performance testing
-python large_input_test.py --iterations 10
+python3 large_input_test.py --iterations 10
 ```
 
 ### Validation Framework
@@ -375,4 +390,53 @@ For larger teams, consider:
 1. Using a fork-and-pull-request model
 2. Setting up CI/CD pipelines for automated testing
 3. Regular code freeze periods for integration
-4. Detailed documentation of API changes 
+4. Detailed documentation of API changes
+
+## Troubleshooting
+
+### Common Issues
+
+#### Port 5000 Already in Use (macOS)
+On macOS, port 5000 is used by AirPlay. Use an alternative port:
+```bash
+python3 working_app.py --port 8085
+```
+
+#### Command Not Found: Python
+The `python` command may not be available. Use `python3` instead:
+```bash
+python3 working_app.py --port 8085
+```
+
+#### Missing Dependencies
+If you get a "No module named X" error, install the missing dependency:
+```bash
+pip install httpx flask flask-cors psutil
+```
+
+For all dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+#### OpenAI API Authentication Failures
+If you see "OpenAI API authentication failed", check:
+1. Your API key in the `.env` file is correct
+2. The API key has sufficient permissions and budget
+3. You're not hitting rate limits
+
+#### Python Version Compatibility
+Some modules may have issues with specific Python versions. 
+This application works best with Python 3.10+ (ideally 3.12 or 3.13).
+
+#### Date/Time Module Errors
+If you encounter errors with `datetime.datetime` or `datetime.timedelta`, ensure you're importing correctly:
+```python
+from datetime import datetime, timedelta
+```
+
+#### Debugging Module Import Errors
+For detailed import errors, run with debug mode:
+```bash
+python3 working_app.py --port 8085 --debug
+```
