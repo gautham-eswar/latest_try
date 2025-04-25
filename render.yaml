@@ -6,12 +6,10 @@ services:
     buildCommand: |
       # Install dependencies
       pip install -r requirements.txt
-    startCommand: gunicorn app:app --log-level debug
+    startCommand: python app.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.7
-      - key: PORT
-        value: 10000
       - key: FLASK_ENV
         value: production
       - key: OPENAI_API_KEY
@@ -21,13 +19,15 @@ services:
       - key: SUPABASE_KEY
         sync: false
       - key: LOG_LEVEL
-        value: DEBUG
+        value: INFO
       - key: CORS_ORIGINS
         value: "*"
       - key: MAX_CONTENT_LENGTH
         value: 16777216
+      - key: PDF_GENERATION_MODE
+        value: cloud_latex
       - key: ENABLE_VERBOSE_LOGGING
-        value: true
+        value: false
       - key: TRANSACTION_TRACKING_ENABLED
         value: true
       - key: ERROR_DETAIL_LEVEL
