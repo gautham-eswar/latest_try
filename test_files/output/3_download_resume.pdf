@@ -1,0 +1,70 @@
+% PDF mock for resume_1745216531_9d6c26ec
+
+\documentclass{article}
+\usepackage{geometry}
+\usepackage{enumitem}
+
+\geometry{a4paper, margin=1in}
+
+\begin{document}
+
+\begin{center}
+    \textbf{\LARGE John Smith}
+    
+    San Francisco, CA | (555) 123-4567 | john.smith@example.com
+\end{center}
+
+\section*{Summary}
+Backend Software Engineer with 5+ years of experience in Python, Flask, and API development. Designed RESTful APIs, optimized database queries for performance, and mentored junior developers.
+
+\section*{Skills}
+\begin{itemize}[label=]
+    \item Python
+    \item Flask
+    \item Django
+    \item SQL
+    \item Docker
+    \item AWS
+    \item CI/CD pipelines
+    \item JavaScript
+    \item TypeScript
+    \item React
+    \item Git
+    \item PostgreSQL
+    \item MongoDB
+    \item Unit testing
+    \item Integration testing
+    \item pytest
+\end{itemize}
+
+\section*{Experience}
+\begin{itemize}
+    \item \textbf{Senior Software Engineer} at TechCorp Inc. (Jan 2021 - Present)
+    \begin{itemize}
+        \item Designed and implemented RESTful APIs using Flask for the company's flagship product
+        \item Optimized database queries resulting in 40% reduction in response time
+        \item Mentored junior developers and conducted code reviews
+    \end{itemize}
+    
+    \item \textbf{Software Engineer} at WebSolutions Inc. (Mar 2018 - Dec 2020)
+    \begin{itemize}
+        \item Developed microservices using Python and Flask
+        \item Implemented automated testing resulting in 90% code coverage
+        \item Deployed applications to AWS using Docker and Kubernetes
+    \end{itemize}
+\end{itemize}
+
+\section*{Education}
+\begin{itemize}[label=]
+    \item Bachelor of Science in Computer Science
+    \item University of California, Berkeley
+    \item 2014-2018
+\end{itemize}
+
+\section*{Certifications}
+\begin{itemize}[label=]
+    \item AWS Certified Developer Associate
+    \item Docker Certified Associate
+\end{itemize}
+
+\end{document}

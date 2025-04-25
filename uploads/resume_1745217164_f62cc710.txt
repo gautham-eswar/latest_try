@@ -1,0 +1,47 @@
+MICHAEL A. RODRIGUEZ
+Senior Software Architect & Machine Learning Engineer
+michael.rodriguez@example.com | (555) 234-7890 | San Francisco, CA
+
+PROFESSIONAL SUMMARY
+Innovative Senior Software Architect and Machine Learning Engineer with 12+ years of experience designing and implementing scalable, distributed systems and advanced ML solutions. Expert in cloud architecture, real-time data processing, and microservices design.
+
+TECHNICAL SKILLS
+• Languages: Python, Java, Scala, TypeScript, Go, C++, SQL
+• Frameworks: TensorFlow, PyTorch, Apache Spark, Spring Boot, React, Angular, FastAPI
+• Cloud & Infrastructure: AWS, GCP, Azure, Kubernetes, Docker, Terraform
+• Databases: PostgreSQL, MongoDB, Cassandra, Redis, Elasticsearch
+• MLOps: MLflow, Kubeflow, Airflow, SageMaker, Databricks
+
+PROFESSIONAL EXPERIENCE
+
+TECH INNOVATIONS INC., San Francisco, CA
+Principal Software Architect & ML Engineering Lead | Jan 2020 - Present
+• Led architecture and development of a next-generation recommendation engine that increased user engagement by 42%.
+• Designed and implemented a cloud-native, microservices-based platform that reduced infrastructure costs by 35%.
+• Architected a scalable data pipeline handling 10TB of daily data, reducing processing latency from hours to minutes.
+• Spearheaded the adoption of MLOps practices across the organization, reducing model deployment time from weeks to hours.
+
+DATAWISE TECHNOLOGIES, Palo Alto, CA
+Senior Software Engineer, Machine Learning | Mar 2017 - Dec 2019
+• Developed an automated anomaly detection system for IoT sensor data that reduced false alarms by 75%.
+• Built a distributed stream processing platform handling 1M+ events per second with sub-second latency.
+• Implemented a continuous training pipeline for ML models that improved model accuracy by 25%.
+• Led integration of federated learning techniques that preserved user privacy while improving model performance by 30%.
+
+CLOUD SYSTEMS INC., Seattle, WA
+Software Engineer, Backend Services | Jun 2014 - Feb 2017
+• Built high-throughput API services handling 50,000+ requests per second with 99.99% availability.
+• Implemented distributed caching solution that reduced database load by 65%.
+• Developed comprehensive monitoring and alerting system that reduced MTTR from hours to minutes.
+• Created automated deployment pipelines that reduced deployment time from days to minutes.
+
+EDUCATION
+• Master of Science in Computer Science, Stanford University, 2011
+• Bachelor of Science in Computer Engineering, Massachusetts Institute of Technology, 2009
+
+CERTIFICATIONS
+• AWS Certified Solutions Architect – Professional
+• Google Cloud Professional Data Engineer
+• Microsoft Certified: Azure Solutions Architect Expert
+• Certified Kubernetes Administrator (CKA)
+• TensorFlow Developer Certificate 

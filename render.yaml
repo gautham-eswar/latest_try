@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: resume-optimizer-api
+    env: python
+    plan: starter
+    buildCommand: |
+      # Install dependencies
+      pip install -r requirements.txt
+    startCommand: gunicorn app:app --log-level debug
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.7
+      - key: PORT
+        value: 10000
+      - key: FLASK_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: DEBUG
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: MAX_CONTENT_LENGTH
+        value: 16777216
+      - key: ENABLE_VERBOSE_LOGGING
+        value: true
+      - key: TRANSACTION_TRACKING_ENABLED
+        value: true
+      - key: ERROR_DETAIL_LEVEL
+        value: full
+    healthCheckPath: /api/health
+    healthCheckTimeout: 10
+    healthCheckInterval: 30
+    healthCheckGracePeriod: 120
+    autoDeploy: true
+    disk:
+      name: tmp
+      mountPath: /tmp
+      sizeGB: 1
+    domains:
+      - resume-optimizer-api.onrender.com  # Default domain 
