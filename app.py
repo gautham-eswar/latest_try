@@ -26,15 +26,25 @@ from dotenv import load_dotenv
 
 # Local imports
 try:
-    from in_memory_db import create_in_memory_database
+    from in_memory_db import create_in_memory_database, InMemoryDatabase
     from database import create_database_client
 except ImportError as e:
     logging.warning(f"Database import error: {e}")
     # Define fallback database functions if imports fail
+    class InMemoryDatabase:
+        """Simple in-memory database fallback."""
+        def __init__(self, app=None):
+            self.data = {}
+            self.app = app
+            logging.info("In-memory database initialized")
+        
+    def create_in_memory_database(app=None):
+        """Create and initialize in-memory database."""
+        return InMemoryDatabase(app)
+        
     def create_database_client():
         """Fallback function for database client creation"""
         logging.warning("Using fallback database client creation function")
-        from in_memory_db import create_in_memory_database
         return create_in_memory_database()
 
 # Load environment variables

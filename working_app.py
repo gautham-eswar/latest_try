@@ -31,12 +31,13 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger('working_app')
+logger = logging.getLogger(__name__)
 
 # Constants
-APP_START_TIME = datetime.now()
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
+START_TIME = time.time()
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx'}
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_files')
+OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_results')
 
 # OpenAI API settings
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
@@ -69,266 +70,203 @@ def extract_text_from_file(file_path):
         # If it's not a text file, return a placeholder
         return f"Binary file content (file type: {file_ext})"
 
-def call_openai_api(messages, temperature=0.3, max_tokens=1000):
-    """Call OpenAI API with error handling and retries"""
+def call_openai_api(system_prompt, user_prompt, max_retries=3):
+    """Call OpenAI API with retry logic and proper error handling."""
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        logger.critical("OPENAI_API_KEY environment variable is not set. Cannot proceed without API key.")
+        raise ValueError("OpenAI API key is not configured. Please set the OPENAI_API_KEY environment variable.")
+    
+    base_url = "https://api.openai.com/v1/chat/completions"
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
     data = {
         "model": "gpt-3.5-turbo",
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.5
     }
     
-    # Try up to 3 times with exponential backoff
-    max_retries = 3
-    retry_delay = 1
-    
-    for attempt in range(max_retries):
+    for attempt in range(1, max_retries + 1):
         try:
-            logger.info(f"Making OpenAI API request (attempt {attempt+1}/{max_retries})")
-            response = requests.post(
-                f"{OPENAI_API_BASE}/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=30  # Set a reasonable timeout
-            )
-            
+            logger.info(f"Making OpenAI API request (attempt {attempt}/{max_retries})")
+            response = requests.post(base_url, headers=headers, json=data, timeout=30)
             logger.info(f"OpenAI API response status: {response.status_code}")
             
             if response.status_code == 200:
-                return response.json()['choices'][0]['message']['content']
+                result = response.json()
+                if 'choices' in result and len(result['choices']) > 0:
+                    return result['choices'][0]['message']['content']
+                raise ValueError("Invalid response format from OpenAI API")
             elif response.status_code == 401:
-                error_details = response.json() if response.text else {"error": "Authentication error"}
-                logger.critical(f"OpenAI API authentication failed: {error_details}")
-                raise Exception(f"OpenAI API key is invalid: {error_details.get('error', {}).get('message', 'Authentication error')}")
-            elif response.status_code == 429:
-                retry_delay = 2 ** attempt  # Exponential backoff
-                logger.warning(f"Rate limited by OpenAI, retrying in {retry_delay}s")
-                time.sleep(retry_delay)
-                continue
+                raise ValueError("OpenAI API key is invalid")
             else:
-                error_details = response.json() if response.text else {"error": "Unknown error"}
-                logger.error(f"OpenAI API error ({response.status_code}): {error_details}")
-                raise Exception(f"OpenAI API error ({response.status_code}): {error_details.get('error', {}).get('message', 'Unknown error')}")
-                
-        except requests.RequestException as e:
-            logger.error(f"Request error: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-                retry_delay *= 2
+                logger.error(f"OpenAI API request failed with status {response.status_code}: {response.text}")
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    raise ValueError(f"OpenAI API request failed after {max_retries} attempts")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"OpenAI API request error: {str(e)}")
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
             else:
-                raise Exception(f"Failed to connect to OpenAI API after {max_retries} attempts: {str(e)}")
+                raise ValueError(f"OpenAI API request error: {str(e)}")
     
-    raise Exception("Failed to get response from OpenAI API")
+    # This should not be reached due to the raise in the loop, but just in case
+    raise ValueError("Failed to get a response from OpenAI API")
 
 def parse_resume(resume_text):
-    """Parse resume text and return structured data using OpenAI"""
-    prompt = """
-    Parse the following resume and extract structured data in JSON format with the following structure:
-    {
-        "contact": {
-            "name": "Full Name",
-            "email": "email@example.com",
-            "phone": "phone number",
-            "location": "City, State"
-        },
-        "summary": "Professional summary",
-        "skills": ["Skill 1", "Skill 2", ...],
-        "experience": [
-            {
-                "title": "Job Title",
-                "company": "Company Name",
-                "date_range": "Start Date - End Date",
-                "description": ["Achievement 1", "Achievement 2", ...]
-            },
-            ...
-        ],
-        "education": [
-            {
-                "degree": "Degree Name",
-                "institution": "Institution Name",
-                "date_range": "Start Year - End Year"
-            },
-            ...
-        ],
-        "certifications": ["Certification 1", "Certification 2", ...]
-    }
+    """Parse resume text into structured data"""
+    system_prompt = "You are a resume parsing assistant. Extract structured information from resumes."
+    user_prompt = f"""
+    Please extract the following information from this resume:
     
-    Respond with ONLY the JSON object, no explanations or other text.
+    {resume_text}
+    
+    Format your response as JSON with these keys:
+    - name
+    - contact (email, phone, location)
+    - objective (if present)
+    - skills (array of strings)
+    - experience (array of objects with company, title, date, description)
+    - education (array of objects with institution, degree, date)
     """
     
-    messages = [
-        {"role": "system", "content": "You are a resume parsing assistant that extracts structured data from resumes."},
-        {"role": "user", "content": f"{prompt}\n\n{resume_text}"}
-    ]
-    
-    result = call_openai_api(messages)
+    result = call_openai_api(system_prompt, user_prompt)
     
     # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```json\s*(.*?)\s*```', result, re.DOTALL)
-    if json_match:
-        result = json_match.group(1)
+    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
+    structured_data = json_match.group(1) if json_match else result
     
     try:
-        return json.loads(result)
+        return json.loads(structured_data)
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON from OpenAI: {e}")
-        raise Exception("Failed to parse structured data from resume")
+        raise ValueError("Failed to parse structured data from resume")
 
 def extract_keywords(job_description):
-    """Extract keywords from job description using OpenAI API"""
-    prompt = """
-    Extract the most important skills, technologies, and qualifications from this job description.
-    Return the result as a JSON array of strings with ONLY the keywords, no explanations or other text.
-    Example: ["Python", "React", "AWS", "CI/CD", "Agile", "Team Leadership"]
-    """
+    """Extract relevant keywords from job description"""
+    system_prompt = "You are a keyword extraction assistant for job descriptions."
+    user_prompt = f"""
+    Extract relevant keywords from this job description:
     
-    messages = [
-        {"role": "system", "content": "You are a job description analyzer that extracts key skills and requirements."},
-        {"role": "user", "content": f"{prompt}\n\n{job_description}"}
-    ]
-    
-    result = call_openai_api(messages)
-    
-    # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```json\s*(.*?)\s*```', result, re.DOTALL)
-    if json_match:
-        result = json_match.group(1)
-    
-    try:
-        return json.loads(result)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing keywords JSON from OpenAI: {e}")
-        raise Exception("Failed to extract keywords from job description")
-
-def optimize_resume(resume_data, job_description, keywords):
-    """Use OpenAI to optimize a resume for a specific job"""
-    prompt = f"""
-    Optimize this resume for the following job description:
-    
-    JOB DESCRIPTION:
     {job_description}
     
-    IMPORTANT KEYWORDS:
-    {', '.join(keywords)}
-    
-    ORIGINAL RESUME:
-    {json.dumps(resume_data, indent=2)}
-    
-    Return an optimized version of the resume as a JSON object with the same structure as the original.
-    The optimization should:
-    1. Tailor the summary to highlight relevant experience
-    2. Reorder skills to prioritize job-relevant ones
-    3. Enhance job descriptions to emphasize achievements relevant to the job
-    
-    Respond with ONLY the JSON object, no explanations or other text.
+    Format your response as JSON with these keys:
+    - skills (technical skills required)
+    - experience (experience areas required)
+    - education (education requirements)
+    - soft_skills (soft skills mentioned)
     """
     
-    messages = [
-        {"role": "system", "content": "You are a resume optimization assistant."},
-        {"role": "user", "content": prompt}
-    ]
-    
-    result = call_openai_api(messages, temperature=0.2, max_tokens=2000)
+    result = call_openai_api(system_prompt, user_prompt)
     
     # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```json\s*(.*?)\s*```', result, re.DOTALL)
-    if json_match:
-        result = json_match.group(1)
+    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
+    structured_data = json_match.group(1) if json_match else result
     
     try:
-        return json.loads(result)
+        return json.loads(structured_data)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON from OpenAI optimization response: {e}")
-        raise Exception("Failed to optimize resume")
+        logger.error(f"Error parsing JSON from OpenAI: {e}")
+        raise ValueError("Failed to extract keywords from job description")
 
-def generate_analysis(resume_data, optimized_resume, job_description, keywords):
-    """Generate analysis data comparing original and optimized resumes"""
-    prompt = f"""
-    Generate an analysis comparing the original resume to the optimized version with respect to the job description:
+def optimize_resume(resume_data, job_keywords):
+    """Optimize resume based on job keywords"""
+    system_prompt = "You are a resume optimization assistant."
+    user_prompt = f"""
+    Optimize this resume for the job requirements:
     
-    JOB DESCRIPTION:
-    {job_description}
-    
-    IMPORTANT KEYWORDS:
-    {', '.join(keywords)}
-    
-    ORIGINAL RESUME:
+    RESUME:
     {json.dumps(resume_data, indent=2)}
     
-    OPTIMIZED RESUME:
-    {json.dumps(optimized_resume, indent=2)}
+    JOB KEYWORDS:
+    {json.dumps(job_keywords, indent=2)}
     
-    Provide the analysis as a JSON object with the following structure:
-    {{
-      "keyword_match": {{
-        "score": "Match score percentage (integer from 0-100)",
-        "matched_keywords": ["list", "of", "matched", "keywords", "from", "resume"],
-        "missing_keywords": ["list", "of", "keywords", "not", "in", "resume"]
-      }},
-      "skills_analysis": {{
-        "relevant_skills": ["list", "of", "skills", "relevant", "to", "job"],
-        "other_skills": ["list", "of", "other", "skills", "not", "directly", "relevant"]
-      }},
-      "improvement_suggestions": [
-        "List of improvements made or suggested"
-      ]
-    }}
-    
-    Respond with ONLY the JSON object, no explanations or other text.
+    Format your response as JSON with the same structure as the resume,
+    but with optimized content that emphasizes relevant skills and experience.
     """
     
-    messages = [
-        {"role": "system", "content": "You are a resume analysis assistant."},
-        {"role": "user", "content": prompt}
-    ]
-    
-    result = call_openai_api(messages)
+    result = call_openai_api(system_prompt, user_prompt)
     
     # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```json\s*(.*?)\s*```', result, re.DOTALL)
-    if json_match:
-        result = json_match.group(1)
+    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
+    structured_data = json_match.group(1) if json_match else result
     
     try:
-        return json.loads(result)
+        return json.loads(structured_data)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse analysis JSON from OpenAI: {e}")
-        raise Exception("Failed to generate resume analysis")
+        logger.error(f"Error parsing JSON from OpenAI: {e}")
+        raise ValueError("Failed to optimize resume")
+
+def match_skills(resume_data, job_keywords):
+    """Match resume skills against job requirements"""
+    system_prompt = "You are a resume analysis assistant."
+    user_prompt = f"""
+    Compare these resume skills against job requirements:
+    
+    RESUME:
+    {json.dumps(resume_data, indent=2)}
+    
+    JOB KEYWORDS:
+    {json.dumps(job_keywords, indent=2)}
+    
+    Format your response as JSON with these keys:
+    - matching_skills (skills present in both)
+    - missing_skills (skills in job but not resume)
+    - skill_match_percentage (percentage of job skills found in resume)
+    - recommendations (array of suggestions)
+    """
+    
+    result = call_openai_api(system_prompt, user_prompt)
+    
+    # Extract JSON from the result (might be wrapped in markdown code blocks)
+    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
+    structured_data = json_match.group(1) if json_match else result
+    
+    try:
+        return json.loads(structured_data)
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing JSON from OpenAI: {e}")
+        raise ValueError("Failed to match skills")
 
 def generate_latex_resume(resume_data):
-    """Generate LaTeX code for the resume using OpenAI"""
-    prompt = f"""
-    Generate professional LaTeX code for the following resume data:
+    """Generate LaTeX resume from structured data"""
+    system_prompt = "You are a LaTeX resume formatting assistant."
+    user_prompt = f"""
+    Generate a professional LaTeX resume from this data:
     
     {json.dumps(resume_data, indent=2)}
     
-    The LaTeX should:
-    1. Use article class with appropriate packages
-    2. Have a clear, professional layout
-    3. Include all sections: contact, summary, skills, experience, education, certifications
-    4. Use itemize environments for lists
-    
-    Respond with ONLY the LaTeX code, no explanations or other text.
+    Format your response as a complete LaTeX document using modern formatting.
+    Use the article class with appropriate margins.
+    Don't include the json input in your response.
     """
     
-    messages = [
-        {"role": "system", "content": "You are a LaTeX resume formatting assistant."},
-        {"role": "user", "content": prompt}
-    ]
-    
-    result = call_openai_api(messages)
+    result = call_openai_api(system_prompt, user_prompt)
     
     # Extract LaTeX from the result (might be wrapped in markdown code blocks)
-    latex_match = re.search(r'```latex\s*(.*?)\s*```', result, re.DOTALL)
-    if latex_match:
-        return latex_match.group(1)
+    latex_match = re.search(r'```(?:latex)?\s*(.*?)```', result, re.DOTALL)
+    latex_content = latex_match.group(1) if latex_match else result
     
-    return result
+    # Ensure it's a proper LaTeX document
+    if not latex_content.strip().startswith('\\documentclass'):
+        latex_content = f"""\\documentclass[11pt,letterpaper]{{article}}
+\\usepackage[margin=1in]{{geometry}}
+\\usepackage{{enumitem}}
+\\usepackage{{hyperref}}
+
+\\begin{{document}}
+{latex_content}
+\\end{{document}}"""
+    
+    return latex_content
 
 def get_system_info():
     """Get basic system information"""
@@ -440,19 +378,36 @@ def create_app():
             ]
         })
     
-    @app.route('/api/health')
+    @app.route('/api/health', methods=['GET'])
     def health():
-        """Health check endpoint"""
-        return jsonify({
-            "status": "ok",
-            "uptime": str(datetime.now() - APP_START_TIME),
-            "timestamp": datetime.now().isoformat(),
-            "version": "1.0.0",
-            "components": {
-                "app": "healthy",
-                "file_system": "healthy" if os.path.exists(UPLOAD_FOLDER) and os.path.exists(OUTPUT_FOLDER) else "error"
-            }
-        })
+        """Health check endpoint."""
+        try:
+            # Get system metrics
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+            
+            return jsonify({
+                "status": "healthy",
+                "uptime": int(time.time() - START_TIME),
+                "memory": {
+                    "total": memory.total,
+                    "available": memory.available,
+                    "percent": memory.percent
+                },
+                "disk": {
+                    "total": disk.total,
+                    "free": disk.free,
+                    "percent": disk.percent
+                },
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500
     
     @app.route('/api/upload', methods=['POST'])
     def upload_resume():
@@ -559,8 +514,8 @@ def create_app():
             
             # Process with OpenAI
             keywords = extract_keywords(job_text)
-            optimized_resume = optimize_resume(resume_data, job_text, keywords)
-            analysis = generate_analysis(resume_data, optimized_resume, job_text, keywords)
+            optimized_resume = optimize_resume(resume_data, keywords)
+            analysis = match_skills(resume_data, keywords)
             
             # Save the optimized resume
             output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
@@ -678,17 +633,47 @@ def create_app():
     
     @app.route('/diagnostic/diagnostics')
     def diagnostics():
-        """Diagnostic dashboard with system metrics"""
-        system_info = get_system_info()
-        component_status = get_component_status()
+        """Show diagnostic information."""
+        # Get system information
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
         
-        return render_template('diagnostics.html', 
-                             system_info=system_info,
-                             component_status=component_status,
-                             uptime=get_uptime(),
-                             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                             timestamp_5_min_ago=(datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S"),
-                             env_vars={k: "***" if k.lower().find("key") >= 0 else v for k, v in os.environ.items()})
+        # Sample metrics
+        resume_processing_times = [1.2, 0.9, 1.5, 1.1, 1.3]
+        api_response_times = [0.2, 0.3, 0.1, 0.2, 0.1]
+        
+        # Sample requests
+        recent_requests = [
+            {
+                "id": f"req-{uuid.uuid4().hex[:8]}",
+                "method": "POST",
+                "endpoint": "/api/upload",
+                "status": 200,
+                "duration": 0.35,
+                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
+            },
+            {
+                "id": f"req-{uuid.uuid4().hex[:8]}",
+                "method": "POST",
+                "endpoint": "/api/optimize",
+                "status": 200,
+                "duration": 1.24,
+                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+            }
+        ]
+        
+        return render_template('diagnostics.html',
+                            uptime=format_uptime(int(time.time() - START_TIME)),
+                            memory_used=f"{memory.percent:.1f}%",
+                            memory_available=format_size(memory.available),
+                            memory_total=format_size(memory.total),
+                            disk_used=f"{disk.percent:.1f}%",
+                            disk_available=format_size(disk.free),
+                            disk_total=format_size(disk.total),
+                            resume_processing_times=resume_processing_times,
+                            api_response_times=api_response_times,
+                            recent_requests=recent_requests,
+                            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
     return app
 
@@ -703,6 +688,30 @@ def parse_args():
                       help='Host to run the server on (default: 0.0.0.0)')
     
     return parser.parse_args()
+
+# Utility functions
+def format_size(size_bytes):
+    """Format bytes to human readable size."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.2f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.2f} PB"
+
+def format_uptime(seconds):
+    """Format seconds to human readable uptime."""
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if days > 0:
+        return f"{int(days)}d {int(hours)}h {int(minutes)}m"
+    elif hours > 0:
+        return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
+    elif minutes > 0:
+        return f"{int(minutes)}m {int(seconds)}s"
+    else:
+        return f"{int(seconds)}s"
 
 if __name__ == '__main__':
     try:

@@ -17,8 +17,13 @@ COPY . .
 # Create directory for temporary uploads
 RUN mkdir -p /tmp/uploads && chmod 777 /tmp/uploads
 
+# Set environment variables
+ENV FLASK_APP=wsgi.py
+ENV FLASK_ENV=production
+ENV PORT=8080
+
 # Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["python", "working_app.py", "--port", "8080"] 
+# Run with gunicorn
+CMD ["gunicorn", "wsgi:app", "--bind", "0.0.0.0:8080", "--log-level", "info"] 

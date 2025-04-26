@@ -6,7 +6,7 @@ This document provides step-by-step instructions for deploying the Resume Optimi
 
 - A [Render account](https://render.com/signup)
 - Git repository with your Resume Optimizer code
-- OpenAI API key
+- OpenAI API key (required)
 
 ## Deployment Steps
 
@@ -53,15 +53,12 @@ Render will automatically detect the `render.yaml` file in your repository and p
 
 Add the following environment variables in the Render dashboard:
 
-- `OPENAI_API_KEY`: Your OpenAI API key
+- `OPENAI_API_KEY`: Your OpenAI API key (required)
 - `FLASK_ENV`: `production`
 - `PORT`: `8080`
 - `PDF_GENERATION_MODE`: `fallback`
 - `SECRET_KEY`: A secure random string for Flask's session encryption
-
-Optional variables (if using Supabase):
-- `SUPABASE_URL`: Your Supabase project URL
-- `SUPABASE_KEY`: Your Supabase anon key
+- `FLASK_APP`: `wsgi.py`
 
 ### 5. Deploy Your Service
 
@@ -70,52 +67,48 @@ Optional variables (if using Supabase):
 3. Monitor the build logs for any errors
 4. Once completed, your service will be available at `https://<service-name>.onrender.com`
 
-### 6. Verify Deployment
-
-Run the test script to verify that all endpoints are working correctly:
-
-```bash
-# Install test dependencies
-pip install requests
-
-# Run the test deployment script
-python test_deployment.py --url https://<service-name>.onrender.com
-```
-
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Application Error (Status 503)**
-   - Check application logs in Render dashboard
-   - Verify your requirements.txt is complete
-   - Ensure gunicorn is installed
+1. **ImportError for werkzeug.contrib.ProxyFix**
+   - This is caused by using an outdated version of Werkzeug
+   - **Fix**: Update the import in app.py to use `from werkzeug.middleware.proxy_fix import ProxyFix` 
 
-2. **API Key Issues**
-   - Verify your OPENAI_API_KEY is correct and active
-   - Check if your API key has sufficient quota
+2. **SyntaxError in database.py**
+   - Caused by malformed docstring or comment in database.py
+   - **Fix**: Edit database.py to ensure all docstrings are properly formatted
 
-3. **PDF Generation Fails**
-   - Check the buildpack.yml file has correct LaTeX dependencies
-   - Set PDF_GENERATION_MODE to fallback for simpler PDF generation
+3. **API Key Issues**
+   - **Fix**: Verify your OPENAI_API_KEY is correctly set in environment variables
+   - You can use the configure_render.sh script to set all environment variables
 
-### Viewing Logs
+4. **PDF Generation Fails**
+   - **Fix**: Set PDF_GENERATION_MODE to fallback to use simpler PDF generation
 
-To view application logs and troubleshoot issues:
-1. Go to your Web Service in the Render Dashboard
-2. Select the **Logs** tab
-3. Filter logs as needed to identify issues
+5. **Database Connection Issues**
+   - The application will automatically fall back to an in-memory database
+   - For persistent storage, configure Supabase credentials properly
 
-## Auto-Deployment
+### Checking Deployment Status
 
-By default, Render automatically deploys when you push to your repository. You can disable this in the Render dashboard if needed.
+To verify the deployment is working correctly:
 
-## Custom Domain (Optional)
+1. Visit `https://<service-name>.onrender.com/api/health`
+2. Check the /status endpoint for more detailed diagnostics
+3. Run test_deployment.py to verify all endpoints
 
-To use a custom domain:
-1. Go to your Web Service settings
-2. Click **Settings** > **Custom Domain**
-3. Follow the instructions to verify and set up your domain
+## Using Docker (Alternative)
+
+You can also deploy the application using Docker:
+
+```bash
+# Build the Docker image
+docker build -t resume-optimizer .
+
+# Run the container
+docker run -p 8080:8080 -e OPENAI_API_KEY=your_key_here resume-optimizer
+```
 
 ## Performance and Scaling
 
