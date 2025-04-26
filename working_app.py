@@ -354,6 +354,20 @@ def get_uptime():
     else:
         return f"{uptime_seconds / 86400:.1f} days"
 
+def handle_missing_api_key():
+    """Return a standardized error response for missing API key"""
+    if request.path == '/api/health':
+        # Still allow health checks without API key
+        return None
+    
+    error_response = {
+        "error": "OpenAI API key not configured",
+        "message": "The server is missing required API credentials. Please contact the administrator.",
+        "status": "configuration_error",
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+    return jsonify(error_response), 503  # Service Unavailable
+
 def create_app():
     """Create and configure a Flask application."""
     # Set up CORS
@@ -399,14 +413,14 @@ def create_app():
                     "free": disk.free,
                     "percent": disk.percent
                 },
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.datetime.now().isoformat()
             }), 200
         except Exception as e:
             logger.error(f"Health check failed: {str(e)}")
             return jsonify({
                 "status": "error",
                 "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.datetime.now().isoformat()
             }), 500
     
     @app.route('/api/upload', methods=['POST'])
@@ -626,7 +640,7 @@ def create_app():
         return render_template('status.html', 
                               title="Resume Optimizer - Status",
                               system_status=overall_status,
-                              timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                              timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                               uptime=get_uptime(),
                               version="0.1.0",
                               components=components)
@@ -650,7 +664,7 @@ def create_app():
                 "endpoint": "/api/upload",
                 "status": 200,
                 "duration": 0.35,
-                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
             },
             {
                 "id": f"req-{uuid.uuid4().hex[:8]}",
@@ -658,7 +672,7 @@ def create_app():
                 "endpoint": "/api/optimize",
                 "status": 200,
                 "duration": 1.24,
-                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
             }
         ]
         
@@ -673,7 +687,17 @@ def create_app():
                             resume_processing_times=resume_processing_times,
                             api_response_times=api_response_times,
                             recent_requests=recent_requests,
-                            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    
+    @app.before_request
+    def check_api_key():
+        """Check if OpenAI API key is available for routes that need it"""
+        api_routes = ['/api/upload', '/api/optimize', '/api/enhance']
+        
+        if request.path in api_routes and not os.environ.get("OPENAI_API_KEY"):
+            error_response = handle_missing_api_key()
+            if error_response:
+                return error_response
     
     return app
 

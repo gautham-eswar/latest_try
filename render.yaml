@@ -2,23 +2,16 @@ services:
   - type: web
     name: resume-optimizer
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn wsgi:app --log-level info
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: gunicorn wsgi:app
+    healthCheckPath: /api/health
+    plan: free
+    autoDeploy: true
     envVars:
-      - key: FLASK_ENV
-        value: production
+      - key: PYTHON_VERSION
+        value: 3.9.0
       - key: PORT
         value: 8080
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
-        sync: false
-      - key: PDF_GENERATION_MODE
-        value: fallback
-    healthCheckPath: /api/health
-    autoDeploy: true
     disk:
       name: uploads
       mountPath: /tmp/uploads

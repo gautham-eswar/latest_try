@@ -1,102 +1,69 @@
-# Resume Optimizer - Render Deployment Guide
+# Deploying Resume Optimizer to Render
 
-This document provides step-by-step instructions for deploying the Resume Optimizer application to [Render](https://render.com/).
+This guide provides step-by-step instructions for deploying the Resume Optimizer application to Render.
 
 ## Prerequisites
 
-- A [Render account](https://render.com/signup)
-- Git repository with your Resume Optimizer code
-- OpenAI API key (required)
+- A Render account
+- Your code pushed to a Git repository (GitHub, GitLab, etc.)
+- An OpenAI API key
 
 ## Deployment Steps
 
-### 1. Push Code to Git
+### 1. Push the Latest Code to Git
 
-First, ensure your code is pushed to a Git repository (GitHub, GitLab, etc.):
+Ensure the latest code with the optimized dependencies is pushed to your repository:
 
 ```bash
-# Initialize a Git repository if not already done
-git init
-
-# Add all files to Git
 git add .
-
-# Commit changes
-git commit -m "Prepare for Render deployment"
-
-# Add your remote repository
-git remote add origin <your-git-repo-url>
-
-# Push to your repository
-git push -u origin main
+git commit -m "[Gautham] Optimize for Render deployment"
+git push origin your-branch-name
 ```
 
-### 2. Connect to Render
+### 2. Create a New Web Service on Render
 
-1. Log in to your [Render Dashboard](https://dashboard.render.com/)
+1. Log in to your Render dashboard at https://dashboard.render.com/
 2. Click **New** and select **Web Service**
-3. Connect your Git repository
-4. Follow the prompts to authorize Render to access your repository
+3. Connect your repository
+4. Configure the service:
+   - **Name**: resume-optimizer (or your preferred name)
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements-render.txt`
+   - **Start Command**: `gunicorn wsgi:app`
 
-### 3. Configure Deployment Settings
+### 3. Configure Environment Variables
 
-Render will automatically detect the `render.yaml` file in your repository and pre-configure your service settings. Review and adjust as needed:
+Add the following environment variables:
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `PORT`: 8080
+- `FLASK_ENV`: production
+- `PDF_GENERATION_MODE`: fallback (or your preferred mode)
 
-- **Name**: `resume-optimizer` (or your preferred name)
-- **Environment**: `Python`
-- **Region**: Choose the region closest to your users
-- **Branch**: `main` (or your deployment branch)
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `gunicorn wsgi:app --log-level info`
+### 4. Deploy the Service
 
-### 4. Set Environment Variables
-
-Add the following environment variables in the Render dashboard:
-
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `FLASK_ENV`: `production`
-- `PORT`: `8080`
-- `PDF_GENERATION_MODE`: `fallback`
-- `SECRET_KEY`: A secure random string for Flask's session encryption
-- `FLASK_APP`: `wsgi.py`
-
-### 5. Deploy Your Service
-
-1. Click **Create Web Service**
-2. Render will begin the deployment process
-3. Monitor the build logs for any errors
-4. Once completed, your service will be available at `https://<service-name>.onrender.com`
+Click **Create Web Service** to deploy.
 
 ## Troubleshooting
 
-### Common Issues
+If you encounter build failures:
 
-1. **ImportError for werkzeug.contrib.ProxyFix**
-   - This is caused by using an outdated version of Werkzeug
-   - **Fix**: Update the import in app.py to use `from werkzeug.middleware.proxy_fix import ProxyFix` 
+1. Check the build logs for specific errors
+2. Ensure all dependencies are properly specified in `requirements-render.txt`
+3. For packages that require compilation, try using pre-built wheels
+4. Consider using a more powerful instance if the build is timing out
 
-2. **SyntaxError in database.py**
-   - Caused by malformed docstring or comment in database.py
-   - **Fix**: Edit database.py to ensure all docstrings are properly formatted
+## Updating the Deployment
 
-3. **API Key Issues**
-   - **Fix**: Verify your OPENAI_API_KEY is correctly set in environment variables
-   - You can use the configure_render.sh script to set all environment variables
+To update your deployment:
+1. Push changes to your Git repository
+2. Render will automatically deploy the latest version if auto-deploy is enabled
+3. You can also manually trigger a deploy from the Render dashboard
 
-4. **PDF Generation Fails**
-   - **Fix**: Set PDF_GENERATION_MODE to fallback to use simpler PDF generation
+## Monitoring
 
-5. **Database Connection Issues**
-   - The application will automatically fall back to an in-memory database
-   - For persistent storage, configure Supabase credentials properly
-
-### Checking Deployment Status
-
-To verify the deployment is working correctly:
-
-1. Visit `https://<service-name>.onrender.com/api/health`
-2. Check the /status endpoint for more detailed diagnostics
-3. Run test_deployment.py to verify all endpoints
+- Monitor application performance via the Render dashboard
+- Check application logs for errors
+- Use the `/diagnostics` endpoint for detailed system status
 
 ## Using Docker (Alternative)
 
