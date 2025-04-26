@@ -3,7 +3,8 @@ flask==2.3.3
 flask-cors==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
-httpx==0.26.0
+# Resolve dependency conflict - httpx version that works with Supabase
+httpx>=0.24.0,<0.26.0
 psutil==5.9.8
 python-dateutil==2.8.2
 markupsafe==2.1.5
@@ -23,6 +24,9 @@ pyyaml==6.0.1
 openai==1.6.1
 cryptography==41.0.7
 regex==2023.12.25
+
+# Supabase with correct version constraints
+supabase==2.4.0
 
 # Testing tools
 pytest==8.0.0
