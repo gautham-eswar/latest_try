@@ -35,8 +35,22 @@ try:
         os.environ["ALLOW_MISSING_API_KEY"] = "true"
         logger.warning("Running in development mode without API key")
 
-    # Import and create the application
-    from working_app import create_app
+    # Try importing from working_app first (preferred)
+    try:
+        logger.info("Attempting to import from working_app...")
+        from working_app import create_app
+        logger.info("Successfully imported from working_app")
+    except ImportError as e:
+        logger.warning(f"Failed to import from working_app: {str(e)}")
+        logger.info("Falling back to app.py...")
+        try:
+            from app import create_app
+            logger.info("Successfully imported from app")
+        except ImportError as e:
+            logger.critical(f"Failed to import from app.py: {str(e)}")
+            raise ImportError("Could not import application from either working_app or app")
+    
+    # Create the application
     app = create_app()
     
     logger.info(f"WSGI application initialized successfully on port {os.environ.get('PORT')}")

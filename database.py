@@ -18,6 +18,121 @@ from collections import defaultdict
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Performance tracking variables
+_connection_status = {
+    'last_success': None,
+    'consecutive_failures': 0,
+    'total_failures': 0,
+    'total_queries': 0,
+    'performance': {
+        'avg_query_time': 0
+    }
+}
+_queries_history = []
+
+def _track_query_performance(func):
+    """
+    Decorator to track query performance and statistics.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        global _connection_status, _queries_history
+        
+        start_time = time.time()
+        _connection_status['total_queries'] += 1
+        transaction_id = f"tx-{datetime.now().timestamp()}"
+        
+        # Extract operation details for logging
+        table_name = args[0] if len(args) > 0 else kwargs.get('table_name', 'unknown')
+        operation = args[1] if len(args) > 1 else kwargs.get('operation', 'unknown')
+        
+        try:
+            result = func(*args, **kwargs)
+            
+            # Update success metrics
+            query_time = time.time() - start_time
+            _connection_status['last_success'] = datetime.now()
+            _connection_status['consecutive_failures'] = 0
+            
+            # Update average query time
+            total_queries = _connection_status['total_queries']
+            current_avg = _connection_status['performance']['avg_query_time']
+            _connection_status['performance']['avg_query_time'] = (
+                (current_avg * (total_queries - 1) + query_time) / total_queries
+            )
+            
+            # Record query in history
+            _queries_history.append({
+                'transaction_id': transaction_id,
+                'table': table_name,
+                'operation': operation,
+                'duration': query_time,
+                'status': 'success',
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Limit history size
+            if len(_queries_history) > 100:
+                _queries_history = _queries_history[-100:]
+                
+            return result
+            
+        except Exception as e:
+            # Update failure metrics
+            query_time = time.time() - start_time
+            _connection_status['consecutive_failures'] += 1
+            _connection_status['total_failures'] += 1
+            
+            # Record query in history
+            _queries_history.append({
+                'transaction_id': transaction_id,
+                'table': table_name,
+                'operation': operation,
+                'duration': query_time,
+                'status': 'error',
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Limit history size
+            if len(_queries_history) > 100:
+                _queries_history = _queries_history[-100:]
+                
+            # Re-raise the exception
+            raise
+    
+    return wrapper
+
+def _with_retry(func):
+    """
+    Decorator to add retry logic to database operations.
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        max_retries = 3
+        retry_delay = 0.5  # Initial delay in seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                logger.warning(f"Database operation failed (attempt {attempt}/{max_retries}): {str(e)}")
+                
+                if attempt == max_retries:
+                    logger.error(f"Max retries reached. Giving up: {str(e)}")
+                    raise
+                
+                # Reset connection before retry
+                reset_connection()
+                
+                # Exponential backoff with jitter
+                jitter = random.uniform(0, 0.5)
+                sleep_time = retry_delay * (2 ** (attempt - 1)) + jitter
+                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
+                time.sleep(sleep_time)
+    
+    return wrapper
+
 # Attempt to import Supabase client
 try:
     from supabase import create_client, Client

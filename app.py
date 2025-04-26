@@ -17,6 +17,8 @@ import io
 import argparse
 import requests
 from functools import wraps
+import psutil
+import platform
 
 from flask import Flask, request, jsonify, send_file, g, render_template, after_this_request
 from flask_cors import CORS
@@ -24,28 +26,71 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
-# Local imports
+# Import database functions or define fallbacks if import fails
 try:
-    from in_memory_db import create_in_memory_database, InMemoryDatabase
-    from database import create_database_client
-except ImportError as e:
-    logging.warning(f"Database import error: {e}")
-    # Define fallback database functions if imports fail
+    from database import create_database_client, create_in_memory_database
+except ImportError:
+    logging.warning("database module could not be imported, using inline fallbacks")
+    from collections import defaultdict
+    
     class InMemoryDatabase:
-        """Simple in-memory database fallback."""
-        def __init__(self, app=None):
-            self.data = {}
-            self.app = app
-            logging.info("In-memory database initialized")
+        """Simple in-memory database fallback implementation."""
         
-    def create_in_memory_database(app=None):
-        """Create and initialize in-memory database."""
-        return InMemoryDatabase(app)
-        
+        def __init__(self):
+            self.data = defaultdict(list)
+            self.counters = defaultdict(int)
+            logging.info("Initialized in-memory database fallback")
+            
+        def insert(self, collection, document):
+            """Insert a document into a collection."""
+            self.counters[collection] += 1
+            document_id = self.counters[collection]
+            document['id'] = document_id
+            self.data[collection].append(document)
+            return document_id
+            
+        def find(self, collection, query=None):
+            """Find documents in a collection matching a query."""
+            if query is None:
+                return self.data[collection]
+            
+            results = []
+            for doc in self.data[collection]:
+                matches = True
+                for key, value in query.items():
+                    if key not in doc or doc[key] != value:
+                        matches = False
+                        break
+                if matches:
+                    results.append(doc)
+            return results
+            
+        def table(self, name):
+            """Compatibility method with Supabase client."""
+            class TableQuery:
+                def __init__(self, db, table_name):
+                    self.db = db
+                    self.table_name = table_name
+                    
+                def select(self, columns='*'):
+                    return self
+                    
+                def limit(self, n):
+                    return self
+                    
+                def execute(self):
+                    return {"data": self.db.find(self.table_name)}
+                    
+            return TableQuery(self, name)
+    
     def create_database_client():
-        """Fallback function for database client creation"""
-        logging.warning("Using fallback database client creation function")
+        """Fallback database client creator."""
+        logging.warning("Using inline fallback database client")
         return create_in_memory_database()
+        
+    def create_in_memory_database():
+        """Create an in-memory database instance."""
+        return InMemoryDatabase()
 
 # Load environment variables
 load_dotenv()
@@ -179,7 +224,7 @@ def create_app():
         logger.warning(f"Failed to initialize database client: {str(e)}")
         logger.warning("Falling back to in-memory database")
         try:
-            db_client = create_in_memory_database(app)
+            db_client = create_in_memory_database()
             logger.info("In-memory database initialized")
         except Exception as e:
             logger.critical(f"Failed to start application: {str(e)}")
