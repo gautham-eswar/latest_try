@@ -70,3 +70,26 @@ python large_input_test.py
 ## Diagnostics
 
 Access the diagnostics dashboard at `/diagnostics` to monitor system performance and pipeline status.
+
+# Environment Variables
+
+This application requires the following environment variables:
+
+- `OPENAI_API_KEY`: Your OpenAI API key (required)
+- `PORT`: The port the application will run on (default: 8080)
+- `FLASK_ENV`: The environment to run Flask in (development or production)
+- `PDF_GENERATION_MODE`: PDF generation mode (default: fallback)
+
+You can set these variables in a `.env` file in the root directory or in your deployment platform's environment settings. For local development:
+
+```bash
+# Create a .env file
+cat << EOF > .env
+OPENAI_API_KEY=your_api_key_here
+PORT=8080
+FLASK_ENV=development
+PDF_GENERATION_MODE=fallback
+EOF
+```
+
+For Render deployment, set these variables in the Render dashboard or in your `render.yaml` file.
