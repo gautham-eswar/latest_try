@@ -31,20 +31,22 @@ class SemanticMatcher:
     Generate embeddings, deduplicate keywords, and match keywords to resume bullets.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-ada-002"):
         """
         Initialize the SemanticMatcher with OpenAI API key.
         
         Args:
             api_key: OpenAI API key. If None, will try to get from environment variable.
+            model: OpenAI model to use for embedding generation
         """
         # Get API key from parameter or environment variable
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or os.environ.get('OPENAI_API_KEY')
         if not self.api_key:
-            raise ValueError("OpenAI API key is required. Provide it as a parameter or set OPENAI_API_KEY environment variable.")
+            raise ValueError("OpenAI API key not provided or found in environment variables")
         
         # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key, proxies=None)
+        self.model = model
         
         # Default similarity threshold
         self.similarity_threshold = 0.75
@@ -445,7 +447,7 @@ class SemanticMatcher:
         """
         response = self.client.embeddings.create(
             input=text,
-            model="text-embedding-ada-002"
+            model=self.model
         )
         return response.data[0].embedding
     

@@ -31,20 +31,22 @@ class ResumeEnhancer:
     Enhance resume bullet points with keywords while preserving meaning.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-3.5-turbo"):
         """
         Initialize the ResumeEnhancer with OpenAI API key.
         
         Args:
             api_key: OpenAI API key. If None, will try to get from environment variable.
+            model: OpenAI model to use
         """
         # Get API key from parameter or environment variable
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.api_key = api_key or os.environ.get('OPENAI_API_KEY')
         if not self.api_key:
-            raise ValueError("OpenAI API key is required. Provide it as a parameter or set OPENAI_API_KEY environment variable.")
+            raise ValueError("OpenAI API key is required")
         
         # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key, proxies=None)
+        self.model = model
         
         # Track which bullets have been modified
         self.modified_bullets = set()
@@ -266,7 +268,7 @@ class ResumeEnhancer:
         try:
             # Call OpenAI API
             response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a professional resume writer specializing in keyword optimization while maintaining factual accuracy."},
                     {"role": "user", "content": prompt}
