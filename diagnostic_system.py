@@ -872,13 +872,15 @@ class DiagnosticSystem:
                 result = self.check_system()
                 
                 # Ensure all required template variables are present
+                # Use .get() for safety, assuming result might be incomplete on error
                 system_info = {
-                    "uptime": result.get('uptime', 'Unknown'),
+                    # Uptime is already guaranteed by check_system's error handling, but .get() is safer
+                    "uptime": result.get('uptime', 'Unknown'), 
                     "platform": result.get('system', {}).get('platform', 'Unknown'),
                     "memory": {
-                        "total": result.get('system', {}).get('memory', {}).get('total', 0),
-                        "available": result.get('system', {}).get('memory', {}).get('available', 0),
-                        "percent": result.get('system', {}).get('memory', {}).get('percent', 0),
+                        "total": result.get('memory', {}).get('system', {}).get('total_gb', 'N/A'),
+                        "available": result.get('memory', {}).get('system', {}).get('available_gb', 'N/A'),
+                        "percent": result.get('memory', {}).get('system', {}).get('percent_used', 0),
                     },
                     "cpu_usage": result.get('system', {}).get('cpu_percent', 0)
                 }
@@ -887,35 +889,41 @@ class DiagnosticSystem:
                 transactions = list(self.transaction_history[:20]) if hasattr(self, 'transaction_history') else []
                 
                 # Ensure environment vars is a dict
-                env_vars = result.get('environment', {})
+                # Use .get() for safety
+                env_vars = result.get('environment', {}).get('env_vars', {})
                 
                 # Ensure pipeline data is present
-                pipeline_status = getattr(self, 'pipeline_status', {"status": "unknown", "message": "No pipeline data"})
-                pipeline_stages = getattr(self, 'pipeline_stages', [])
-                pipeline_history = list(getattr(self, 'pipeline_history', []))
+                pipeline_status = result.get('pipeline', {})
+                pipeline_stages = pipeline_status.get('stages', [])
+                pipeline_history = list(pipeline_status.get('recent_jobs', []))
                 
+                # Use .get() for all direct accesses to result for robustness
                 return render_template('diagnostics.html', 
                                       title="System Diagnostics",
                                       diagnostic=result,
-                                      system_status=result['overall_status'],
+                                      system_status=result.get('overall_status', 'error'),
                                       version=result.get('version', '1.0.0'),
                                       active_connections=len(self.transactions),
-                                      uptime=result['uptime'],
-                                      timestamp=result['timestamp'],
-                                      components=result['components'],
+                                      uptime=result.get('uptime', 0), # Default to 0 seconds if missing
+                                      timestamp=result.get('timestamp', datetime.now().isoformat()),
+                                      components=result.get('components', {}), # Default to empty dict
                                       system_info=system_info,
                                       env_vars=env_vars,
                                       transactions=transactions,
                                       pipeline_status=pipeline_status,
                                       pipeline_stages=pipeline_stages,
                                       pipeline_history=pipeline_history)
+                                      
             except Exception as e:
-                logger.error(f"Error rendering diagnostics page: {str(e)}")
+                # Log the actual error type and message
+                error_type = type(e).__name__
+                error_message = str(e)
+                logger.error(f"Error rendering diagnostics page: {error_type} - {error_message}", exc_info=True)
                 # Fallback to a simple JSON response
                 return jsonify({
                     "status": "error",
-                    "message": f"Error rendering diagnostics page: {str(e)}",
-                    "error_type": type(e).__name__,
+                    "message": f"Error rendering diagnostics page: {error_type} - {error_message}",
+                    "error_type": error_type,
                     "timestamp": datetime.now().isoformat()
                 }), 500
         
