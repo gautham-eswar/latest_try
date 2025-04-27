@@ -237,7 +237,8 @@ def create_app():
     # Initialize diagnostic system
     try:
         import diagnostic_system
-        diagnostic = diagnostic_system.DiagnosticSystem(app)
+        diagnostic = diagnostic_system.DiagnosticSystem()
+        diagnostic.init_app(app)
         app.config['diagnostic'] = diagnostic
         logger.info("Diagnostic system initialized successfully")
     except ImportError:
