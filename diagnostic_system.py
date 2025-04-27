@@ -23,6 +23,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger('diagnostic_system')
 
+def log_openai_dependencies():
+    """Log detailed OpenAI dependency information for debugging."""
+    try:
+        # Log main OpenAI version
+        import openai
+        logger.info(f"OpenAI main package version: {openai.__version__}")
+        
+        # Check for httpx dependency version (OpenAI requires httpx)
+        try:
+            import httpx
+            logger.info(f"httpx version: {httpx.__version__}")
+        except (ImportError, AttributeError):
+            logger.warning("httpx version information not available")
+        
+        # Log all installed packages to check for conflicts
+        import pkg_resources
+        logger.info("Listing all installed packages that might affect OpenAI:")
+        relevant_packages = ['openai', 'httpx', 'aiohttp', 'requests', 'urllib3']
+        for pkg_name in relevant_packages:
+            try:
+                version = pkg_resources.get_distribution(pkg_name).version
+                logger.info(f"  - {pkg_name}: {version}")
+            except pkg_resources.DistributionNotFound:
+                logger.info(f"  - {pkg_name}: Not installed")
+        
+        # Check Python version
+        import sys
+        logger.info(f"Python version: {sys.version}")
+        
+    except Exception as e:
+        logger.error(f"Error getting dependency information: {str(e)}")
+
 class DiagnosticSystem:
     """Comprehensive diagnostic system for monitoring application health."""
     
@@ -36,6 +68,9 @@ class DiagnosticSystem:
         self.transactions = {}
         self.transaction_history = []
         self.max_transaction_history = 100
+        
+        # Log dependency information for debugging
+        log_openai_dependencies()
         
         # Pipeline monitoring data
         self.pipeline_jobs = {}
@@ -510,48 +545,147 @@ class DiagnosticSystem:
             
             # We'll import here to isolate potential import errors
             try:
-                from openai import OpenAI
+                # Log the openai version for debugging
+                import openai
+                logger.info(f"OpenAI library version: {openai.__version__}")
                 
-                # Simplest possible initialization with just the API key
-                client = OpenAI(api_key=api_key)
+                # Determine initialization approach based on version
+                is_legacy_openai = False
+                try:
+                    from packaging import version
+                    current_version = version.parse(openai.__version__)
+                    if current_version < version.parse("1.0.0"):
+                        is_legacy_openai = True
+                        logger.info("Detected legacy OpenAI client (pre-1.0)")
+                    else:
+                        logger.info("Detected modern OpenAI client (>= 1.0)")
+                except ImportError:
+                    # Can't verify version with packaging, try based on importing
+                    if not hasattr(openai, "OpenAI"):
+                        is_legacy_openai = True
+                        logger.info("Detected legacy OpenAI client (based on module structure)")
                 
-                # Check connection with a simple ping
-                start_time = datetime.now()
-                models = client.models.list()
-                ping_time = (datetime.now() - start_time).total_seconds()
-                
-                # Check if required models are available
-                required_models = ['gpt-4-turbo', 'gpt-3.5-turbo']
-                available_models = [model.id for model in models.data]
-                
-                model_status = {
-                    model: model in available_models
-                    for model in required_models
-                }
-                
-                # Check rate limit information from headers
-                rate_limit_info = {
-                    'requests_remaining': 'unknown',
-                    'request_limit': 'unknown',
-                    'tokens_remaining': 'unknown',
-                    'token_limit': 'unknown'
-                }
-                
-                # Determine overall OpenAI status
-                if all(model_status.values()):
-                    status = 'healthy'
-                    message = 'OpenAI API connection successful'
+                if is_legacy_openai:
+                    # Legacy OpenAI client (pre-1.0)
+                    logger.info("Using legacy OpenAI client initialization")
+                    # Set API key directly on the module
+                    openai.api_key = api_key
+                    
+                    # Make test request using legacy pattern
+                    try:
+                        logger.info("Testing legacy OpenAI client...")
+                        start_time = datetime.now()
+                        models = openai.Model.list()
+                        ping_time = (datetime.now() - start_time).total_seconds()
+                        
+                        # Extract model IDs
+                        available_models = [model.id for model in models.data] if hasattr(models, 'data') else []
+                        
+                        # Required models to check
+                        required_models = ['gpt-4-turbo', 'gpt-3.5-turbo']
+                        
+                        model_status = {
+                            model: model in available_models
+                            for model in required_models
+                        }
+                        
+                        # Rate limit info for legacy client
+                        rate_limit_info = {
+                            'requests_remaining': 'unknown',
+                            'request_limit': 'unknown',
+                            'tokens_remaining': 'unknown',
+                            'token_limit': 'unknown'
+                        }
+                        
+                        # Determine status
+                        if all(model_status.values()):
+                            status = 'healthy'
+                            message = 'OpenAI API connection successful (legacy client)'
+                        else:
+                            status = 'degraded'
+                            message = 'Some required models are not available (legacy client)'
+                        
+                        return {
+                            'status': status,
+                            'message': message,
+                            'ping': ping_time,
+                            'models': model_status,
+                            'rate_limits': rate_limit_info,
+                            'client_version': 'legacy'
+                        }
+                    except Exception as e:
+                        logger.error(f"Legacy OpenAI client test failed: {str(e)}")
+                        return {
+                            'status': 'error',
+                            'message': f'Legacy OpenAI API test failed: {str(e)}',
+                            'models': None,
+                            'ping': None
+                        }
                 else:
-                    status = 'degraded'
-                    message = 'Some required models are not available'
-                
-                return {
-                    'status': status,
-                    'message': message,
-                    'ping': ping_time,
-                    'models': model_status,
-                    'rate_limits': rate_limit_info
-                }
+                    # Modern OpenAI client (>= 1.0)
+                    from openai import OpenAI
+                    
+                    # Log exact client initialization details
+                    logger.info(f"Initializing modern OpenAI client with api_key={api_key[:4]}... (masked)")
+                    
+                    try:
+                        # Simplest possible initialization with just the API key
+                        client = OpenAI(api_key=api_key)
+                        logger.info("OpenAI client initialized successfully")
+                    except TypeError as te:
+                        # Specific handler for TypeError which might be related to argument issues
+                        logger.error(f"TypeError during OpenAI client initialization: {str(te)}")
+                        if "got an unexpected keyword argument" in str(te):
+                            logger.error("This appears to be an API compatibility issue. Checking openai version again.")
+                            import pkg_resources
+                            installed_version = pkg_resources.get_distribution("openai").version
+                            logger.error(f"Confirmed openai version from pkg_resources: {installed_version}")
+                        return {
+                            'status': 'error',
+                            'message': f'OpenAI API initialization error: {str(te)}',
+                            'models': None,
+                            'ping': None
+                        }
+                    
+                    # Check connection with a simple ping
+                    logger.info("Attempting to list OpenAI models...")
+                    start_time = datetime.now()
+                    models = client.models.list()
+                    ping_time = (datetime.now() - start_time).total_seconds()
+                    logger.info(f"Successfully listed {len(models.data)} OpenAI models in {ping_time:.2f}s")
+                    
+                    # Check if required models are available
+                    required_models = ['gpt-4-turbo', 'gpt-3.5-turbo']
+                    available_models = [model.id for model in models.data]
+                    
+                    model_status = {
+                        model: model in available_models
+                        for model in required_models
+                    }
+                    
+                    # Check rate limit information from headers
+                    rate_limit_info = {
+                        'requests_remaining': 'unknown',
+                        'request_limit': 'unknown',
+                        'tokens_remaining': 'unknown',
+                        'token_limit': 'unknown'
+                    }
+                    
+                    # Determine overall OpenAI status
+                    if all(model_status.values()):
+                        status = 'healthy'
+                        message = 'OpenAI API connection successful'
+                    else:
+                        status = 'degraded'
+                        message = 'Some required models are not available'
+                    
+                    return {
+                        'status': status,
+                        'message': message,
+                        'ping': ping_time,
+                        'models': model_status,
+                        'rate_limits': rate_limit_info
+                    }
                 
             except ImportError as e:
                 return {
