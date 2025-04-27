@@ -247,31 +247,74 @@ def parse_resume(resume_text):
         logger.error(f"Error parsing JSON from OpenAI: {e}")
         raise ValueError("Failed to parse structured data from resume")
 
-# Placeholder for Advanced Keyword Extraction
-def advanced_keyword_extraction(job_description_text: str) -> Dict[str, Any]:
-    """ 
-    Placeholder for a more advanced keyword extraction logic.
-    This should return a dict compatible with SemanticMatcher, e.g.:
-    { "keywords": [ 
-        { "keyword": "Python", "context": "Experience with Python...", "relevance_score": 0.9, "skill_type": "hard skill" },
-        { "keyword": "Teamwork", "context": "Ability to work in a team...", "relevance_score": 0.8, "skill_type": "soft skill" }
-      ] 
-    }
-    For now, it does a very basic split and assigns default values.
+def extract_detailed_keywords(job_description_text: str, max_retries=3) -> Dict[str, Any]:
     """
-    logger.warning("Using placeholder advanced_keyword_extraction. Implement proper logic.")
-    keywords = []
-    # Simple split for demonstration - REPLACE THIS
-    potential_keywords = re.split(r'[\n.,;!?\s]+', job_description_text)
-    for kw in potential_keywords:
-        if len(kw) > 2 and len(kw) < 25: # Basic filtering
-            keywords.append({
-                "keyword": kw.strip(),
-                "context": f"Mentioned in job description: ...{kw[:50]}...", # Example context
-                "relevance_score": 0.7, # Default score
-                "skill_type": "hard skill" if any(c.isdigit() for c in kw) else "soft skill" # Basic guess
-            })
-    return {"keywords": keywords[:50]} # Limit number of keywords for now
+    Extract detailed keywords from job description using OpenAI, 
+    attempting to get context, relevance, and skill type.
+    Returns a dictionary structured for SemanticMatcher.
+    """
+    logger.info("Extracting detailed keywords using OpenAI...")
+    system_prompt = """
+    You are an expert HR analyst specializing in extracting structured keywords from job descriptions. 
+    Focus on identifying distinct skills (hard and soft), experiences, tools, qualifications, and responsibilities.
+    """
+    user_prompt = f"""
+    Analyze the following job description and extract key requirements. 
+    For each requirement, identify:
+    1.  `keyword`: The core skill, tool, qualification, or concept (1-5 words).
+    2.  `context`: A short snippet from the job description where the keyword appears, providing context.
+    3.  `relevance_score`: Estimate the importance of this keyword for the role on a scale of 0.1 to 1.0 (e.g., 1.0 for required, 0.7 for preferred, 0.5 for mentioned).
+    4.  `skill_type`: Classify as 'hard skill' (technical, measurable), 'soft skill' (interpersonal), 'qualification' (degree, certificate), 'tool' (software, platform), or 'responsibility'.
+
+    JOB DESCRIPTION:
+    """
+    {job_description_text}
+    """
+
+    Return ONLY a JSON object containing a single key "keywords", which is a list of objects, each having the keys "keyword", "context", "relevance_score", and "skill_type".
+    Example Format:
+    {{
+      "keywords": [
+        {{ "keyword": "Python", "context": "Experience with Python for scripting...", "relevance_score": 0.9, "skill_type": "hard skill" }},
+        {{ "keyword": "Team Collaboration", "context": "...strong ability for team collaboration.", "relevance_score": 0.8, "skill_type": "soft skill" }},
+        {{ "keyword": "Bachelor's Degree", "context": "Bachelor's Degree in Computer Science required.", "relevance_score": 1.0, "skill_type": "qualification" }}
+      ]
+    }}
+    Ensure the context snippet is directly from the provided text.
+    """
+    
+    raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
+    
+    # Extract JSON from the result (might be wrapped in markdown code blocks)
+    logger.debug(f"Raw keyword extraction result from OpenAI: {raw_result[:500]}...")
+    json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', raw_result, re.DOTALL | re.IGNORECASE)
+    if not json_match:
+        # Fallback: try finding JSON without backticks if the model didn't use them
+        json_match = re.search(r'({.*?})', raw_result, re.DOTALL)
+        
+    structured_data_str = json_match.group(1) if json_match else raw_result
+    
+    try:
+        # Attempt to parse the extracted JSON string
+        parsed_data = json.loads(structured_data_str)
+        
+        # Validate the structure
+        if isinstance(parsed_data, dict) and 'keywords' in parsed_data and isinstance(parsed_data['keywords'], list):
+             # Further validation could check individual keyword objects
+             logger.info(f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords.")
+             return parsed_data
+        else:
+            logger.error(f"Parsed keyword JSON has incorrect structure: {parsed_data}")
+            raise ValueError("Keyword extraction result has invalid structure.")
+            
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing keyword JSON from OpenAI: {e}. Raw data: {structured_data_str[:500]}...")
+        # Fallback: maybe try the placeholder logic here if needed?
+        # For now, raise the error to indicate failure.
+        raise ValueError(f"Failed to parse keywords JSON from OpenAI response: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error during keyword extraction processing: {e}", exc_info=True)
+        raise
 
 def generate_latex_resume(resume_data):
     """Generate LaTeX resume from structured data"""
@@ -679,11 +722,11 @@ def create_app():
                 original_resume_data = json.load(f)
             logger.info(f"Loaded original parsed resume data for ID: {resume_id}")
             
-            # --- Keyword Extraction (Using Placeholder) --- 
-            # !!! Replace with actual advanced keyword extraction implementation !!!
-            logger.info("Extracting keywords from job description (using placeholder)...")
-            keywords_data = advanced_keyword_extraction(job_description_text) 
-            logger.info(f"Placeholder keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
+            # --- Keyword Extraction (Using OpenAI) --- 
+            logger.info("Extracting detailed keywords from job description using OpenAI...")
+            # Use the new detailed extraction function
+            keywords_data = extract_detailed_keywords(job_description_text) 
+            logger.info(f"Detailed keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
             
             # --- Semantic Matching --- 
             logger.info("Initializing SemanticMatcher...")
