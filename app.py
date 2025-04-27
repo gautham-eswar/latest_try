@@ -248,7 +248,6 @@ def create_app():
         logger.info("Diagnostic system initialized successfully")
     except ImportError:
         logger.warning("Diagnostic system not available")
-    
     # Initialize PDF generator
     try:
         import pdf_generator
