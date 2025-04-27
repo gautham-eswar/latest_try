@@ -251,78 +251,141 @@ class DiagnosticSystem:
     
     def check_system(self):
         """Run a comprehensive system check."""
+        # Initialize results with defaults in case checks fail
+        file_system_check = {'status': 'error', 'message': 'Check not run'}
+        supabase_check = {'status': 'error', 'message': 'Check not run'}
+        openai_check = {'status': 'error', 'message': 'Check not run'}
+        system_info = {'platform': 'unknown'}
+        memory_info = {'system': {'percent_used': 'N/A'}}
+        env_info = {'env_vars': {}, 'cwd': 'unknown', 'user': 'unknown'}
+        overall_status = 'error' # Default to error
+
         try:
-            # Run component checks
-            file_system_check = self.check_file_system()
-            supabase_check = self.check_supabase()
-            openai_check = self.check_openai()
+            # Run component checks individually with error handling
+            try:
+                file_system_check = self.check_file_system()
+            except Exception as e:
+                logger.error(f"check_file_system failed: {str(e)}", exc_info=True)
+                file_system_check = {'status': 'error', 'message': f'Failed: {str(e)}', 'error': traceback.format_exc()}
+
+            try:
+                supabase_check = self.check_supabase()
+            except Exception as e:
+                logger.error(f"check_supabase failed: {str(e)}", exc_info=True)
+                supabase_check = {'status': 'error', 'message': f'Failed: {str(e)}', 'error': traceback.format_exc()}
+
+            try:
+                openai_check = self.check_openai()
+            except Exception as e:
+                logger.error(f"check_openai failed: {str(e)}", exc_info=True)
+                openai_check = {'status': 'error', 'message': f'Failed: {str(e)}', 'error': traceback.format_exc()}
             
-            # Assemble components dictionary
+            # Get system info individually with error handling
+            try:
+                system_info = self._get_system_info()
+            except Exception as e:
+                logger.error(f"_get_system_info failed: {str(e)}", exc_info=True)
+                system_info = {'status': 'error', 'message': f'Failed: {str(e)}', 'error': traceback.format_exc()}
+
+            try:
+                memory_info = self._get_memory_info()
+            except Exception as e:
+                logger.error(f"_get_memory_info failed: {str(e)}", exc_info=True)
+                # Provide a default structure if memory check fails
+                memory_info = {
+                    'status': 'error', 
+                    'message': f'Failed: {str(e)}', 
+                    'error': traceback.format_exc(),
+                    'process': {'rss_mb': 'N/A', 'vms_mb': 'N/A'},
+                    'system': {'total_gb': 'N/A', 'available_gb': 'N/A', 'percent_used': 'N/A'}
+                }
+                # Propagate the error status if not already critical
+                if file_system_check.get('status') != 'critical':
+                     overall_status = 'warning' # Memory info failure is usually a warning
+
+            try:
+                env_info = self._get_environment_info()
+            except Exception as e:
+                logger.error(f"_get_environment_info failed: {str(e)}", exc_info=True)
+                env_info = {'status': 'error', 'message': f'Failed: {str(e)}', 'error': traceback.format_exc()}
+
+            # Assemble components dictionary using potentially failed checks
+            # Ensure status and message keys exist using .get() with defaults
             components = {
                 'System': {
-                    'status': 'healthy',
-                    'message': f'Running on {platform.system()} {platform.release()}'
+                    'status': 'healthy' if 'error' not in system_info else 'error',
+                    'message': system_info.get('message', f"Running on {system_info.get('platform', 'unknown')}")
                 },
                 'Database': {
-                    'status': supabase_check['status'],
-                    'message': supabase_check['message']
+                    'status': supabase_check.get('status', 'error'),
+                    'message': supabase_check.get('message', 'Check failed')
                 },
                 'OpenAI API': {
-                    'status': openai_check['status'],
-                    'message': openai_check['message']
+                    'status': openai_check.get('status', 'error'),
+                    'message': openai_check.get('message', 'Check failed')
                 },
                 'File System': {
-                    'status': file_system_check['status'],
-                    'message': file_system_check['message']
+                    'status': file_system_check.get('status', 'error'),
+                    'message': file_system_check.get('message', 'Check failed')
                 },
                 'Pipeline': {
-                    'status': self.pipeline_status['status'],
-                    'message': self.pipeline_status['message']
+                    'status': self.pipeline_status.get('status', 'unknown'),
+                    'message': self.pipeline_status.get('message', 'No status')
                 }
             }
             
+            # Assemble the final result dictionary - THIS NOW ALWAYS RUNS
             result = {
                 'timestamp': datetime.now().isoformat(),
-                'uptime': (datetime.now() - self.start_time).total_seconds(),
+                'uptime': (datetime.now() - self.start_time).total_seconds(), # Uptime is always calculated
                 'components': components,
-                'system': self._get_system_info(),
-                'memory': self._get_memory_info(),
-                'environment': self._get_environment_info(),
+                'system': system_info,
+                'memory': memory_info,
+                'environment': env_info,
                 'file_system': file_system_check,
                 'supabase': supabase_check,
                 'openai': openai_check,
                 'pipeline': {
-                    'status': self.pipeline_status['status'],
-                    'message': self.pipeline_status['message'],
-                    'success_rate': self.pipeline_status['success_rate'],
-                    'total_jobs': self.pipeline_status['total_jobs'],
-                    'stages': self.pipeline_stages,
-                    'recent_jobs': list(self.pipeline_history)
+                    'status': self.pipeline_status.get('status', 'unknown'),
+                    'message': self.pipeline_status.get('message', 'No status'),
+                    'success_rate': self.pipeline_status.get('success_rate', 0),
+                    'total_jobs': self.pipeline_status.get('total_jobs', 0),
+                    'stages': self.pipeline_stages, # Assumed to exist
+                    'recent_jobs': list(self.pipeline_history) # Assumed to exist
                 },
-                'overall_status': 'healthy'
+                'overall_status': 'checking' # Determine below
             }
             
-            # Determine overall status based on component checks
-            critical_services = ['file_system', 'supabase', 'openai', 'pipeline']
-            failing_services = [s for s in critical_services if result[s]['status'] not in ['healthy', 'unknown']]
+            # Determine overall status based on component checks that ran
+            critical_services = ['file_system', 'supabase', 'openai'] # Pipeline status checked separately
+            failing_services = [s for s in critical_services if result[s].get('status', 'error') not in ['healthy', 'unknown', 'warning']] # Count errors/critical
+            warning_services = [s for s in critical_services if result[s].get('status') == 'warning']
             
-            if failing_services:
-                if 'file_system' in failing_services:
-                    result['overall_status'] = 'critical'
-                elif len(failing_services) > 1:
-                    result['overall_status'] = 'warning'
-                else:
-                    result['overall_status'] = 'warning'
-            
+            if file_system_check.get('status') == 'critical':
+                 result['overall_status'] = 'critical'
+            elif failing_services:
+                 result['overall_status'] = 'error'
+            elif warning_services or self.pipeline_status.get('status') == 'warning':
+                 result['overall_status'] = 'warning'
+            elif self.pipeline_status.get('status') == 'error':
+                 result['overall_status'] = 'error' # Consider pipeline error as overall error
+            else:
+                 result['overall_status'] = 'healthy' # Healthy only if nothing failed or warned
+
             logger.info(f"System check completed: {result['overall_status']}")
             return result
-        except Exception as e:
-            logger.error(f"System check failed: {str(e)}")
+            
+        # This outer except block should ideally not be reached now, but is kept as a final safety net
+        except Exception as e: 
+            logger.error(f"Outer check_system failed unexpectedly: {str(e)}", exc_info=True)
+            # Still return a dictionary, but add uptime if possible
+            uptime_seconds = (datetime.now() - self.start_time).total_seconds() if hasattr(self, 'start_time') else -1
             return {
                 'timestamp': datetime.now().isoformat(),
                 'overall_status': 'error',
-                'error': str(e),
-                'traceback': traceback.format_exc()
+                'error': f'Outer check failed: {str(e)}',
+                'traceback': traceback.format_exc(),
+                'uptime': uptime_seconds # Attempt to include uptime
             }
         
     def check_supabase(self):
