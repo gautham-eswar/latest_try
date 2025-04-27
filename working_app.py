@@ -362,7 +362,7 @@ def handle_missing_api_key():
         "error": "OpenAI API key not configured",
         "message": "The server is missing required API credentials. Please contact the administrator.",
         "status": "configuration_error",
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }
     return jsonify(error_response), 503  # Service Unavailable
 
@@ -420,7 +420,7 @@ def create_app():
             "message": message,
             "status_code": status_code,
             "transaction_id": getattr(g, 'transaction_id', None) or str(uuid.uuid4()),
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat()
         }), status_code
     
     # Make utility function available to route handlers
@@ -458,7 +458,7 @@ def create_app():
             health_data = {
                 "status": "healthy",
                 "uptime": get_uptime(),
-                "timestamp": datetime.datetime.now().isoformat(),
+                "timestamp": datetime.now().isoformat(),
                 "components": {}
             }
             
@@ -537,7 +537,7 @@ def create_app():
                 "status": "critical",
                 "message": f"Health check encountered a critical error: {str(e)}",
                 "error_type": type(e).__name__,
-                "timestamp": datetime.datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()
             }), 200  # Still return 200 for Render
     
     @app.route('/api/upload', methods=['POST'])
@@ -818,7 +818,7 @@ def create_app():
                 "status": "critical",
                 "message": f"Error loading status page: {str(e)}",
                 "error_type": type(e).__name__,
-                "timestamp": datetime.datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()
             }), 200  # Always return 200
     
     @app.route('/diagnostic/diagnostics')
@@ -840,7 +840,7 @@ def create_app():
                 "endpoint": "/api/upload",
                 "status": 200,
                 "duration": 0.35,
-                "timestamp": (datetime.datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
             },
             {
                 "id": f"req-{uuid.uuid4().hex[:8]}",
@@ -848,7 +848,7 @@ def create_app():
                 "endpoint": "/api/optimize",
                 "status": 200,
                 "duration": 1.24,
-                "timestamp": (datetime.datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
             }
         ]
         
@@ -879,14 +879,14 @@ def create_app():
                                pipeline_status={"status": "unknown", "message": "No pipeline data available"},
                                pipeline_stages=[],
                                pipeline_history=[],
-                               timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                               timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         except Exception as e:
             logger.error(f"Error rendering diagnostics template: {str(e)}")
             return jsonify({
                 "status": "error",
                 "message": f"Error rendering diagnostics: {str(e)}",
                 "system_info": system_info,
-                "timestamp": datetime.datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()
             }), 500
     
     @app.route('/api/test/simulate-failure')
@@ -903,7 +903,7 @@ def create_app():
                 "message": "Error code must be between 400 and 599",
                 "status_code": 400,
                 "transaction_id": str(uuid.uuid4()),
-                "timestamp": datetime.datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat()
             }), 400
         
         # Define some standard error messages for common codes
@@ -930,7 +930,7 @@ def create_app():
             "message": message,
             "status_code": error_code,
             "transaction_id": str(uuid.uuid4()),
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat()
         }), error_code
     
     @app.before_request
@@ -1059,7 +1059,7 @@ class FallbackDatabase:
         
         # Add timestamp if not present
         if 'timestamp' not in document:
-            document['timestamp'] = datetime.datetime.now().isoformat()
+            document['timestamp'] = datetime.now().isoformat()
             
         self.data[collection][doc_id] = document
         return doc_id

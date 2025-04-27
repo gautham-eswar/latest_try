@@ -217,6 +217,7 @@ def create_database_client():
     
     try:
         logger.info(f"Connecting to Supabase at {supabase_url}")
+        global _connection_status
         client = create_client(supabase_url, supabase_key)
         
         # Test the connection with a simple query
@@ -226,7 +227,6 @@ def create_database_client():
             logger.info("Successfully connected to Supabase")
             
             # Update connection status
-            global _connection_status
             _connection_status = {
                 'last_check': datetime.now(),
                 'is_connected': True,
@@ -239,7 +239,6 @@ def create_database_client():
             logger.warning("Falling back to in-memory database")
             
             # Update connection status
-            global _connection_status
             _connection_status = {
                 'last_check': datetime.now(),
                 'is_connected': False,

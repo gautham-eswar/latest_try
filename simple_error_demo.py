@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-import datetime
+from datetime import datetime
 import uuid
 import logging
 import os
@@ -29,9 +29,9 @@ def health():
     logger.info("Health check requested")
     return jsonify({
         "status": "healthy",
-        "timestamp": datetime.datetime.now().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "version": "1.0.0"
-    })
+    }), 200
 
 @app.route('/api/test/custom-error/<int:error_code>')
 def test_custom_error(error_code):
@@ -45,7 +45,7 @@ def test_custom_error(error_code):
             "message": "Error code must be between 400 and 599",
             "status_code": 400,
             "transaction_id": get_transaction_id(),
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat()
         }), 400
     
     # Define some standard error messages for common codes
@@ -73,7 +73,7 @@ def test_custom_error(error_code):
         "message": message,
         "status_code": error_code,
         "transaction_id": get_transaction_id(),
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }), error_code
 
 @app.route('/api/test/simulate-failure')
@@ -85,7 +85,7 @@ def simulate_failure():
         "message": "This is a simulated server error",
         "status_code": 500,
         "transaction_id": get_transaction_id(),
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }), 500
 
 # Global error handler
@@ -112,7 +112,7 @@ def handle_exception(e):
         "message": error_message,
         "status_code": status_code,
         "transaction_id": transaction_id,
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }), status_code
 
 def parse_args():
