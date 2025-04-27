@@ -808,7 +808,7 @@ class DiagnosticSystem:
             'env_vars': {var: os.environ.get(var, '(not set)') 
                          for var in env_vars},
             'cwd': os.getcwd(),
-            'user': os.getlogin() if hasattr(os, 'getlogin') else '(unknown)'
+            'user': '(unknown)'  # Remove os.getlogin() call that causes OSError
         }
         
     def _register_routes(self):
