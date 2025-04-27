@@ -503,27 +503,6 @@ This is a placeholder LaTeX document for resume ID: %s
                 "timestamp": datetime.now().isoformat()
             }), 500
     
-    @app.route('/diagnostic/diagnostics')
-    def diagnostics():
-        """Diagnostic dashboard"""
-        if not app.config.get('diagnostic'):
-            return jsonify({"error": "Diagnostic system not available"}), 404
-        
-        # Get system metrics from diagnostic system
-        metrics = app.config['diagnostic'].get_metrics()
-        
-        # Get recent transactions
-        transactions = []
-        
-        # Render the diagnostics template
-        return render_template('diagnostics.html', 
-                             metrics=metrics,
-                             transactions=transactions,
-                             uptime=str(datetime.now() - app.config.get('start_time', datetime.now())),
-                             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                             timestamp_5_min_ago=(datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S"),
-                             env_vars={k: "***" if k.lower().find("key") >= 0 else v for k, v in os.environ.items()})
-    
     @app.route('/api/test')
     def test_endpoint():
         """Test endpoint for diagnostics"""
