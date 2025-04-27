@@ -362,7 +362,7 @@ def handle_missing_api_key():
         "error": "OpenAI API key not configured",
         "message": "The server is missing required API credentials. Please contact the administrator.",
         "status": "configuration_error",
-        "timestamp": datetime.datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat()
     }
     return jsonify(error_response), 503  # Service Unavailable
 
@@ -445,57 +445,96 @@ def create_app():
     @app.route('/api/health', methods=['GET'])
     def health():
         """
-        Health check endpoint that always returns 200 status for Render.
+        Health check endpoint that always returns 200 status for Render's monitoring.
         
-        Actual component status is included in the response body.
+        Actual component status is included in the response body so clients
+        can determine the true system health while Render continues to see a healthy service.
         """
-        status = "healthy"
-        health_data = {
-            "status": status,
-            "uptime": get_uptime(),
-            "timestamp": datetime.now().isoformat()
-        }
-        
         try:
-            # Get system metrics
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            health_data = {
+                "status": "healthy",
+                "uptime": get_uptime(),
+                "timestamp": datetime.now().isoformat(),
+                "components": {}
+            }
             
-            health_data.update({
-                "memory": {
-                    "total": memory.total,
-                    "available": memory.available,
+            # Get system metrics with detailed error handling
+            try:
+                memory = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+                
+                health_data["memory"] = {
+                    "status": "healthy",
+                    "total": format_size(memory.total),
+                    "available": format_size(memory.available),
                     "percent": memory.percent
-                },
-                "disk": {
-                    "total": disk.total,
-                    "free": disk.free,
+                }
+                
+                health_data["disk"] = {
+                    "status": "healthy",
+                    "total": format_size(disk.total),
+                    "free": format_size(disk.free),
                     "percent": disk.percent
                 }
-            })
-        except Exception as e:
-            logger.warning(f"Error getting system metrics: {str(e)}")
-            health_data["status"] = "degraded"
-            health_data["warning"] = f"System metrics unavailable: {str(e)}"
-        
-        # Check database if possible
-        try:
-            # Include basic database check if database module is available
-            # This doesn't fail the health check if database is unavailable
-            from database import health_check
-            db_status = health_check()
-            health_data["database"] = db_status
-            if db_status.get("status") == "error":
+                
+                health_data["components"]["system_resources"] = "healthy"
+            except Exception as e:
+                logger.warning(f"Error getting system metrics: {str(e)}")
                 health_data["status"] = "degraded"
-        except ImportError:
-            health_data["database"] = {"status": "unknown", "message": "Database module not available"}
-        except Exception as e:
-            logger.warning(f"Database health check failed: {str(e)}")
-            health_data["database"] = {"status": "error", "message": str(e)}
-            health_data["status"] = "degraded"
+                health_data["memory"] = {"status": "error", "message": str(e)}
+                health_data["disk"] = {"status": "error", "message": str(e)}
+                health_data["components"]["system_resources"] = "error"
             
-        # Always return 200 for Render's health check
-        return jsonify(health_data), 200
+            # Check database with detailed error handling
+            try:
+                db = get_db()
+                db_status = db.health_check() if hasattr(db, 'health_check') else {"status": "unknown"}
+                health_data["database"] = db_status
+                health_data["components"]["database"] = db_status.get("status", "unknown")
+                if db_status.get("status") == "error":
+                    health_data["status"] = "degraded"
+            except Exception as e:
+                logger.warning(f"Database health check failed: {str(e)}")
+                health_data["database"] = {"status": "error", "message": str(e)}
+                health_data["components"]["database"] = "error"
+                health_data["status"] = "degraded"
+            
+            # Check OpenAI API connection
+            try:
+                headers = {
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                response = requests.get(f"{OPENAI_API_BASE}/models", headers=headers, timeout=5)
+                
+                if response.status_code == 200:
+                    health_data["openai"] = {"status": "healthy"}
+                    health_data["components"]["openai"] = "healthy"
+                else:
+                    health_data["openai"] = {
+                        "status": "error", 
+                        "message": f"API returned status {response.status_code}"
+                    }
+                    health_data["components"]["openai"] = "error"
+                    health_data["status"] = "degraded"
+            except Exception as e:
+                logger.warning(f"OpenAI API check failed: {str(e)}")
+                health_data["openai"] = {"status": "error", "message": str(e)}
+                health_data["components"]["openai"] = "error"
+                health_data["status"] = "degraded"
+            
+            # Always return 200 for Render's health check
+            return jsonify(health_data), 200
+            
+        except Exception as e:
+            # Even if everything fails, return 200 with error details
+            logger.error(f"Critical error in health check: {str(e)}")
+            return jsonify({
+                "status": "critical",
+                "message": f"Health check encountered a critical error: {str(e)}",
+                "error_type": type(e).__name__,
+                "timestamp": datetime.now().isoformat()
+            }), 200  # Still return 200 for Render
     
     @app.route('/api/upload', methods=['POST'])
     def upload_resume():
@@ -690,41 +729,67 @@ def create_app():
     def status():
         """Display a system status page with detailed component information"""
         try:
-            # Get component status
-            components = get_component_status()
+            # Get component status with fallbacks
+            try:
+                components = get_component_status()
+            except Exception as e:
+                logger.error(f"Failed to get component status: {str(e)}")
+                components = {
+                    "database": {"status": "error", "message": str(e)},
+                    "system": {"status": "unknown", "message": "Could not retrieve system status"}
+                }
             
-            # Get system metrics
-            memory = psutil.virtual_memory()
+            # Get system metrics with fallbacks
+            try:
+                memory = psutil.virtual_memory()
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+            except Exception as e:
+                logger.error(f"Failed to get system metrics: {str(e)}")
+                memory = None
+                cpu_percent = None
             
             # Determine overall system status based on component statuses
             overall_status = "healthy"
             for component in components.values():
-                if component["status"] == "error":
+                if component.get("status") == "error":
                     overall_status = "error"
                     break
-                elif component["status"] == "warning" and overall_status != "error":
+                elif component.get("status") == "warning" and overall_status != "error":
                     overall_status = "warning"
             
-            # Create a simulated database status from components
-            database_component = components.get("database", {"status": "unknown", "message": "Database status unknown"})
-            database_status = {
-                "status": database_component["status"],
-                "message": database_component["message"],
-                "tables": ["resumes", "optimizations", "users"]  # Example tables
-            }
+            # Create a database status object with fallbacks
+            try:
+                db = get_db()
+                db_check = db.health_check() if hasattr(db, 'health_check') else {"status": "unknown"}
+                database_status = {
+                    "status": db_check.get("status", "unknown"),
+                    "message": db_check.get("message", "Database status unknown"),
+                    "tables": db_check.get("tables", ["resumes", "optimizations", "users"])  # Example tables
+                }
+            except Exception as e:
+                logger.error(f"Failed to check database status: {str(e)}")
+                database_status = {
+                    "status": "error",
+                    "message": f"Database error: {str(e)}",
+                    "tables": []
+                }
             
-            # System info
+            # System info with fallbacks
             system_info = {
                 "uptime": get_uptime(),
-                "memory_usage": f"{memory.percent:.1f}%",
-                "cpu_usage": f"{psutil.cpu_percent(interval=0.1):.1f}%"
+                "memory_usage": f"{memory.percent:.1f}%" if memory else "Unknown",
+                "cpu_usage": f"{cpu_percent:.1f}%" if cpu_percent is not None else "Unknown"
             }
             
-            # Recent transactions (placeholder)
-            recent_transactions = []
-            if diagnostic_system:
-                # Get recent transactions from diagnostic system if available
-                recent_transactions = diagnostic_system.transaction_history[:5] if hasattr(diagnostic_system, 'transaction_history') else []
+            # Recent transactions (placeholder) with fallbacks
+            try:
+                if diagnostic_system and hasattr(diagnostic_system, 'transaction_history'):
+                    recent_transactions = diagnostic_system.transaction_history[:5]
+                else:
+                    recent_transactions = []
+            except Exception as e:
+                logger.error(f"Failed to get transaction history: {str(e)}")
+                recent_transactions = []
             
             # Render the template with error handling
             try:
@@ -740,15 +805,17 @@ def create_app():
                     "system_info": system_info,
                     "components": components,
                     "error": f"Template error: {str(e)}"
-                })
+                }), 200  # Return 200 even for errors
             
         except Exception as e:
-            logger.error(f"Error in status page: {str(e)}")
+            # Catch-all exception handler with JSON fallback
+            logger.error(f"Critical error in status page: {str(e)}")
             return jsonify({
-                "status": "error",
+                "status": "critical",
                 "message": f"Error loading status page: {str(e)}",
+                "error_type": type(e).__name__,
                 "timestamp": datetime.now().isoformat()
-            }), 500
+            }), 200  # Always return 200
     
     @app.route('/diagnostic/diagnostics')
     def diagnostics():
@@ -769,7 +836,7 @@ def create_app():
                 "endpoint": "/api/upload",
                 "status": 200,
                 "duration": 0.35,
-                "timestamp": (datetime.datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S")
             },
             {
                 "id": f"req-{uuid.uuid4().hex[:8]}",
@@ -777,22 +844,46 @@ def create_app():
                 "endpoint": "/api/optimize",
                 "status": 200,
                 "duration": 1.24,
-                "timestamp": (datetime.datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
             }
         ]
         
-        return render_template('diagnostics.html',
-                            uptime=format_uptime(int(time.time() - START_TIME)),
-                            memory_used=f"{memory.percent:.1f}%",
-                            memory_available=format_size(memory.available),
-                            memory_total=format_size(memory.total),
-                            disk_used=f"{disk.percent:.1f}%",
-                            disk_available=format_size(disk.free),
-                            disk_total=format_size(disk.total),
-                            resume_processing_times=resume_processing_times,
-                            api_response_times=api_response_times,
-                            recent_requests=recent_requests,
-                            timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        # Prepare diagnostic info in structured format for template
+        system_info = {
+            "uptime": format_uptime(int(time.time() - START_TIME)),
+            "memory": {
+                "total": format_size(memory.total),
+                "available": format_size(memory.available),
+                "percent": memory.percent
+            },
+            "disk": {
+                "total": format_size(disk.total),
+                "free": format_size(disk.free),
+                "percent": disk.percent
+            }
+        }
+        
+        # Gracefully handle template rendering
+        try:
+            return render_template('diagnostics.html',
+                               system_info=system_info,
+                               resume_processing_times=resume_processing_times,
+                               api_response_times=api_response_times,
+                               recent_requests=recent_requests,
+                               transactions=[],  # Empty list as fallback
+                               env_vars={},      # Empty dict as fallback
+                               pipeline_status={"status": "unknown", "message": "No pipeline data available"},
+                               pipeline_stages=[],
+                               pipeline_history=[],
+                               timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception as e:
+            logger.error(f"Error rendering diagnostics template: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": f"Error rendering diagnostics: {str(e)}",
+                "system_info": system_info,
+                "timestamp": datetime.now().isoformat()
+            }), 500
     
     @app.route('/api/test/simulate-failure')
     def test_simulate_failure():
@@ -939,6 +1030,129 @@ def format_uptime(seconds):
         return f"{int(minutes)}m {int(seconds)}s"
     else:
         return f"{int(seconds)}s"
+
+class FallbackDatabase:
+    """In-memory fallback database for when the main database is unavailable."""
+    
+    def __init__(self):
+        """Initialize the in-memory database."""
+        self.data = {
+            "resumes": {},
+            "optimizations": {},
+            "users": {},
+            "system_logs": []
+        }
+        logger.info("Initialized fallback in-memory database")
+    
+    def insert(self, collection, document):
+        """Insert a document into a collection."""
+        if collection not in self.data:
+            self.data[collection] = {}
+        
+        # Use document id if provided, otherwise generate one
+        doc_id = document.get('id') or str(uuid.uuid4())
+        document['id'] = doc_id
+        
+        # Add timestamp if not present
+        if 'timestamp' not in document:
+            document['timestamp'] = datetime.now().isoformat()
+            
+        self.data[collection][doc_id] = document
+        return doc_id
+    
+    def find(self, collection, query=None):
+        """Find documents in a collection matching a query."""
+        if collection not in self.data:
+            return []
+            
+        if query is None:
+            return list(self.data[collection].values())
+            
+        # Simple query matching
+        results = []
+        for doc in self.data[collection].values():
+            match = True
+            for k, v in query.items():
+                if k not in doc or doc[k] != v:
+                    match = False
+                    break
+            if match:
+                results.append(doc)
+                
+        return results
+    
+    def get(self, collection, doc_id):
+        """Get a specific document by ID."""
+        if collection not in self.data or doc_id not in self.data[collection]:
+            return None
+        return self.data[collection][doc_id]
+    
+    def update(self, collection, doc_id, updates):
+        """Update a document."""
+        if collection not in self.data or doc_id not in self.data[collection]:
+            return False
+            
+        doc = self.data[collection][doc_id]
+        for k, v in updates.items():
+            doc[k] = v
+            
+        return True
+    
+    def delete(self, collection, doc_id):
+        """Delete a document."""
+        if collection not in self.data or doc_id not in self.data[collection]:
+            return False
+            
+        del self.data[collection][doc_id]
+        return True
+    
+    def health_check(self):
+        """Perform a basic health check."""
+        return {
+            "status": "warning",
+            "message": "Using fallback in-memory database",
+            "tables": list(self.data.keys())
+        }
+    
+    def table(self, name):
+        """Get a table/collection reference for chaining operations."""
+        class TableQuery:
+            def __init__(self, db, table_name):
+                self.db = db
+                self.table_name = table_name
+                self._columns = '*' 
+                self._limit_val = None
+                
+            def select(self, columns='*'):
+                self._columns = columns
+                return self
+                
+            def limit(self, n):
+                self._limit_val = n
+                return self
+                
+            def execute(self):
+                results = self.db.find(self.table_name)
+                if self._limit_val:
+                    results = results[:self._limit_val]
+                return results
+                
+        return TableQuery(self, name)
+
+def get_db():
+    """Get database client with comprehensive error handling."""
+    try:
+        # First try to import and use the real database
+        from database import create_database_client
+        client = create_database_client()
+        logger.info("Connected to primary database")
+        return client
+    except ImportError:
+        logger.warning("Database module not available. Using fallback database.")
+        return FallbackDatabase()
+    except Exception as e:
+        logger.warning(f"Database connection failed: {str(e)}. Using fallback database.")
+        return FallbackDatabase()
 
 if __name__ == '__main__':
     try:
