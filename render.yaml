@@ -2,7 +2,7 @@ services:
   - type: web
     name: resume-optimizer
     env: python
-    buildCommand: pip install -r requirements-render.txt
+    buildCommand: pip install --no-cache-dir -r requirements-render.txt
     startCommand: python render_entrypoint.py --port $PORT
     healthCheckPath: /api/health
     plan: free
