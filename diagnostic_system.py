@@ -871,6 +871,14 @@ class DiagnosticSystem:
             try:
                 result = self.check_system()
                 
+                # Safely get and format uptime BEFORE passing to template
+                uptime_seconds = result.get('uptime', -1) # Get seconds, default to -1 if missing
+                if isinstance(uptime_seconds, (int, float)) and uptime_seconds >= 0:
+                     formatted_uptime = f"{int(uptime_seconds // 3600)}h {int((uptime_seconds % 3600) // 60)}m {int(uptime_seconds % 60)}s"
+                else:
+                     formatted_uptime = "Unknown"
+                     logger.warning(f"Could not determine valid uptime from check_system result: {uptime_seconds}")
+
                 # Ensure all required template variables are present
                 # Use .get() for safety, assuming result might be incomplete on error
                 system_info = {
@@ -897,14 +905,14 @@ class DiagnosticSystem:
                 pipeline_stages = pipeline_status.get('stages', [])
                 pipeline_history = list(pipeline_status.get('recent_jobs', []))
                 
-                # Use .get() for all direct accesses to result for robustness
+                # Use .get() for most direct accesses, but pass pre-formatted uptime
                 return render_template('diagnostics.html', 
                                       title="System Diagnostics",
                                       diagnostic=result,
                                       system_status=result.get('overall_status', 'error'),
                                       version=result.get('version', '1.0.0'),
                                       active_connections=len(self.transactions),
-                                      uptime=result.get('uptime', 0), # Default to 0 seconds if missing
+                                      uptime=formatted_uptime, # Pass the guaranteed string
                                       timestamp=result.get('timestamp', datetime.now().isoformat()),
                                       components=result.get('components', {}), # Default to empty dict
                                       system_info=system_info,
@@ -941,6 +949,15 @@ class DiagnosticSystem:
                                       'OpenAI': result['openai']['status'],
                                       'File System': result['file_system']['status']
                                   })
+        
+        @self.blueprint.context_processor
+        def inject_global_diagnostics():
+            """Inject common diagnostic variables into template context."""
+            uptime_seconds = (datetime.now() - self.start_time).total_seconds() if hasattr(self, 'start_time') else 0
+            # Simple uptime formatting (can be enhanced later)
+            uptime_str = f"{int(uptime_seconds // 3600)}h {int((uptime_seconds % 3600) // 60)}m {int(uptime_seconds % 60)}s"
+            # Return using the key 'uptime' to match the template
+            return dict(uptime=uptime_str)
 
     def increment_error_count(self, error_type, message):
         """Increment the count of errors by type and store recent errors."""
