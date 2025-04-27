@@ -52,11 +52,11 @@ def log_file_snippet(filepath, start_marker, end_marker, lines=15):
         logging.info(f"--- Verifying code in {filepath} ---")
         logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
         logging.info(f"--- End verification for {filepath} ---")
-        # Check specifically for proxies=None
-        if "proxies=None" in snippet:
-             logging.info(f"Verification successful: 'proxies=None' found in {filepath} snippet.")
+        # Check for OpenAI client initialization
+        if "OpenAI(api_key=" in snippet:
+             logging.info(f"Verification successful: OpenAI client initialization found in {filepath} snippet.")
         else:
-             logging.warning(f"Verification FAILED: 'proxies=None' NOT found in {filepath} snippet.")
+             logging.warning(f"Verification FAILED: OpenAI client initialization NOT found in {filepath} snippet.")
              
     except Exception as e:
         logging.error(f"Code verification: Error reading {filepath}: {str(e)}")
