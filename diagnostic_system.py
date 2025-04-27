@@ -511,8 +511,13 @@ class DiagnosticSystem:
             # We'll import here to isolate potential import errors
             try:
                 from openai import OpenAI
-                # Explicitly set proxies=None to avoid issues with environment variables
-                client = OpenAI(api_key=api_key, proxies=None)
+                import httpx # Import httpx
+
+                # Create an httpx client explicitly disabling environment proxies
+                custom_http_client = httpx.Client(proxies=None)
+
+                # Pass the custom client to OpenAI constructor, removing the proxies arg here
+                client = OpenAI(api_key=api_key, http_client=custom_http_client)
                 
                 # Check connection with a simple ping
                 start_time = datetime.now()
