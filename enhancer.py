@@ -45,7 +45,7 @@ class ResumeEnhancer:
             raise ValueError("OpenAI API key is required")
         
         # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key, proxies=None)
+        self.client = OpenAI(api_key=self.api_key)
         self.model = model
         
         # Track which bullets have been modified

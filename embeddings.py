@@ -45,7 +45,7 @@ class SemanticMatcher:
             raise ValueError("OpenAI API key not provided or found in environment variables")
         
         # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key, proxies=None)
+        self.client = OpenAI(api_key=self.api_key)
         self.model = model
         
         # Default similarity threshold
