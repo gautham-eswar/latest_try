@@ -18,8 +18,10 @@ import re
 import io
 import requests
 from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException, NotFound
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from flask import Flask, jsonify, request, render_template, g, Response
+from flask import Flask, jsonify, request, render_template, g, Response, current_app
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -51,13 +53,14 @@ OPENAI_API_BASE = "https://api.openai.com/v1"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-app = Flask(__name__, template_folder='templates')
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB
-
-# Track application start time
-start_time = time.time()
+# Track application startup
+diagnostic_system = None
+try:
+    from diagnostic_system import DiagnosticSystem
+    diagnostic_system = DiagnosticSystem()
+    logger.info("Diagnostic system initialized successfully")
+except ImportError:
+    logger.warning("Diagnostic system module not found. Some features will be disabled.")
 
 def extract_text_from_file(file_path):
     """Extract text from files based on their extension"""
@@ -344,15 +347,10 @@ def get_component_status():
 
 def get_uptime():
     """Get application uptime in human readable format"""
+    start_time = current_app.config.get('START_TIME', START_TIME)
     uptime_seconds = time.time() - start_time
-    if uptime_seconds < 60:
-        return f"{int(uptime_seconds)} seconds"
-    elif uptime_seconds < 3600:
-        return f"{int(uptime_seconds / 60)} minutes"
-    elif uptime_seconds < 86400:
-        return f"{int(uptime_seconds / 3600)} hours"
-    else:
-        return f"{uptime_seconds / 86400:.1f} days"
+    
+    return format_uptime(uptime_seconds)
 
 def handle_missing_api_key():
     """Return a standardized error response for missing API key"""
@@ -369,9 +367,61 @@ def handle_missing_api_key():
     return jsonify(error_response), 503  # Service Unavailable
 
 def create_app():
-    """Create and configure a Flask application."""
-    # Set up CORS
-    CORS(app, resources={r"/api/*": {"origins": '*'}})
+    """Create and configure the Flask application."""
+    app = Flask(__name__, template_folder='templates', static_folder='static')
+    
+    # Apply middleware
+    app.wsgi_app = ProxyFix(app.wsgi_app)
+    
+    # Configure app settings
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24))
+    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+    app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 16 * 1024 * 1024))  # 16MB
+    app.config['TRAP_HTTP_EXCEPTIONS'] = True  # Ensure HTTP exceptions are handled by our handlers
+    app.config['PROPAGATE_EXCEPTIONS'] = False  # Don't propagate exceptions up to the werkzeug handler
+    app.config['ERROR_INCLUDE_MESSAGE'] = False  # Don't include default error messages
+    
+    # Apply CORS
+    CORS(app)
+    
+    # Track application start time
+    app.config['START_TIME'] = time.time()
+    
+    # Initialize diagnostic system
+    if diagnostic_system:
+        diagnostic_system.init_app(app)
+    
+    # Request tracking middleware
+    @app.before_request
+    def before_request():
+        """Setup request tracking with transaction ID."""
+        g.start_time = time.time()
+        g.transaction_id = request.headers.get('X-Transaction-ID', str(uuid.uuid4()))
+        logger.info(f"Transaction {g.transaction_id}: {request.method} {request.path} started")
+
+    @app.after_request
+    def after_request(response):
+        """Complete request tracking and add transaction ID to response."""
+        if hasattr(g, 'transaction_id') and hasattr(g, 'start_time'):
+            duration = time.time() - g.start_time
+            logger.info(f"Transaction {g.transaction_id}: {request.method} {request.path} "
+                        f"returned {response.status_code} in {duration:.4f}s")
+            response.headers['X-Transaction-ID'] = g.transaction_id
+        return response
+    
+    # Utility function for creating error responses
+    def create_error_response(error_type, message, status_code):
+        """Create a standardized error response following the error schema."""
+        return jsonify({
+            "error": error_type,
+            "message": message,
+            "status_code": status_code,
+            "transaction_id": getattr(g, 'transaction_id', None) or str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat()
+        }), status_code
+    
+    # Make utility function available to route handlers
+    app.create_error_response = create_error_response
     
     # Basic routes
     @app.route('/')
@@ -394,15 +444,24 @@ def create_app():
     
     @app.route('/api/health', methods=['GET'])
     def health():
-        """Health check endpoint."""
+        """
+        Health check endpoint that always returns 200 status for Render.
+        
+        Actual component status is included in the response body.
+        """
+        status = "healthy"
+        health_data = {
+            "status": status,
+            "uptime": get_uptime(),
+            "timestamp": datetime.now().isoformat()
+        }
+        
         try:
             # Get system metrics
             memory = psutil.virtual_memory()
             disk = psutil.disk_usage('/')
             
-            return jsonify({
-                "status": "healthy",
-                "uptime": int(time.time() - START_TIME),
+            health_data.update({
                 "memory": {
                     "total": memory.total,
                     "available": memory.available,
@@ -412,41 +471,59 @@ def create_app():
                     "total": disk.total,
                     "free": disk.free,
                     "percent": disk.percent
-                },
-                "timestamp": datetime.datetime.now().isoformat()
-            }), 200
+                }
+            })
         except Exception as e:
-            logger.error(f"Health check failed: {str(e)}")
-            return jsonify({
-                "status": "error",
-                "error": str(e),
-                "timestamp": datetime.datetime.now().isoformat()
-            }), 500
+            logger.warning(f"Error getting system metrics: {str(e)}")
+            health_data["status"] = "degraded"
+            health_data["warning"] = f"System metrics unavailable: {str(e)}"
+        
+        # Check database if possible
+        try:
+            # Include basic database check if database module is available
+            # This doesn't fail the health check if database is unavailable
+            from database import health_check
+            db_status = health_check()
+            health_data["database"] = db_status
+            if db_status.get("status") == "error":
+                health_data["status"] = "degraded"
+        except ImportError:
+            health_data["database"] = {"status": "unknown", "message": "Database module not available"}
+        except Exception as e:
+            logger.warning(f"Database health check failed: {str(e)}")
+            health_data["database"] = {"status": "error", "message": str(e)}
+            health_data["status"] = "degraded"
+            
+        # Always return 200 for Render's health check
+        return jsonify(health_data), 200
     
     @app.route('/api/upload', methods=['POST'])
     def upload_resume():
         """Upload and parse a resume file."""
         if 'file' not in request.files:
-            return jsonify({
-                "status": "error",
-                "message": "No file part in the request"
-            }), 400
+            return app.create_error_response(
+                "MissingFile", 
+                "No file part in the request", 
+                400
+            )
         
         file = request.files['file']
         if file.filename == '':
-            return jsonify({
-                "status": "error",
-                "message": "No file selected"
-            }), 400
+            return app.create_error_response(
+                "EmptyFile", 
+                "No file selected", 
+                400
+            )
         
         # Check if the file has an allowed extension
         allowed_extensions = {'pdf', 'docx', 'txt'}
         file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
         if file_ext not in allowed_extensions:
-            return jsonify({
-                "status": "error",
-                "message": f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}"
-            }), 400
+            return app.create_error_response(
+                "InvalidFileType",
+                f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}", 
+                400
+            )
         
         # Generate a unique ID for the resume
         resume_id = f"resume_{int(time.time())}_{uuid.uuid4().hex[:8]}"
@@ -476,47 +553,44 @@ def create_app():
             })
         except Exception as e:
             logger.error(f"Error processing resume: {str(e)}")
-            return jsonify({
-                "status": "error",
-                "message": f"Error processing resume: {str(e)}"
-            }), 500
+            return app.create_error_response(
+                "ProcessingError", 
+                f"Error processing resume: {str(e)}", 
+                500
+            )
     
     @app.route('/api/optimize', methods=['POST'])
     def optimize_resume_endpoint():
         """Optimize a resume with a job description."""
+        # Handle invalid JSON in the request
+        if request.content_type == 'application/json':
+            try:
+                # Explicitly parse the JSON
+                data = json.loads(request.data.decode('utf-8') if request.data else '{}')
+            except json.JSONDecodeError:
+                return app.create_error_response("InvalidJSON", "Could not parse JSON data from request", 400)
+        else:
+            return app.create_error_response("InvalidContentType", "Content-Type must be application/json", 400)
+        
         try:
-            data = request.json
-            
             if not data:
-                return jsonify({
-                    "status": "error",
-                    "message": "No JSON data in request"
-                }), 400
+                return app.create_error_response("MissingData", "No JSON data in request", 400)
             
             resume_id = data.get('resume_id')
             job_description = data.get('job_description')
             
             if not resume_id:
-                return jsonify({
-                    "status": "error",
-                    "message": "Missing required field: resume_id"
-                }), 400
+                return app.create_error_response("MissingParameter", "Missing required field: resume_id", 400)
             
             if not job_description:
-                return jsonify({
-                    "status": "error",
-                    "message": "Missing required field: job_description"
-                }), 400
+                return app.create_error_response("MissingParameter", "Missing required field: job_description", 400)
             
             # Check if the resume exists
             uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
             resume_file = os.path.join(uploads_dir, f"{resume_id}.json")
             
             if not os.path.exists(resume_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"Resume with ID {resume_id} not found"
-                }), 404
+                return app.create_error_response("NotFound", f"Resume with ID {resume_id} not found", 404)
             
             # Load the resume data
             with open(resume_file, 'r') as f:
@@ -549,19 +623,14 @@ def create_app():
             
         except Exception as e:
             logger.error(f"Error optimizing resume: {str(e)}")
-            return jsonify({
-                "status": "error",
-                "message": f"Error optimizing resume: {str(e)}"
-            }), 500
+            return app.create_error_response("ProcessingError", f"Error optimizing resume: {str(e)}", 500)
     
     @app.route('/api/download/<resume_id>/<format_type>', methods=['GET'])
     def download_resume(resume_id, format_type):
         """Download a resume in different formats."""
         if format_type not in ['json', 'pdf', 'latex']:
-            return jsonify({
-                "status": "error",
-                "message": f"Unsupported format: {format_type}. Supported formats: json, pdf, latex"
-            }), 400
+            return app.create_error_response("InvalidFormat", 
+                f"Unsupported format: {format_type}. Supported formats: json, pdf, latex", 400)
         
         # Check if optimized resume exists
         outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
@@ -573,10 +642,7 @@ def create_app():
             resume_file = os.path.join(uploads_dir, f"{resume_id}.json")
             
             if not os.path.exists(resume_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"Resume with ID {resume_id} not found"
-                }), 404
+                return app.create_error_response("NotFound", f"Resume with ID {resume_id} not found", 404)
         
         # Load the resume data
         with open(resume_file, 'r') as f:
@@ -618,32 +684,71 @@ def create_app():
                 return response
             except Exception as e:
                 logger.error(f"Error generating PDF: {str(e)}")
-                return jsonify({
-                    "status": "error",
-                    "message": f"Error generating PDF: {str(e)}"
-                }), 500
+                return app.create_error_response("ProcessingError", f"Error generating PDF: {str(e)}", 500)
     
     @app.route('/status')
     def status():
-        """Display a simple status page"""
-        components = get_component_status()
-        
-        # Determine overall system status based on component statuses
-        overall_status = "healthy"
-        for component in components.values():
-            if component["status"] == "error":
-                overall_status = "error"
-                break
-            elif component["status"] == "warning" and overall_status != "error":
-                overall_status = "warning"
-        
-        return render_template('status.html', 
-                              title="Resume Optimizer - Status",
-                              system_status=overall_status,
-                              timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                              uptime=get_uptime(),
-                              version="0.1.0",
-                              components=components)
+        """Display a system status page with detailed component information"""
+        try:
+            # Get component status
+            components = get_component_status()
+            
+            # Get system metrics
+            memory = psutil.virtual_memory()
+            
+            # Determine overall system status based on component statuses
+            overall_status = "healthy"
+            for component in components.values():
+                if component["status"] == "error":
+                    overall_status = "error"
+                    break
+                elif component["status"] == "warning" and overall_status != "error":
+                    overall_status = "warning"
+            
+            # Create a simulated database status from components
+            database_component = components.get("database", {"status": "unknown", "message": "Database status unknown"})
+            database_status = {
+                "status": database_component["status"],
+                "message": database_component["message"],
+                "tables": ["resumes", "optimizations", "users"]  # Example tables
+            }
+            
+            # System info
+            system_info = {
+                "uptime": get_uptime(),
+                "memory_usage": f"{memory.percent:.1f}%",
+                "cpu_usage": f"{psutil.cpu_percent(interval=0.1):.1f}%"
+            }
+            
+            # Recent transactions (placeholder)
+            recent_transactions = []
+            if diagnostic_system:
+                # Get recent transactions from diagnostic system if available
+                recent_transactions = diagnostic_system.transaction_history[:5] if hasattr(diagnostic_system, 'transaction_history') else []
+            
+            # Render the template with error handling
+            try:
+                return render_template('status.html',
+                                    system_info=system_info,
+                                    database_status=database_status,
+                                    recent_transactions=recent_transactions)
+            except Exception as e:
+                logger.error(f"Error rendering status template: {str(e)}")
+                # Fall back to JSON response on template error
+                return jsonify({
+                    "status": overall_status,
+                    "system_info": system_info,
+                    "components": components,
+                    "error": f"Template error: {str(e)}"
+                })
+            
+        except Exception as e:
+            logger.error(f"Error in status page: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": f"Error loading status page: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }), 500
     
     @app.route('/diagnostic/diagnostics')
     def diagnostics():
@@ -689,6 +794,50 @@ def create_app():
                             recent_requests=recent_requests,
                             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     
+    @app.route('/api/test/simulate-failure')
+    def test_simulate_failure():
+        """Test endpoint to simulate a failure"""
+        raise ValueError("This is a simulated failure for testing error handling")
+        
+    @app.route('/api/test/custom-error/<int:error_code>')
+    def test_custom_error(error_code):
+        """Test endpoint to return custom error codes"""
+        if error_code < 400 or error_code > 599:
+            return jsonify({
+                "error": "Invalid error code",
+                "message": "Error code must be between 400 and 599",
+                "status_code": 400,
+                "transaction_id": str(uuid.uuid4()),
+                "timestamp": datetime.now().isoformat()
+            }), 400
+        
+        # Define some standard error messages for common codes
+        error_messages = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            408: "Request Timeout",
+            418: "I'm a teapot",
+            429: "Too Many Requests",
+            500: "Internal Server Error",
+            501: "Not Implemented",
+            502: "Bad Gateway",
+            503: "Service Unavailable",
+            504: "Gateway Timeout"
+        }
+        
+        message = error_messages.get(error_code, f"Custom error with code {error_code}")
+        
+        return jsonify({
+            "error": f"Error {error_code}",
+            "message": message,
+            "status_code": error_code,
+            "transaction_id": str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat()
+        }), error_code
+    
     @app.before_request
     def check_api_key():
         """Check if OpenAI API key is available for routes that need it"""
@@ -698,6 +847,60 @@ def create_app():
             error_response = handle_missing_api_key()
             if error_response:
                 return error_response
+    
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        """Handle all exceptions and return a consistent JSON error response."""
+        # Generate a unique error ID
+        error_id = str(uuid.uuid4())
+        
+        # Determine the status code
+        if isinstance(e, HTTPException):
+            status_code = e.code
+        else:
+            status_code = 500
+        
+        # Get error type and message
+        error_type = e.__class__.__name__
+        error_message = str(e)
+        
+        # Log the error with the unique ID and traceback
+        logger.error(f"Error {error_id}: {error_type} - {error_message}", exc_info=True)
+        
+        # Track error in diagnostic system
+        if diagnostic_system:
+            diagnostic_system.increment_error_count(error_type, error_message)
+        
+        # Use the standard error response function
+        return app.create_error_response(error_type, error_message, status_code)
+
+    @app.errorhandler(404)
+    def page_not_found(e):
+        """Handle 404 errors specifically."""
+        return app.create_error_response("NotFound", "The requested resource could not be found", 404)
+
+    @app.errorhandler(500)
+    def internal_server_error(e):
+        """Handle 500 errors specifically."""
+        return app.create_error_response("InternalServerError", "An internal server error occurred", 500)
+    
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e):
+        """Handle all other HTTP exceptions."""
+        return app.create_error_response(
+            f"HTTP{e.code}Error", 
+            e.description or f"HTTP error occurred with status code {e.code}", 
+            e.code
+        )
+    
+    @app.route('/favicon.ico')
+    def favicon():
+        """Serve the favicon to prevent repeated 404 errors."""
+        try:
+            return app.send_static_file('favicon.ico')
+        except:
+            # If favicon.ico isn't found, return empty response with 204 status
+            return '', 204
     
     return app
 
@@ -751,8 +954,18 @@ if __name__ == '__main__':
         # Create and run app
         app = create_app()
         app.run(host=host, port=port, debug=debug)
+        
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested via keyboard interrupt")
+        sys.exit(0)
+    except SystemExit as e:
+        # Clean exit with provided exit code
+        logger.info(f"System exit with code {e.code}")
+        sys.exit(e.code)
     except Exception as e:
         logger.critical(f"Failed to start application: {str(e)}")
         logger.exception(e)
+        if diagnostic_system:
+            diagnostic_system.increment_error_count("StartupError", str(e))
         sys.exit(1) 
  

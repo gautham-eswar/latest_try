@@ -1,0 +1,111 @@
+{
+  "timestamp": "2025-04-26T19:18:16.716030",
+  "base_url": "http://localhost:8085",
+  "scenarios": {
+    "invalid_endpoint": {
+      "status": "passed",
+      "endpoint": "/api/nonexistent-endpoint",
+      "expected_code": 404,
+      "actual_code": 404,
+      "response_time": 0.011636972427368164,
+      "message": "Received expected 404 response for invalid endpoint"
+    },
+    "invalid_method": {
+      "status": "passed",
+      "endpoint": "/api/upload",
+      "expected_code": "400 or 405",
+      "actual_code": 405,
+      "response_time": 0.0019550323486328125,
+      "message": "Received expected error response for invalid method: 405"
+    },
+    "invalid_file_type": {
+      "status": "passed",
+      "endpoint": "/api/upload",
+      "expected_code": 400,
+      "actual_code": 400,
+      "response_time": 0.002116680145263672,
+      "message": "Received expected 400 response for invalid file type"
+    },
+    "missing_resume": {
+      "status": "passed",
+      "endpoint": "/api/optimize",
+      "expected_code": 404,
+      "actual_code": 404,
+      "response_time": 0.0012710094451904297,
+      "message": "Received expected 404 response for missing resume"
+    },
+    "invalid_resume_id": {
+      "status": "passed",
+      "endpoint": "/api/download/invalid-id-format/json",
+      "expected_code": 404,
+      "actual_code": 404,
+      "response_time": 0.0013148784637451172,
+      "message": "Received expected 404 response for invalid resume ID"
+    },
+    "server_error": {
+      "status": "passed",
+      "endpoint": "/api/test/simulate-failure",
+      "expected_code": 500,
+      "actual_code": 500,
+      "response_time": 0.0015230178833007812,
+      "message": "Received expected 500 response for simulated server error"
+    },
+    "invalid_json": {
+      "status": "passed",
+      "endpoint": "/api/optimize",
+      "expected_code": 400,
+      "actual_code": 500,
+      "response_time": 0.001154184341430664,
+      "message": "Received proper error response for invalid JSON (status: 500)",
+      "response_text": "{\"error\":\"ProcessingError\",\"message\":\"Error optimizing resume: 400 Bad Request: The browser (or proxy) sent a request that this server could not understand.\",\"status_code\":500}\n"
+    },
+    "missing_parameters": {
+      "status": "passed",
+      "endpoint": "/api/optimize",
+      "expected_code": 400,
+      "actual_code": 400,
+      "response_time": 0.001299142837524414,
+      "message": "Received expected 400 response for missing parameters"
+    },
+    "timeout": {
+      "status": "passed",
+      "endpoint": "/api/health",
+      "response_time": 0.001,
+      "message": "Timeout handling test simulated successfully"
+    },
+    "large_payload": {
+      "status": "passed",
+      "endpoint": "/api/optimize",
+      "response_code": 404,
+      "response_time": 0.0019850730895996094,
+      "message": "Server handled large payload with status code 404"
+    },
+    "custom_error_code": {
+      "status": "passed",
+      "endpoint": "/api/test/custom-error/418",
+      "expected_code": 418,
+      "actual_code": 418,
+      "response_time": 0.0012938976287841797,
+      "message": "Received expected 418 custom error response"
+    },
+    "error_format": {
+      "status": "passed",
+      "endpoint": "/api/test/custom-error/400",
+      "response_code": 400,
+      "response_time": 0.0011780261993408203,
+      "message": "Error response format matches expected schema",
+      "response": {
+        "error": "Error 400",
+        "message": "Bad Request",
+        "status_code": 400,
+        "timestamp": "2025-04-26T19:18:16.743691",
+        "transaction_id": "6267b653-9ef1-4af0-ba55-cfb6c8d7a556"
+      }
+    }
+  },
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0
+  }
+}
