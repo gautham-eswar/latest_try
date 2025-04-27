@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         .status-healthy { color: #28a745; }
         .status-warning { color: #ffc107; }
@@ -202,6 +203,108 @@
             </div>
         </div>
         
+        <!-- Pipeline Status & Testing -->
+        <h2 class="mb-3">Pipeline Status</h2>
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Overall Pipeline Status</h5>
+                                <span class="badge bg-{{ pipeline_status.status }} text-white">{{ pipeline_status.status|title }}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-1">{{ pipeline_status.message }}</p>
+                                <p class="mb-1">Success Rate: <strong>{{ pipeline_status.success_rate|round(1) }}%</strong></p>
+                                <p class="mb-1">Total Jobs: {{ pipeline_status.total_jobs }} ({{ pipeline_status.successful_jobs }} successful)</p>
+                                {% if pipeline_status.last_run %}
+                                <p class="mb-0">Last Run: {{ pipeline_status.last_run }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Pipeline Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <button id="test-pipeline-btn" class="btn btn-primary mb-2" onclick="testPipeline()">
+                                    Run Pipeline Test
+                                </button>
+                                <div id="test-result" class="mt-2" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <span id="test-message">Running pipeline test...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h5 class="mb-3">Pipeline Stage Status</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Stage</th>
+                                <th>Status</th>
+                                <th>Success Rate</th>
+                                <th>Avg Processing Time</th>
+                                <th>Total Runs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stage in pipeline_stages %}
+                            <tr>
+                                <td>
+                                    <i class="bi {{ stage.icon }}"></i> {{ stage.name }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ stage.status }} text-white">{{ stage.status|title }}</span>
+                                </td>
+                                <td>{{ stage.success_rate|round(1) }}%</td>
+                                <td>{{ stage.avg_time|round(2) }}s</td>
+                                <td>{{ stage.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if pipeline_history %}
+                <h5 class="mb-3 mt-4">Recent Pipeline Jobs</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Resume ID</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in pipeline_history %}
+                            <tr>
+                                <td>{{ job.id }}</td>
+                                <td>{{ job.resume_id }}</td>
+                                <td>
+                                    <span class="badge bg-{{ job.status }} text-white">{{ job.status|title }}</span>
+                                </td>
+                                <td>{{ job.duration|round(2) }}s</td>
+                                <td>{{ job.start_time }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
         <!-- Footer & Actions -->
         <div class="d-flex justify-content-between mb-4">
             <div>
@@ -234,6 +337,45 @@
         
         // Update timestamps every minute
         setInterval(updateTimestamps, 60000);
+    </script>
+    
+    <script>
+        // Test Pipeline Function
+        function testPipeline() {
+            const testBtn = document.getElementById('test-pipeline-btn');
+            const testResult = document.getElementById('test-result');
+            const testMessage = document.getElementById('test-message');
+            
+            // Disable button while testing
+            testBtn.disabled = true;
+            testResult.style.display = 'block';
+            testMessage.textContent = 'Running pipeline test...';
+            
+            // Call test-pipeline endpoint
+            fetch('/diagnostic/test-pipeline')
+                .then(response => response.json())
+                .then(data => {
+                    const statusClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                    testResult.innerHTML = `<div class="alert ${statusClass}">
+                        <p class="mb-1"><strong>${data.message}</strong></p>
+                        <p class="mb-0">Job ID: ${data.job_id} - Status: ${data.overall_status}</p>
+                    </div>`;
+                    
+                    // Re-enable button
+                    testBtn.disabled = false;
+                    
+                    // Refresh after successful test
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                })
+                .catch(error => {
+                    testResult.innerHTML = `<div class="alert alert-danger">
+                        <p class="mb-0"><strong>Error:</strong> ${error.message}</p>
+                    </div>`;
+                    testBtn.disabled = false;
+                });
+        }
     </script>
 </body>
 </html> 

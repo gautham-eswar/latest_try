@@ -246,15 +246,45 @@ class DiagnosticSystem:
     def check_system(self):
         """Run a comprehensive system check."""
         try:
+            # Run component checks
+            file_system_check = self.check_file_system()
+            supabase_check = self.check_supabase()
+            openai_check = self.check_openai()
+            
+            # Assemble components dictionary
+            components = {
+                'System': {
+                    'status': 'healthy',
+                    'message': f'Running on {platform.system()} {platform.release()}'
+                },
+                'Database': {
+                    'status': supabase_check['status'],
+                    'message': supabase_check['message']
+                },
+                'OpenAI API': {
+                    'status': openai_check['status'],
+                    'message': openai_check['message']
+                },
+                'File System': {
+                    'status': file_system_check['status'],
+                    'message': file_system_check['message']
+                },
+                'Pipeline': {
+                    'status': self.pipeline_status['status'],
+                    'message': self.pipeline_status['message']
+                }
+            }
+            
             result = {
                 'timestamp': datetime.now().isoformat(),
                 'uptime': (datetime.now() - self.start_time).total_seconds(),
+                'components': components,
                 'system': self._get_system_info(),
                 'memory': self._get_memory_info(),
                 'environment': self._get_environment_info(),
-                'file_system': self.check_file_system(),
-                'supabase': self.check_supabase(),
-                'openai': self.check_openai(),
+                'file_system': file_system_check,
+                'supabase': supabase_check,
+                'openai': openai_check,
                 'pipeline': {
                     'status': self.pipeline_status['status'],
                     'message': self.pipeline_status['message'],
@@ -732,8 +762,21 @@ class DiagnosticSystem:
             """HTML dashboard with comprehensive system information."""
             result = self.check_system()
             return render_template('diagnostics.html', 
+                                  title="System Diagnostics",
                                   diagnostic=result,
-                                  transactions=self.transaction_history[:20])
+                                  system_status=result['overall_status'],
+                                  version=result.get('version', '1.0.0'),
+                                  active_connections=len(self.transactions),
+                                  uptime=result['uptime'],
+                                  timestamp=result['timestamp'],
+                                  components=result['components'],
+                                  system_info=result['system'],
+                                  env_vars=result['environment'],
+                                  transactions=self.transaction_history[:20],
+                                  # Add pipeline data
+                                  pipeline_status=self.pipeline_status,
+                                  pipeline_stages=self.pipeline_stages,
+                                  pipeline_history=list(self.pipeline_history))
         
         @self.blueprint.route('/status')
         def status_page():
