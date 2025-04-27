@@ -505,6 +505,10 @@ class DiagnosticSystem:
             }
             
             # Check each directory
+            tmp_dir = tempfile.gettempdir()
+            logger.info(f"Checking temporary directory: {tmp_dir}")
+            dirs_to_check['tmp'] = tmp_dir
+            
             for name, path in dirs_to_check.items():
                 dir_status = {
                     'path': path,
