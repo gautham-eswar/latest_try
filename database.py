@@ -5,8 +5,10 @@ Provides functions for database connections and operations.
 
 import os
 import time
-import json
+import uuid
 import logging
+import traceback
+import json
 import threading
 import random
 from datetime import datetime, timedelta
@@ -18,128 +20,101 @@ from collections import defaultdict
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Performance tracking variables
+# Connection status tracking
 _connection_status = {
-    'last_success': None,
-    'consecutive_failures': 0,
-    'total_failures': 0,
-    'total_queries': 0,
-    'performance': {
-        'avg_query_time': 0
-    }
+    'last_check': None,
+    'is_connected': False,
+    'error': None
 }
+
+# Query performance tracking
 _queries_history = []
+_queries_stats = {
+    'total': 0,
+    'errors': 0,
+    'total_time': 0
+}
 
 def _track_query_performance(func):
-    """
-    Decorator to track query performance and statistics.
-    """
+    """Decorator to track database query performance"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        global _connection_status, _queries_history
+        global _queries_stats
         
         start_time = time.time()
-        _connection_status['total_queries'] += 1
-        transaction_id = f"tx-{datetime.now().timestamp()}"
-        
-        # Extract operation details for logging
-        table_name = args[0] if len(args) > 0 else kwargs.get('table_name', 'unknown')
-        operation = args[1] if len(args) > 1 else kwargs.get('operation', 'unknown')
+        error = None
         
         try:
             result = func(*args, **kwargs)
-            
-            # Update success metrics
-            query_time = time.time() - start_time
-            _connection_status['last_success'] = datetime.now()
-            _connection_status['consecutive_failures'] = 0
-            
-            # Update average query time
-            total_queries = _connection_status['total_queries']
-            current_avg = _connection_status['performance']['avg_query_time']
-            _connection_status['performance']['avg_query_time'] = (
-                (current_avg * (total_queries - 1) + query_time) / total_queries
-            )
-            
-            # Record query in history
-            _queries_history.append({
-                'transaction_id': transaction_id,
-                'table': table_name,
-                'operation': operation,
-                'duration': query_time,
-                'status': 'success',
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            # Limit history size
-            if len(_queries_history) > 100:
-                _queries_history = _queries_history[-100:]
-                
             return result
-            
         except Exception as e:
-            # Update failure metrics
-            query_time = time.time() - start_time
-            _connection_status['consecutive_failures'] += 1
-            _connection_status['total_failures'] += 1
-            
-            # Record query in history
-            _queries_history.append({
-                'transaction_id': transaction_id,
-                'table': table_name,
-                'operation': operation,
-                'duration': query_time,
-                'status': 'error',
-                'error': str(e),
-                'timestamp': datetime.now().isoformat()
-            })
-            
-            # Limit history size
-            if len(_queries_history) > 100:
-                _queries_history = _queries_history[-100:]
-                
-            # Re-raise the exception
+            error = e
+            _queries_stats['errors'] += 1
             raise
-    
+        finally:
+            end_time = time.time()
+            duration = end_time - start_time
+            
+            # Update stats
+            _queries_stats['total'] += 1
+            _queries_stats['total_time'] += duration
+            
+            # Record query info (keep last 100 queries)
+            query_info = {
+                'timestamp': datetime.now().isoformat(),
+                'duration': duration,
+                'operation': args[1] if len(args) > 1 else 'unknown',
+                'table': args[0] if args else 'unknown',
+                'error': str(error) if error else None
+            }
+            
+            _queries_history.append(query_info)
+            if len(_queries_history) > 100:
+                _queries_history.pop(0)
+            
+            # Log slow queries (>500ms)
+            if duration > 0.5:
+                logger.warning(f"Slow query: {duration:.2f}s - {query_info['operation']} on {query_info['table']}")
+                
     return wrapper
 
+
 def _with_retry(func):
-    """
-    Decorator to add retry logic to database operations.
-    """
+    """Decorator to add retry logic to database operations"""
     @wraps(func)
     def wrapper(*args, **kwargs):
         max_retries = 3
-        retry_delay = 0.5  # Initial delay in seconds
+        retry_delay = 1  # seconds
         
         for attempt in range(1, max_retries + 1):
             try:
+                if attempt > 1:
+                    logger.info(f"Retry attempt {attempt}/{max_retries}...")
+                    
                 return func(*args, **kwargs)
-            except Exception as e:
-                logger.warning(f"Database operation failed (attempt {attempt}/{max_retries}): {str(e)}")
                 
+            except Exception as e:
                 if attempt == max_retries:
-                    logger.error(f"Max retries reached. Giving up: {str(e)}")
+                    logger.error(f"Failed after {max_retries} attempts: {str(e)}")
                     raise
                 
-                # Reset connection before retry
-                reset_connection()
+                logger.warning(f"Operation failed (attempt {attempt}/{max_retries}): {str(e)}")
+                logger.warning(f"Waiting {retry_delay}s before retry...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
                 
-                # Exponential backoff with jitter
-                jitter = random.uniform(0, 0.5)
-                sleep_time = retry_delay * (2 ** (attempt - 1)) + jitter
-                logger.info(f"Retrying in {sleep_time:.2f} seconds...")
-                time.sleep(sleep_time)
-    
     return wrapper
+
 
 # Attempt to import Supabase client
 try:
     from supabase import create_client, Client
     from postgrest import APIError, APIResponse
     SUPABASE_AVAILABLE = True
-except ImportError:
-    logger.warning("Supabase client not available. Fallback mode will be used.")
+    logger.info("Supabase client imported successfully")
+except ImportError as e:
+    logger.warning(f"Supabase client not available: {str(e)}")
+    logger.warning("Fallback mode will be used.")
     SUPABASE_AVAILABLE = False
 
 class InMemoryDatabase:
@@ -188,14 +163,18 @@ class InMemoryDatabase:
         return False
     
     def health_check(self):
-        """Check database health."""
+        """Run health check on the in-memory database."""
         return {
-            "status": "healthy",
-            "message": "In-memory database is working",
-            "tables": [{"name": k, "count": len(v)} for k, v in self.data.items()],
-            "response_time_ms": 1  # Simulated response time
+            "status": "available",
+            "message": "Using in-memory database (fallback mode)",
+            "tables": {table: {"exists": True, "count": len(docs), "status": "available"} 
+                      for table, docs in self.data.items()},
+            "performance": {
+                "queries": len(_queries_history),
+                "errors": _queries_stats.get('errors', 0)
+            }
         }
-    
+        
     def table(self, name):
         """Compatibility method with Supabase client."""
         class TableQuery:
@@ -227,16 +206,51 @@ def create_database_client():
     supabase_url = os.environ.get('SUPABASE_URL')
     supabase_key = os.environ.get('SUPABASE_KEY')
     
-    if supabase_url and supabase_key and SUPABASE_AVAILABLE:
+    if not supabase_url or not supabase_key:
+        logger.warning("Supabase credentials not found in environment variables")
+        logger.warning("Using in-memory database fallback.")
+        return create_in_memory_database()
+    
+    if not SUPABASE_AVAILABLE:
+        logger.warning("Supabase client library not available. Using fallback database.")
+        return create_in_memory_database()
+    
+    try:
+        logger.info(f"Connecting to Supabase at {supabase_url}")
+        client = create_client(supabase_url, supabase_key)
+        
+        # Test the connection with a simple query
         try:
-            logger.info(f"Connecting to Supabase at {supabase_url}")
-            return create_client(supabase_url, supabase_key)
+            # Try a health check table query to verify connection
+            client.table('health_checks').select('*').limit(1).execute()
+            logger.info("Successfully connected to Supabase")
+            
+            # Update connection status
+            global _connection_status
+            _connection_status = {
+                'last_check': datetime.now(),
+                'is_connected': True,
+                'error': None
+            }
+            
+            return client
         except Exception as e:
-            logger.error(f"Failed to create Supabase client: {str(e)}")
+            logger.error(f"Failed to query Supabase: {str(e)}")
             logger.warning("Falling back to in-memory database")
+            
+            # Update connection status
+            global _connection_status
+            _connection_status = {
+                'last_check': datetime.now(),
+                'is_connected': False,
+                'error': str(e)
+            }
+            
             return create_in_memory_database()
-    else:
-        logger.warning("Supabase credentials not found or client not available. Using in-memory database fallback.")
+            
+    except Exception as e:
+        logger.error(f"Failed to create Supabase client: {str(e)}")
+        logger.warning("Falling back to in-memory database")
         return create_in_memory_database()
 
 
@@ -247,26 +261,26 @@ def create_in_memory_database():
     Returns:
         An InMemoryDatabase instance
     """
-    logger.warning("Supabase client not available. Using fallback database.")
+    logger.warning("Using fallback in-memory database instead of Supabase.")
     return InMemoryDatabase()
 
 
 # Initialize the connection when the module is imported
-_db_client = None
+_supabase_client = None
 
 def get_db():
     """Get a database client singleton instance."""
-    global _db_client
-    if _db_client is None:
-        _db_client = create_database_client()
-    return _db_client
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = create_database_client()
+    return _supabase_client
 
 
 def reset_connection():
     """Force a reset of the database connection."""
-    global _db_client
+    global _supabase_client
     
-    _db_client = None
+    _supabase_client = None
         
     # Re-initialize the connection
     return get_db() is not None
@@ -422,38 +436,47 @@ def health_check():
                     'status': 'error'
                 }
         
-        # Compile the results
-        result = {
+        # Compile overall health
+        health_info = {
             'timestamp': datetime.now().isoformat(),
             'client_type': client_type,
             'status': 'healthy' if query_success else 'error',
-            'connection_info': {
-                'last_success': _connection_status['last_success'].isoformat() 
-                    if _connection_status['last_success'] else None,
-                'consecutive_failures': _connection_status['consecutive_failures'],
-                'total_failures': _connection_status['total_failures'],
-                'total_queries': _connection_status['total_queries']
-            },
-            'performance': {
-                'last_query_time': query_time,
-                'avg_query_time': _connection_status['performance']['avg_query_time']
-            },
+            'message': 'Database is responding normally' if query_success else f"Database error: {query_error}",
+            'response_time': query_time,
             'tables': tables_status,
-            'recent_queries': _queries_history[-5:] if _queries_history else []
+            'queries': {
+                'total': _queries_stats.get('total', 0),
+                'errors': _queries_stats.get('errors', 0),
+                'avg_time': _queries_stats.get('total_time', 0) / max(_queries_stats.get('total', 1), 1),
+                'recent': _queries_history[-5:] if _queries_history else []
+            }
         }
         
-        if not query_success:
-            result['last_error'] = query_error
+        # Update connection status
+        _connection_status = {
+            'last_check': datetime.now(),
+            'is_connected': query_success,
+            'error': query_error if not query_success else None
+        }
         
-        return result
+        return health_info
         
     except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        
+        # Update connection status
+        _connection_status = {
+            'last_check': datetime.now(),
+            'is_connected': False,
+            'error': str(e)
+        }
+        
         return {
             'timestamp': datetime.now().isoformat(),
-            'status': 'critical_error',
+            'client_type': 'Unknown',
+            'status': 'critical',
             'message': f"Health check failed: {str(e)}",
-            'error': str(e),
-            'error_type': type(e).__name__
+            'error': traceback.format_exc()
         }
 
 

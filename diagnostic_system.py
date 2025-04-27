@@ -56,6 +56,12 @@ class DiagnosticSystem:
             'successful_jobs': 0
         }
         
+        self.error_stats = {
+            'count': 0,
+            'by_type': {},
+            'recent_errors': []
+        }
+        
     def init_app(self, app):
         """Register the diagnostic Blueprint with the Flask app."""
         app.register_blueprint(self.blueprint, url_prefix='/diagnostic')
@@ -760,23 +766,56 @@ class DiagnosticSystem:
         @self.blueprint.route('/diagnostics')
         def diagnostics_page():
             """HTML dashboard with comprehensive system information."""
-            result = self.check_system()
-            return render_template('diagnostics.html', 
-                                  title="System Diagnostics",
-                                  diagnostic=result,
-                                  system_status=result['overall_status'],
-                                  version=result.get('version', '1.0.0'),
-                                  active_connections=len(self.transactions),
-                                  uptime=result['uptime'],
-                                  timestamp=result['timestamp'],
-                                  components=result['components'],
-                                  system_info=result['system'],
-                                  env_vars=result['environment'],
-                                  transactions=self.transaction_history[:20],
-                                  # Add pipeline data
-                                  pipeline_status=self.pipeline_status,
-                                  pipeline_stages=self.pipeline_stages,
-                                  pipeline_history=list(self.pipeline_history))
+            try:
+                result = self.check_system()
+                
+                # Ensure all required template variables are present
+                system_info = {
+                    "uptime": result.get('uptime', 'Unknown'),
+                    "platform": result.get('system', {}).get('platform', 'Unknown'),
+                    "memory": {
+                        "total": result.get('system', {}).get('memory', {}).get('total', 0),
+                        "available": result.get('system', {}).get('memory', {}).get('available', 0),
+                        "percent": result.get('system', {}).get('memory', {}).get('percent', 0),
+                    },
+                    "cpu_usage": result.get('system', {}).get('cpu_percent', 0)
+                }
+                
+                # Ensure transactions is a list
+                transactions = list(self.transaction_history[:20]) if hasattr(self, 'transaction_history') else []
+                
+                # Ensure environment vars is a dict
+                env_vars = result.get('environment', {})
+                
+                # Ensure pipeline data is present
+                pipeline_status = getattr(self, 'pipeline_status', {"status": "unknown", "message": "No pipeline data"})
+                pipeline_stages = getattr(self, 'pipeline_stages', [])
+                pipeline_history = list(getattr(self, 'pipeline_history', []))
+                
+                return render_template('diagnostics.html', 
+                                      title="System Diagnostics",
+                                      diagnostic=result,
+                                      system_status=result['overall_status'],
+                                      version=result.get('version', '1.0.0'),
+                                      active_connections=len(self.transactions),
+                                      uptime=result['uptime'],
+                                      timestamp=result['timestamp'],
+                                      components=result['components'],
+                                      system_info=system_info,
+                                      env_vars=env_vars,
+                                      transactions=transactions,
+                                      pipeline_status=pipeline_status,
+                                      pipeline_stages=pipeline_stages,
+                                      pipeline_history=pipeline_history)
+            except Exception as e:
+                logger.error(f"Error rendering diagnostics page: {str(e)}")
+                # Fallback to a simple JSON response
+                return jsonify({
+                    "status": "error",
+                    "message": f"Error rendering diagnostics page: {str(e)}",
+                    "error_type": type(e).__name__,
+                    "timestamp": datetime.now().isoformat()
+                }), 500
         
         @self.blueprint.route('/status')
         def status_page():
@@ -792,6 +831,36 @@ class DiagnosticSystem:
                                       'OpenAI': result['openai']['status'],
                                       'File System': result['file_system']['status']
                                   })
+
+    def increment_error_count(self, error_type, message):
+        """Increment the count of errors by type and store recent errors."""
+        try:
+            self.error_stats['count'] += 1
+            
+            # Initialize counter for this error type if needed
+            if error_type not in self.error_stats['by_type']:
+                self.error_stats['by_type'][error_type] = 0
+            
+            # Increment the counter for this error type
+            self.error_stats['by_type'][error_type] += 1
+            
+            # Add to recent errors list (keep last 20)
+            timestamp = datetime.now().isoformat()
+            self.error_stats['recent_errors'].append({
+                'error_type': error_type,
+                'message': message,
+                'timestamp': timestamp
+            })
+            
+            # Keep only the 20 most recent errors
+            if len(self.error_stats['recent_errors']) > 20:
+                self.error_stats['recent_errors'] = self.error_stats['recent_errors'][-20:]
+            
+            logger.info(f"Error recorded: {error_type} - {message}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to record error: {str(e)}")
+            return False
 
 
 def create_diagnostic_system():

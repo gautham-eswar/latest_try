@@ -1,0 +1,17 @@
+{
+  "timestamp": "2025-04-26T22:26:08.661174",
+  "base_url": "http://localhost:5001",
+  "scenario": "error_format",
+  "endpoint": "/api/test/custom-error/400",
+  "response_code": 400,
+  "response_time": 0.0016341209411621094,
+  "response": {
+    "error": "Error 400",
+    "message": "Bad Request",
+    "status_code": 400,
+    "timestamp": "2025-04-26T22:26:08.673722",
+    "transaction_id": "32c3e6ce-2951-4b30-a45a-aae863c6d6af"
+  },
+  "status": "passed",
+  "message": "Error response format matches expected schema"
+}

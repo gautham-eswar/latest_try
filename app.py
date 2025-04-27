@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 
 # Import database functions or define fallbacks if import fails
 try:
-    from database import create_database_client, create_in_memory_database
+    from database import create_database_client, create_in_memory_database, health_check
 except ImportError:
     logging.warning("database module could not be imported, using inline fallbacks")
     from collections import defaultdict
@@ -91,6 +91,10 @@ except ImportError:
     def create_in_memory_database():
         """Create an in-memory database instance."""
         return InMemoryDatabase()
+
+    # Define a fallback health_check
+    def health_check():
+        return {"status": "warning", "message": "Using fallback health check", "tables": []}
 
 # Load environment variables
 load_dotenv()
@@ -169,7 +173,7 @@ def allowed_file(filename):
 
 def create_app():
     """Create and configure the Flask application"""
-    app = Flask(__name__, template_folder='templates')
+    app = Flask(__name__, template_folder='templates', static_folder='static')
     
     # Apply CORS settings
     cors_origins = os.environ.get('CORS_ORIGINS', '*')
@@ -179,6 +183,7 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
     app.config['JSON_SORT_KEYS'] = False
+    app.config['start_time'] = datetime.now()
     
     # Middleware to log request info
     @app.before_request
@@ -281,16 +286,29 @@ def create_app():
     @app.route('/api/health')
     def health():
         """Health check endpoint"""
-        return jsonify({
-            "status": "ok",
-            "uptime": str(datetime.now() - app.config.get('start_time', datetime.now())),
-            "timestamp": datetime.now().isoformat(),
-            "components": {
-                "database": db_client.health_check() if db_client else {"status": "not_available"},
-                "pdf_generator": {"status": "available" if app.config.get('pdf_generator') else "not_available"},
-                "diagnostic": {"status": "available" if app.config.get('diagnostic') else "not_available"}
-            }
-        })
+        try:
+            from database import health_check as db_health_check
+        except ImportError:
+            db_health_check = lambda: {"status": "error", "message": "Database module not available"}
+            
+        try:
+            return jsonify({
+                "status": "ok",
+                "uptime": str(datetime.now() - app.config.get('start_time', datetime.now())),
+                "timestamp": datetime.now().isoformat(),
+                "components": {
+                    "database": db_health_check() if db_client else {"status": "not_available"},
+                    "pdf_generator": {"status": "available" if app.config.get('pdf_generator') else "not_available"},
+                    "diagnostic": {"status": "available" if app.config.get('diagnostic') else "not_available"}
+                }
+            })
+        except Exception as e:
+            logging.error(f"Error in health check: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": f"Error during health check: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }), 500
     
     @app.route('/api/upload', methods=['POST'])
     @track_request
@@ -449,16 +467,41 @@ This is a placeholder LaTeX document for resume ID: %s
     @app.route('/status')
     def status():
         """System status endpoint with more details"""
-        return render_template('status.html', {
-            "system_info": {
-                "uptime": str(datetime.now() - app.config.get('start_time', datetime.now())),
-                "memory_usage": "N/A",  # Placeholder
-                "cpu_usage": "N/A",  # Placeholder
-                "active_connections": "N/A"  # Placeholder
-            },
-            "database_status": db_client.health_check() if db_client else {"status": "not_available"},
-            "recent_transactions": []  # Placeholder
-        })
+        try:
+            try:
+                from database import health_check as db_health_check
+            except ImportError:
+                db_health_check = lambda: {"status": "error", "message": "Database module not available", "tables": []}
+                
+            # Get system metrics
+            memory_info = psutil.virtual_memory() if psutil else None
+            cpu_percent = psutil.cpu_percent(interval=0.1) if psutil else None
+            
+            # Get active connections (simplified estimation)
+            active_connections = len(getattr(app.config.get('diagnostic', {}), 'transactions', {}))
+            
+            try:
+                return render_template('status.html', 
+                    system_info={
+                        "uptime": str(datetime.now() - app.config.get('start_time', datetime.now())),
+                        "memory_usage": f"{memory_info.percent}%" if memory_info else "N/A",
+                        "cpu_usage": f"{cpu_percent}%" if cpu_percent is not None else "N/A",
+                        "active_connections": active_connections
+                    },
+                    database_status=db_health_check() if db_client else {"status": "error", "message": "Database not available", "tables": []},
+                    recent_transactions=getattr(app.config.get('diagnostic', {}), 'transaction_history', [])[:5],
+                    current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                )
+            except Exception as e:
+                logging.error(f"Error rendering status template: {str(e)}")
+                raise  # Re-raise to be caught by outer try-except
+        except Exception as e:
+            logging.error(f"Error in status page: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": f"Error loading status page: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }), 500
     
     @app.route('/diagnostic/diagnostics')
     def diagnostics():
@@ -496,8 +539,47 @@ This is a placeholder LaTeX document for resume ID: %s
         """Test endpoint to simulate a failure"""
         raise ValueError("This is a simulated failure for testing error handling")
     
-    # Store app start time
-    app.config['start_time'] = datetime.now()
+    @app.route('/api/test/custom-error/<int:error_code>')
+    def test_custom_error(error_code):
+        """Test endpoint to return custom error codes"""
+        if error_code < 400 or error_code > 599:
+            return jsonify({
+                "error": "Invalid error code",
+                "message": "Error code must be between 400 and 599",
+                "status_code": 400
+            }), 400
+        
+        # Define some standard error messages for common codes
+        error_messages = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            408: "Request Timeout",
+            418: "I'm a teapot",
+            429: "Too Many Requests",
+            500: "Internal Server Error",
+            501: "Not Implemented",
+            502: "Bad Gateway",
+            503: "Service Unavailable",
+            504: "Gateway Timeout"
+        }
+        
+        message = error_messages.get(error_code, f"Custom error with code {error_code}")
+        
+        return jsonify({
+            "error": f"Error {error_code}",
+            "message": message,
+            "status_code": error_code,
+            "transaction_id": get_transaction_id(),
+            "timestamp": datetime.now().isoformat()
+        }), error_code
+    
+    @app.route('/favicon.ico')
+    def favicon():
+        """Serve the favicon"""
+        return app.send_static_file('favicon.ico')
     
     # Return the app
     return app

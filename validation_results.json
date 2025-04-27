@@ -1,0 +1,23 @@
+{
+  "valid": {
+    "status": "passed",
+    "file": "error_response.json",
+    "message": "Error response format matches expected schema",
+    "response": {
+      "error": "Error 400",
+      "message": "Bad Request",
+      "status_code": 400,
+      "transaction_id": "550e8400-e29b-41d4-a716-446655440000",
+      "timestamp": "2025-04-26T21:00:00.000000"
+    }
+  },
+  "invalid": {
+    "status": "failed",
+    "file": "invalid_error_response.json",
+    "message": "Schema validation error: 'message' is a required property\n\nFailed validating 'required' in schema:\n    {'type': 'object',\n     'required': ['error',\n                  'message',\n                  'status_code',\n                  'transaction_id',\n                  'timestamp'],\n     'properties': {'error': {'type': 'string'},\n                    'message': {'type': 'string'},\n                    'status_code': {'type': 'number'},\n                    'transaction_id': {'type': 'string',\n                                       'pattern': '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'},\n                    'timestamp': {'type': 'string', 'format': 'date-time'}}}\n\nOn instance:\n    {'error': 'Error 400', 'status_code': 400}",
+    "response": {
+      "error": "Error 400",
+      "status_code": 400
+    }
+  }
+}
