@@ -495,21 +495,50 @@ class DiagnosticSystem:
                 'directories': {}
             }
             
-            # Directories to check
             app_root = os.path.abspath(os.path.dirname(__file__))
+            
+            # Safely get temporary directory
+            tmp_dir = None
+            tmp_dir_error = None
+            try:
+                tmp_dir = tempfile.gettempdir()
+                logger.info(f"Using temporary directory: {tmp_dir}")
+            except Exception as e:
+                logger.error(f"Failed to get temporary directory path: {str(e)}")
+                tmp_dir_error = str(e)
+                # Mark status immediately if getting temp dir fails
+                result['status'] = 'critical' 
+                result['message'] = f'Critical error accessing temporary directory: {tmp_dir_error}'
+
+            # Directories to check
             dirs_to_check = {
                 'app_root': app_root,
                 'templates': os.path.join(app_root, 'templates'),
                 'static': os.path.join(app_root, 'static'),
-                'tmp': tempfile.gettempdir()
+                'tmp': tmp_dir # Will be None if the above try block failed
             }
             
             # Check each directory
-            tmp_dir = tempfile.gettempdir()
-            logger.info(f"Checking temporary directory: {tmp_dir}")
-            dirs_to_check['tmp'] = tmp_dir
-            
             for name, path in dirs_to_check.items():
+                # Handle case where temp dir path could not be determined
+                if name == 'tmp' and path is None:
+                    result['directories']['tmp'] = {
+                        'path': 'N/A',
+                        'exists': False,
+                        'is_dir': False,
+                        'readable': False,
+                        'writable': False,
+                        'status': 'error',
+                        'write_test': 'failed',
+                        'error': f"Failed to determine temp directory path: {tmp_dir_error}"
+                    }
+                    # Ensure overall status reflects the critical failure
+                    if result['status'] != 'critical':
+                         result['status'] = 'error' 
+                         result['message'] = 'Failed to access temporary directory'
+                    continue # Skip checks for this non-existent path
+
+                # Proceed with checks if path is valid
                 dir_status = {
                     'path': path,
                     'exists': os.path.exists(path),
@@ -519,7 +548,7 @@ class DiagnosticSystem:
                     'status': 'checking'
                 }
                 
-                # Test write capability
+                # Test write capability (only if dir exists and is writable)
                 if dir_status['exists'] and dir_status['writable']:
                     try:
                         if name == 'tmp':  # Only actually write to temp dir
@@ -529,41 +558,47 @@ class DiagnosticSystem:
                             os.remove(test_file)
                             dir_status['write_test'] = 'passed'
                         else:
-                            dir_status['write_test'] = 'skipped'
+                            dir_status['write_test'] = 'skipped' # Skip writing to app dirs
                     except Exception as e:
                         dir_status['write_test'] = 'failed'
                         dir_status['write_error'] = str(e)
+                        logger.warning(f"Write test failed for directory '{name}' at {path}: {str(e)}")
                 else:
-                    dir_status['write_test'] = 'skipped'
-                
-                # Set status based on checks
+                    dir_status['write_test'] = 'skipped' if not dir_status['exists'] else 'failed'
+
+                # Set final status based on checks
                 if not dir_status['exists']:
                     dir_status['status'] = 'error'
                 elif not dir_status['readable']:
                     dir_status['status'] = 'error'
+                # Writable check is critical only for 'tmp' directory
                 elif name == 'tmp' and (not dir_status['writable'] or dir_status['write_test'] == 'failed'):
-                    dir_status['status'] = 'error'
-                else:
+                     dir_status['status'] = 'error'
+                else: # Otherwise healthy (exists, readable, and if tmp, writable)
                     dir_status['status'] = 'healthy'
                 
                 result['directories'][name] = dir_status
                 
-                # Update overall status if any directory has issues
-                if dir_status['status'] == 'error':
-                    if name == 'tmp':  # temp dir is critical
+                # Update overall file system status if any directory check failed
+                if dir_status['status'] == 'error' and result['status'] != 'critical':
+                    if name == 'tmp': # Temp dir failure is critical
                         result['status'] = 'critical'
-                        result['message'] = f'Critical directory {name} check failed'
-                    else:
-                        result['status'] = 'warning'
-                        result['message'] = f'Directory {name} check failed'
-            
+                        result['message'] = f'Critical check failed for directory: {name}'
+                    elif result['status'] == 'healthy': # Non-critical dir failure is a warning
+                         result['status'] = 'warning'
+                         result['message'] = f'Check failed for directory: {name}'
+                         
+            # Final message update if still healthy
+            if result['status'] == 'healthy':
+                 result['message'] = 'File system checks passed'
+                 
             return result
             
-        except Exception as e:
-            logger.error(f"File system check failed: {str(e)}")
+        except Exception as e: # Catch unexpected errors during the overall check process
+            logger.error(f"Unexpected error during file system check: {str(e)}")
             return {
                 'status': 'error',
-                'message': f'File system check error: {str(e)}',
+                'message': f'File system check failed unexpectedly: {str(e)}',
                 'error': traceback.format_exc()
             }
     
