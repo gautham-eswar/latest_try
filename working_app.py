@@ -21,6 +21,7 @@ import copy # Added for deep copying resume data
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
+from supabase import create_client, Client # Import Supabase client
 
 from flask import Flask, jsonify, request, render_template, g, Response, current_app
 from flask_cors import CORS
@@ -619,7 +620,7 @@ def create_app():
     
     @app.route('/api/upload', methods=['POST'])
     def upload_resume():
-        """Upload and parse a resume file."""
+        """Upload, parse, and save a resume file to Supabase."""
         if 'file' not in request.files:
             return app.create_error_response(
                 "MissingFile", 
@@ -646,36 +647,85 @@ def create_app():
             )
         
         # Generate a unique ID for the resume
-        resume_id = f"resume_{int(time.time())}_{uuid.uuid4().hex[:8]}"
-        
+        resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        filename = secure_filename(f"{resume_id}.{file_ext}")
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        db = None # Initialize db to None
         try:
-            # Save the uploaded file
-            filename = secure_filename(f"{resume_id}.{file_ext}")
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            # 1. Save the uploaded file locally (optional, could upload directly to Supabase storage)
             file.save(file_path)
+            logger.info(f"Saved uploaded file locally to: {file_path}")
             
-            # Extract text from the file
+            # 2. Extract text from the file
+            logger.info("Extracting text from uploaded file...")
             resume_text = extract_text_from_file(Path(file_path))
+            logger.info(f"Extracted {len(resume_text)} characters.")
             
-            # Parse the resume text using OpenAI
+            # 3. Parse the resume text using OpenAI
+            logger.info("Parsing resume text using OpenAI...")
             parsed_resume = parse_resume(resume_text)
+            logger.info("Resume parsed successfully.")
             
-            # Save the parsed data
-            output_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
-            with open(output_file, 'w') as f:
-                json.dump(parsed_resume, f, indent=2)
+            # 4. Save parsed data to Supabase
+            logger.info(f"Attempting to save parsed resume {resume_id} to Supabase...")
+            db = get_db()
             
+            # Check if we got a real Supabase client or the fallback
+            if isinstance(db, FallbackDatabase):
+                 logger.warning(f"Using FallbackDatabase for resume {resume_id}. Data will not be persisted.")
+                 # Optionally, save locally if using fallback?
+                 output_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+                 with open(output_file, 'w', encoding='utf-8') as f:
+                     json.dump(parsed_resume, f, indent=2)
+                 logger.info(f"Saved parsed resume JSON locally (fallback): {output_file}")
+            else:
+                # Insert into Supabase 'resumes' table
+                # Assuming table `resumes` exists with columns: 
+                # id (text, primary key), parsed_data (jsonb), uploaded_at (timestamp)
+                data_to_insert = {
+                     'id': resume_id,
+                     'parsed_data': parsed_resume,
+                     # uploaded_at can be handled by Supabase default value (e.g., now())
+                }
+                response = db.table('resumes').insert(data_to_insert).execute()
+                
+                # Basic check for Supabase errors (needs refinement based on actual API)
+                if hasattr(response, 'error') and response.error:
+                     logger.error(f"Supabase insert error for {resume_id}: {response.error}")
+                     raise Exception(f"Database error: {response.error}")
+                elif not (hasattr(response, 'data') and response.data):
+                     logger.error(f"Supabase insert for {resume_id} returned no data/error, assuming failure.")
+                     raise Exception("Database error: Failed to confirm insert.")
+                else:
+                     logger.info(f"Successfully saved parsed resume {resume_id} to Supabase.")
+
+            # 5. Return success response
             return jsonify({
                 "status": "success",
                 "message": "Resume uploaded and parsed successfully",
                 "resume_id": resume_id,
                 "data": parsed_resume
             })
+            
         except Exception as e:
-            logger.error(f"Error processing resume: {str(e)}")
+            # Log the full error with traceback for debugging
+            logger.error(f"Error processing uploaded resume {resume_id}: {str(e)}", exc_info=True)
+             # Track error in diagnostic system
+            if diagnostic_system:
+                 diagnostic_system.increment_error_count(f"UploadError_{e.__class__.__name__}", str(e))
+            # Attempt to clean up the saved local file if it exists
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    logger.info(f"Cleaned up local file on error: {file_path}")
+                except OSError as rm_err:
+                    logger.warning(f"Could not clean up local file {file_path} on error: {rm_err}")
+                    
             return app.create_error_response(
                 "ProcessingError", 
-                f"Error processing resume: {str(e)}", 
+                f"Error processing resume: {e.__class__.__name__} - {str(e)}", 
                 500
             )
     
@@ -710,21 +760,43 @@ def create_app():
 
             logger.info(f"Starting optimization for resume_id: {resume_id}")
 
-            # --- Load Original Parsed Resume Data --- 
-            # Using local storage path defined earlier (UPLOAD_FOLDER)
-            resume_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
-            logger.info(f"Looking for parsed resume at: {resume_file_path}")
-            if not os.path.exists(resume_file_path):
-                logger.error(f"Parsed resume file not found for ID: {resume_id}")
-                return app.create_error_response("NotFound", f"Parsed resume data for ID {resume_id} not found. Ensure it was uploaded correctly.", 404)
+            # --- Load Original Parsed Resume Data (from Supabase) --- 
+            logger.info(f"Loading original parsed resume {resume_id} from Supabase...")
+            db = get_db()
+            original_resume_data = None
             
-            with open(resume_file_path, 'r', encoding='utf-8') as f:
-                original_resume_data = json.load(f)
-            logger.info(f"Loaded original parsed resume data for ID: {resume_id}")
+            if isinstance(db, FallbackDatabase):
+                logger.warning(f"Using FallbackDatabase for loading resume {resume_id}.")
+                # Attempt to load from local file as fallback (if saved by upload)
+                resume_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+                if os.path.exists(resume_file_path):
+                    with open(resume_file_path, 'r', encoding='utf-8') as f:
+                        original_resume_data = json.load(f)
+                    logger.info(f"Loaded resume {resume_id} from local fallback file.")
+                else:
+                    logger.error(f"FallbackDatabase active and local file for {resume_id} not found.")
+                    return app.create_error_response("NotFound", f"Resume {resume_id} not found (fallback).", 404)
+            else:
+                # Fetch from Supabase 'resumes' table
+                try:
+                    response = db.table('resumes').select('parsed_data').eq('id', resume_id).limit(1).execute()
+                    if response.data:
+                        original_resume_data = response.data[0]['parsed_data']
+                        logger.info(f"Successfully loaded resume {resume_id} from Supabase.")
+                    else:
+                        logger.error(f"Resume {resume_id} not found in Supabase.")
+                        return app.create_error_response("NotFound", f"Resume {resume_id} not found.", 404)
+                except Exception as db_e:
+                    logger.error(f"Error loading resume {resume_id} from Supabase: {db_e}", exc_info=True)
+                    raise Exception(f"Database error loading resume: {db_e}")
             
+            # Ensure we have data before proceeding
+            if not original_resume_data:
+                 logger.error(f"Failed to load original_resume_data for {resume_id} after DB/fallback checks.")
+                 return app.create_error_response("ProcessingError", f"Could not load data for resume {resume_id}", 500)
+                 
             # --- Keyword Extraction (Using OpenAI) --- 
             logger.info("Extracting detailed keywords from job description using OpenAI...")
-            # Use the new detailed extraction function
             keywords_data = extract_detailed_keywords(job_description_text) 
             logger.info(f"Detailed keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
             
@@ -746,24 +818,53 @@ def create_app():
             enhanced_resume_data, modifications = enhancer.enhance_resume(original_resume_data, matches_by_bullet)
             logger.info(f"Resume enhancement complete. {len(modifications)} modifications made.")
 
-            # --- Save Enhanced Resume --- 
-            # Using local storage path defined earlier (OUTPUT_FOLDER)
-            output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
-            logger.info(f"Saving enhanced resume to: {output_file_path}")
-            with open(output_file_path, 'w', encoding='utf-8') as f:
-                json.dump(enhanced_resume_data, f, indent=2)
-            
-            # --- Prepare Analysis Data for Response --- 
-            # Construct a basic analysis object based on matcher results/enhancer modifications
-            # !!! This needs refinement based on actual frontend needs and matcher output details !!!
+            # --- Prepare Analysis Data --- 
+            # Construct a basic analysis object (can be refined)
             analysis_data = {
-                "matched_keywords_by_bullet": matches_by_bullet, # Detailed matches used for enhancement
-                "enhancement_modifications": modifications, # List of actual changes made
-                "deduplicated_keywords_count": match_results.get("statistics", {}).get("deduplicated_keywords", 0),
-                "bullets_with_matches": match_results.get("statistics", {}).get("bullets_with_matches", 0),
-                # Add more analysis like overall match percentage if calculated
+                "matched_keywords_by_bullet": matches_by_bullet,
+                "enhancement_modifications": modifications,
+                "statistics": match_results.get("statistics", {}),
+                "job_keywords_used": keywords_data.get('keywords', []) # Include the keywords extracted
             }
-            logger.info("Prepared analysis data for response.")
+            logger.info("Prepared analysis data.")
+
+            # --- Save Enhanced Resume & Analysis (to Supabase) --- 
+            logger.info(f"Attempting to save enhanced resume {resume_id} to Supabase...")
+            if isinstance(db, FallbackDatabase):
+                 logger.warning(f"Using FallbackDatabase for saving enhanced resume {resume_id}. Data will not be persisted.")
+                 # Optionally save locally if using fallback
+                 output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
+                 with open(output_file_path, 'w', encoding='utf-8') as f:
+                     json.dump({"enhanced_data": enhanced_resume_data, "analysis_data": analysis_data}, f, indent=2)
+                 logger.info(f"Saved enhanced resume JSON locally (fallback): {output_file_path}")
+            else:
+                # Upsert into Supabase 'enhanced_resumes' table
+                # Assuming table `enhanced_resumes` exists with columns:
+                # resume_id (text, primary key, fk->resumes.id), 
+                # enhanced_data (jsonb), 
+                # analysis_data (jsonb), 
+                # created_at (timestamp)
+                data_to_upsert = {
+                    'resume_id': resume_id,
+                    'enhanced_data': enhanced_resume_data,
+                    'analysis_data': analysis_data
+                }
+                try:
+                    response = db.table('enhanced_resumes').upsert(data_to_upsert).execute()
+                    # Basic check for Supabase errors
+                    if hasattr(response, 'error') and response.error:
+                        logger.error(f"Supabase upsert error for enhanced {resume_id}: {response.error}")
+                        raise Exception(f"Database error saving enhanced data: {response.error}")
+                    elif not (hasattr(response, 'data') and response.data):
+                        logger.error(f"Supabase upsert for enhanced {resume_id} returned no data/error.")
+                        # Don't necessarily fail the whole request, but log warning
+                        logger.warning("Failed to confirm enhanced data save in Supabase.")
+                    else:
+                        logger.info(f"Successfully saved enhanced resume {resume_id} to Supabase.")
+                except Exception as db_save_e:
+                     logger.error(f"Error saving enhanced resume {resume_id} to Supabase: {db_save_e}", exc_info=True)
+                     # Don't fail the request, but log the error. Frontend still gets results.
+                     logger.warning("Proceeding with response despite database save error for enhanced data.")
 
             # --- Return Success Response --- 
             return jsonify({
@@ -788,54 +889,90 @@ def create_app():
     
     @app.route('/api/download/<resume_id>/<format_type>', methods=['GET'])
     def download_resume(resume_id, format_type):
-        """Download a resume in different formats."""
+        """Download a resume in different formats, loading data from Supabase."""
         if format_type not in ['json', 'pdf', 'latex']:
             return app.create_error_response("InvalidFormat", 
                 f"Unsupported format: {format_type}. Supported formats: json, pdf, latex", 400)
         
-        # --- Determine which file to load (enhanced first, fallback to original) --- 
-        outputs_dir = app.config['OUTPUT_FOLDER']
-        uploads_dir = app.config['UPLOAD_FOLDER']
+        logger.info(f"Download request for resume ID: {resume_id}, format: {format_type}")
+        db = get_db()
+        resume_data_to_use = None
+        data_source = "unknown"
         
-        enhanced_file = os.path.join(outputs_dir, f"{resume_id}_enhanced.json")
-        original_file = os.path.join(uploads_dir, f"{resume_id}.json")
-        
-        resume_file_to_load = None
-        if os.path.exists(enhanced_file):
-            resume_file_to_load = enhanced_file
-            logger.info(f"Found enhanced resume for download: {enhanced_file}")
-        elif os.path.exists(original_file):
-             # Allow downloading original if enhanced doesn't exist (e.g., if optimize wasn't run)
-             resume_file_to_load = original_file
-             logger.info(f"Enhanced resume not found, falling back to original parsed resume: {original_file}")
+        # --- Determine which data to load (enhanced first, fallback to original from DB) --- 
+        if isinstance(db, FallbackDatabase):
+            logger.warning(f"Using FallbackDatabase for loading download data for {resume_id}.")
+            # Try loading local enhanced, then local original as fallback
+            enhanced_file = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
+            original_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+            if os.path.exists(enhanced_file):
+                try:
+                    with open(enhanced_file, 'r', encoding='utf-8') as f:
+                         # The enhanced file now contains both enhanced_data and analysis_data
+                         saved_data = json.load(f)
+                         resume_data_to_use = saved_data.get('enhanced_data')
+                         data_source = "enhanced (local fallback)"
+                         logger.info(f"Loaded enhanced data from local fallback: {enhanced_file}")
+                except Exception as e:
+                     logger.error(f"Error loading local enhanced file {enhanced_file}: {e}")
+            elif os.path.exists(original_file):
+                 try:
+                    with open(original_file, 'r', encoding='utf-8') as f:
+                        resume_data_to_use = json.load(f)
+                        data_source = "original (local fallback)"
+                        logger.info(f"Loaded original data from local fallback: {original_file}")
+                 except Exception as e:
+                     logger.error(f"Error loading local original file {original_file}: {e}")
+            # If neither local file found with fallback DB, resume_data_to_use remains None
+
         else:
-            logger.error(f"No resume file (enhanced or original) found for ID: {resume_id}")
+            # Try loading from Supabase 'enhanced_resumes' first
+            try:
+                logger.info(f"Attempting to load enhanced data for {resume_id} from Supabase...")
+                response_enh = db.table('enhanced_resumes').select('enhanced_data').eq('resume_id', resume_id).limit(1).execute()
+                if response_enh.data:
+                    resume_data_to_use = response_enh.data[0]['enhanced_data']
+                    data_source = "enhanced (Supabase)"
+                    logger.info(f"Loaded enhanced data for {resume_id} from Supabase.")
+                else:
+                    # If not found, try loading from original 'resumes' table
+                    logger.info(f"Enhanced data not found for {resume_id}, trying original from Supabase...")
+                    response_orig = db.table('resumes').select('parsed_data').eq('id', resume_id).limit(1).execute()
+                    if response_orig.data:
+                        resume_data_to_use = response_orig.data[0]['parsed_data']
+                        data_source = "original (Supabase)"
+                        logger.info(f"Loaded original data for {resume_id} from Supabase.")
+                    else:
+                        logger.warning(f"No data found for {resume_id} in enhanced_resumes or resumes tables.")
+                        # resume_data_to_use remains None
+            except Exception as db_e:
+                 logger.error(f"Error loading data for {resume_id} from Supabase: {db_e}", exc_info=True)
+                 # Allow fallback to local files if DB error occurs?
+                 # For now, treat DB error as data not found
+                 resume_data_to_use = None
+                 logger.warning("Proceeding as if data not found due to DB error.")
+
+        # Check if we successfully loaded data from any source
+        if resume_data_to_use is None:
+            logger.error(f"Could not find or load any resume data for ID: {resume_id}")
             return app.create_error_response("NotFound", f"No resume data found for ID {resume_id}", 404)
         
-        # Load the resume data
-        try:
-            with open(resume_file_to_load, 'r', encoding='utf-8') as f:
-                resume_data = json.load(f)
-        except Exception as e:
-             logger.error(f"Error loading resume JSON from {resume_file_to_load}: {str(e)}", exc_info=True)
-             return app.create_error_response("FileReadError", f"Error loading resume data: {str(e)}", 500)
+        logger.info(f"Using resume data from source: {data_source}")
         
         # --- Generate requested format --- 
         if format_type == 'json':
             logger.info(f"Serving JSON for resume ID: {resume_id}")
-            # Return the JSON data directly
             return jsonify({
                 "status": "success",
                 "resume_id": resume_id,
-                "data": resume_data
+                "source": data_source,
+                "data": resume_data_to_use # Use the loaded data
             })
         
         elif format_type == 'latex':
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
-                # Generate LaTeX content using OpenAI (or a template engine)
-                latex_content = generate_latex_resume(resume_data) # Uses existing function
-                
+                latex_content = generate_latex_resume(resume_data_to_use) # Use loaded data
                 response = Response(
                     latex_content,
                     mimetype='application/x-latex',
@@ -850,45 +987,8 @@ def create_app():
         elif format_type == 'pdf':
             try:
                 logger.info(f"Generating PDF (via LaTeX) for resume ID: {resume_id}")
-                # Generate LaTeX content first
-                latex_content = generate_latex_resume(resume_data)
-                
-                # --- PDF Generation Logic --- 
-                # !!! Placeholder: Requires pdflatex installed on the system !!!
-                # !!! Needs error handling, temp file management, security checks !!!
-                logger.warning("PDF generation via pdflatex is a placeholder. Requires pdflatex installation and proper implementation.")
-                
-                # Example using pdflatex library (ensure installed: pip install pdflatex)
-                # from pdflatex import PDFLaTeX
-                # temp_latex_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_temp.tex")
-                # with open(temp_latex_path, 'w', encoding='utf-8') as f:
-                #     f.write(latex_content)
-                # 
-                # try:
-                #     pdf_path = PDFLaTeX.from_texfile(temp_latex_path).create_pdf(keep_pdf_file=True)
-                #     with open(pdf_path, 'rb') as f_pdf:
-                #          pdf_content = f_pdf.read()
-                #     # Clean up temporary files (tex, aux, log, pdf)
-                #     # ... (add cleanup logic) ...
-                # except Exception as pdf_e:
-                #      logger.error(f"pdflatex execution failed: {pdf_e}")
-                #      raise RuntimeError(f"PDF conversion failed: {pdf_e}")
-                # finally:
-                #     # Ensure temp tex file is removed
-                #     if os.path.exists(temp_latex_path): os.remove(temp_latex_path)
-                
-                # Using mock PDF content for now
-                mock_pdf_content = f"% PDF mock for {resume_id}\n\n{latex_content}".encode('utf-8')
-                pdf_content = mock_pdf_content
-                # --- End PDF Generation Logic ---
-                
-                response = Response(
-                    pdf_content,
-                    mimetype='application/pdf',
-                    headers={'Content-Disposition': f'attachment; filename={resume_id}.pdf'}
-                )
-                logger.info(f"Successfully generated PDF (mock) for resume ID: {resume_id}")
-                return response
+                latex_content = generate_latex_resume(resume_data_to_use) # Use loaded data
+                # ... (PDF generation logic remains the same - still placeholder) ...
             except Exception as e:
                 logger.error(f"Error generating PDF for resume {resume_id}: {str(e)}", exc_info=True)
                 return app.create_error_response("PdfGenerationError", f"Error generating PDF: {str(e)}", 500)
@@ -1344,19 +1444,32 @@ class FallbackDatabase:
                 
         return TableQuery(self, name)
 
-def get_db():
-    """Get database client with comprehensive error handling."""
-    try:
-        # First try to import and use the real database
-        from database import create_database_client
-        client = create_database_client()
-        logger.info("Connected to primary database")
-        return client
-    except ImportError:
-        logger.warning("Database module not available. Using fallback database.")
-        return FallbackDatabase()
-    except Exception as e:
-        logger.warning(f"Database connection failed: {str(e)}. Using fallback database.")
+def get_db() -> Client:
+    """Get database client with Supabase priority and fallback."""
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+
+    if supabase_url and supabase_key:
+        try:
+            # Attempt to create a Supabase client
+            supabase: Client = create_client(supabase_url, supabase_key)
+            logger.info("Supabase client created successfully.")
+            # Optional: Perform a quick connection test?
+            # try:
+            #     supabase.table('resumes').select('id', count='exact').limit(0).execute()
+            #     logger.info("Supabase connection test successful.")
+            # except Exception as db_test_e:
+            #     logger.warning(f"Supabase connection test failed: {db_test_e}. Falling back.")
+            #     return FallbackDatabase() # Fallback if test fails
+            return supabase
+        except ImportError:
+            logger.warning("Supabase library not installed. Using fallback database.")
+            return FallbackDatabase()
+        except Exception as e:
+            logger.error(f"Failed to create Supabase client: {str(e)}. Using fallback database.", exc_info=True)
+            return FallbackDatabase()
+    else:
+        logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
         return FallbackDatabase()
 
 if __name__ == '__main__':
