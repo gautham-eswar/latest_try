@@ -21,6 +21,7 @@ import copy # Added for deep copying resume data
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
+from typing import Dict, List, Any, Optional, Tuple # Import necessary types
 from supabase import create_client, Client # Import Supabase client
 
 from flask import Flask, jsonify, request, render_template, g, Response, current_app
