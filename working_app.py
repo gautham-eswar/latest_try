@@ -25,6 +25,62 @@ from flask import Flask, jsonify, request, render_template, g, Response, current
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
+# --- BEGIN CODE VERIFICATION LOGGING ---
+# Add logging to verify the running code for OpenAI initialization
+# This helps diagnose deployment/caching issues.
+def log_file_snippet(filepath, start_marker, end_marker, lines=15):
+    try:
+        if not os.path.exists(filepath):
+            logging.warning(f"Code verification: File not found at {filepath}")
+            return
+        with open(filepath, 'r') as f:
+            content = f.read()
+        start_index = content.find(start_marker)
+        if start_index == -1:
+            logging.warning(f"Code verification: Start marker '{start_marker}' not found in {filepath}")
+            return
+        end_index = content.find(end_marker, start_index)
+        if end_index == -1:
+             end_index = start_index + 1000 # Approx limit if end marker not found nearby
+        
+        snippet = content[start_index:end_index].strip()
+        # Limit lines for clarity
+        snippet_lines = snippet.split('\\n')
+        if len(snippet_lines) > lines:
+            snippet = '\\n'.join(snippet_lines[:lines]) + '\\n...'
+
+        logging.info(f"--- Verifying code in {filepath} ---")
+        logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
+        logging.info(f"--- End verification for {filepath} ---")
+        # Check specifically for proxies=None
+        if "proxies=None" in snippet:
+             logging.info(f"Verification successful: 'proxies=None' found in {filepath} snippet.")
+        else:
+             logging.warning(f"Verification FAILED: 'proxies=None' NOT found in {filepath} snippet.")
+             
+    except Exception as e:
+        logging.error(f"Code verification: Error reading {filepath}: {str(e)}")
+
+try:
+    # Get the directory of the current script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Log diagnostic_system.py snippet
+    ds_path = os.path.join(current_dir, 'diagnostic_system.py')
+    log_file_snippet(ds_path, 'def check_openai(self):', 'def check_file_system(self):')
+
+    # Log embeddings.py snippet
+    emb_path = os.path.join(current_dir, 'embeddings.py')
+    log_file_snippet(emb_path, 'class SemanticMatcher:', 'def process_keywords_and_resume')
+
+    # Log enhancer.py snippet
+    enh_path = os.path.join(current_dir, 'enhancer.py')
+    log_file_snippet(enh_path, 'class ResumeEnhancer:', 'def enhance_resume')
+
+except Exception as e:
+     logging.error(f"Code verification: Top-level error during file reading: {str(e)}")
+# --- END CODE VERIFICATION LOGGING ---
+
 # Load environment variables
 load_dotenv()
 
