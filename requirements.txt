@@ -52,9 +52,4 @@ pdflatex==0.1.3        # Python wrapper for pdflatex (optional, system pdflatex 
 
 # Utility Libraries
 tqdm==4.66.1           # Progress bars
-pyyaml==6.0.1          # YAML parsing and generation
-charset-normalizer==3.3.2  # Character encoding detection
-idna==3.6              # Internationalized Domain Names
-certifi==2023.11.17    # Root certificates for validation
-typing-extensions==4.9.0  # Typing extensions for type hints 
  
