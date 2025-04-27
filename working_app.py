@@ -869,8 +869,11 @@ def create_app():
         
         # Gracefully handle template rendering
         try:
+            # Calculate uptime separately for direct passing
+            current_uptime = format_uptime(int(time.time() - START_TIME))
             return render_template('diagnostics.html',
                                system_info=system_info,
+                               uptime=current_uptime,  # Pass uptime directly
                                resume_processing_times=resume_processing_times,
                                api_response_times=api_response_times,
                                recent_requests=recent_requests,
