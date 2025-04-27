@@ -406,11 +406,31 @@ class DiagnosticSystem:
                 from supabase import create_client
                 supabase = create_client(supabase_url, supabase_key)
                 
-                # Check connection with a simple ping
-                start_time = datetime.now()
-                response = supabase.table('healthcheck').select('*').limit(1).execute()
-                ping_time = (datetime.now() - start_time).total_seconds()
-                
+                # Check connection with a simple ping attempt
+                ping_time = None
+                healthcheck_status = 'unknown'
+                healthcheck_message = 'Not checked'
+                try:
+                    start_time = datetime.now()
+                    # Try querying healthcheck table
+                    response = supabase.table('healthcheck').select('*', count='exact').limit(1).execute()
+                    ping_time = (datetime.now() - start_time).total_seconds()
+                    healthcheck_status = 'healthy'
+                    healthcheck_message = f"Healthcheck table query successful (count={response.count})"
+                except Exception as ping_error:
+                    ping_time = (datetime.now() - start_time).total_seconds() # Record time even on failure
+                    error_str = str(ping_error)
+                    # Check if the error is specifically 'relation "..." does not exist' (PostgREST error)
+                    if 'relation "public.healthcheck" does not exist' in error_str or getattr(ping_error, 'code', None) == '42P01':
+                        healthcheck_status = 'warning'
+                        healthcheck_message = "Connection successful, but 'healthcheck' table missing."
+                        logger.warning("Supabase check: 'healthcheck' table not found, but connection seems ok.")
+                    else:
+                        # Different error during ping, treat as connection failure
+                        healthcheck_status = 'error'
+                        healthcheck_message = f"Connection test failed: {error_str}"
+                        logger.error(f"Supabase healthcheck query failed: {error_str}")
+
                 # Check if critical tables exist
                 tables_to_check = ['resumes', 'users', 'jobs']
                 tables_status = {}
@@ -429,19 +449,26 @@ class DiagnosticSystem:
                             'status': 'error'
                         }
                 
-                # Determine overall Supabase status
-                if all(t['status'] == 'healthy' for t in tables_status.values()):
+                # Determine overall Supabase status based on table checks AND healthcheck attempt
+                if all(t['status'] == 'healthy' for t in tables_status.values()) and healthcheck_status == 'healthy':
                     status = 'healthy'
-                    message = 'Supabase connection successful'
-                else:
+                    message = 'Supabase connection and tables healthy.'
+                elif all(t['status'] == 'healthy' for t in tables_status.values()) and healthcheck_status == 'warning':
+                     status = 'warning' # Downgrade to warning if healthcheck table missing but others ok
+                     message = healthcheck_message
+                elif healthcheck_status == 'error':
+                     status = 'error' # If connection ping failed, report error
+                     message = healthcheck_message
+                else: # Some tables are missing/inaccessible
                     status = 'degraded'
-                    message = 'Some tables are not accessible'
+                    message = 'Some critical tables are not accessible or connection failed.'
                 
                 return {
                     'status': status,
                     'message': message,
                     'ping': ping_time,
-                    'tables': tables_status
+                    'tables': tables_status,
+                    'healthcheck_query': {'status': healthcheck_status, 'details': healthcheck_message}
                 }
                 
             except ImportError as e:
@@ -484,7 +511,8 @@ class DiagnosticSystem:
             # We'll import here to isolate potential import errors
             try:
                 from openai import OpenAI
-                client = OpenAI(api_key=api_key)
+                # Explicitly set proxies=None to avoid issues with environment variables
+                client = OpenAI(api_key=api_key, proxies=None)
                 
                 # Check connection with a simple ping
                 start_time = datetime.now()
