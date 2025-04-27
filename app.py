@@ -247,7 +247,7 @@ def create_app():
     # Initialize PDF generator
     try:
         import pdf_generator
-        pdf_gen = pdf_generator.create_generator()
+        pdf_gen = pdf_generator.create_pdf_generator()
         app.config['pdf_generator'] = pdf_gen
         
         # Check if pdflatex is available
