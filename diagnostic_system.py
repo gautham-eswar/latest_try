@@ -624,28 +624,47 @@ class DiagnosticSystem:
                 else:
                     # Modern OpenAI client (>= 1.0)
                     from openai import OpenAI
+                    import httpx # Ensure httpx is imported
                     
                     # Log exact client initialization details
                     logger.info(f"Initializing modern OpenAI client with api_key={api_key[:4]}... (masked)")
                     
                     try:
-                        # Simplest possible initialization with just the API key
-                        client = OpenAI(api_key=api_key)
-                        logger.info("OpenAI client initialized successfully")
+                        # Explicitly create httpx client disabling env proxies
+                        logger.info("Creating explicit httpx.Client with trust_env=False to disable environment proxy loading")
+                        custom_http_client = httpx.Client(trust_env=False) 
+
+                        # Pass the custom client to OpenAI constructor
+                        logger.info("Initializing OpenAI client using custom http_client")
+                        client = OpenAI(api_key=api_key, http_client=custom_http_client)
+                        logger.info("OpenAI client initialized successfully using custom http_client")
+                        
                     except TypeError as te:
                         # Specific handler for TypeError which might be related to argument issues
                         logger.error(f"TypeError during OpenAI client initialization: {str(te)}")
                         if "got an unexpected keyword argument" in str(te):
                             logger.error("This appears to be an API compatibility issue. Checking openai version again.")
-                            import pkg_resources
-                            installed_version = pkg_resources.get_distribution("openai").version
-                            logger.error(f"Confirmed openai version from pkg_resources: {installed_version}")
+                            try:
+                                import pkg_resources
+                                installed_version = pkg_resources.get_distribution("openai").version
+                                logger.error(f"Confirmed openai version from pkg_resources: {installed_version}")
+                            except Exception as pkg_e:
+                                logger.error(f"Could not confirm version via pkg_resources: {pkg_e}")
                         return {
                             'status': 'error',
                             'message': f'OpenAI API initialization error: {str(te)}',
                             'models': None,
                             'ping': None
                         }
+                    except Exception as e:
+                         # Add generic exception logging here too
+                         logger.error(f"Exception during OpenAI client initialization with custom httpx client: {str(e)}", exc_info=True)
+                         return {
+                             'status': 'error',
+                             'message': f'OpenAI API initialization error: {str(e)}',
+                             'models': None,
+                             'ping': None
+                         }
                     
                     # Check connection with a simple ping
                     logger.info("Attempting to list OpenAI models...")
