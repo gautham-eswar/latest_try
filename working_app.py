@@ -17,6 +17,7 @@ import socket
 import re
 import io
 import requests
+import copy # Added for deep copying resume data
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -24,6 +25,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import Flask, jsonify, request, render_template, g, Response, current_app
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+
+# Import the advanced modules
+from embeddings import SemanticMatcher
+from enhancer import ResumeEnhancer
 
 # --- BEGIN CODE VERIFICATION LOGGING ---
 # Add logging to verify the running code for OpenAI initialization
@@ -94,8 +99,8 @@ logger = logging.getLogger(__name__)
 # Constants
 START_TIME = time.time()
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx'}
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_files')
-OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'test_results')
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
 
 # OpenAI API settings
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
@@ -120,14 +125,47 @@ except ImportError:
 
 def extract_text_from_file(file_path):
     """Extract text from files based on their extension"""
+    # NOTE: This function currently only handles reading text files.
+    # Proper extraction for PDF/DOCX needs to be implemented here.
     file_ext = file_path.suffix.lower()
+    logger.info(f"Attempting to extract text from {file_path} (extension: {file_ext})")
     
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except UnicodeDecodeError:
-        # If it's not a text file, return a placeholder
-        return f"Binary file content (file type: {file_ext})"
+    if file_ext == '.txt':
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Error reading text file {file_path}: {e}")
+            raise IOError(f"Could not read text file: {e}") from e
+    elif file_ext == '.pdf':
+        # Placeholder: Implement actual PDF extraction (e.g., using PyPDF2 or pdfminer.six)
+        logger.warning(f"PDF text extraction not implemented for {file_path}. Returning placeholder.")
+        return f"Placeholder PDF content for {file_path.name}. Please implement PDF extraction."
+        # Example with PyPDF2 (ensure installed: pip install pypdf2)
+        # try:
+        #     from PyPDF2 import PdfReader
+        #     reader = PdfReader(file_path)
+        #     text = ""
+        #     for page in reader.pages:
+        #         text += page.extract_text() + "\n"
+        #     return text
+        # except Exception as e:
+        #     logger.error(f"Error extracting PDF text from {file_path}: {e}")
+        #     raise IOError(f"Could not extract text from PDF: {e}") from e
+    elif file_ext == '.docx':
+        # Placeholder: Implement actual DOCX extraction (e.g., using python-docx or docx2txt)
+        logger.warning(f"DOCX text extraction not implemented for {file_path}. Returning placeholder.")
+        return f"Placeholder DOCX content for {file_path.name}. Please implement DOCX extraction."
+        # Example with docx2txt (ensure installed: pip install docx2txt)
+        # try:
+        #     import docx2txt
+        #     return docx2txt.process(file_path)
+        # except Exception as e:
+        #     logger.error(f"Error extracting DOCX text from {file_path}: {e}")
+        #     raise IOError(f"Could not extract text from DOCX: {e}") from e
+    else:
+        logger.error(f"Unsupported file type for text extraction: {file_ext}")
+        raise ValueError(f"Unsupported file type: {file_ext}")
 
 def call_openai_api(system_prompt, user_prompt, max_retries=3):
     """Call OpenAI API with retry logic and proper error handling."""
@@ -209,91 +247,31 @@ def parse_resume(resume_text):
         logger.error(f"Error parsing JSON from OpenAI: {e}")
         raise ValueError("Failed to parse structured data from resume")
 
-def extract_keywords(job_description):
-    """Extract relevant keywords from job description"""
-    system_prompt = "You are a keyword extraction assistant for job descriptions."
-    user_prompt = f"""
-    Extract relevant keywords from this job description:
-    
-    {job_description}
-    
-    Format your response as JSON with these keys:
-    - skills (technical skills required)
-    - experience (experience areas required)
-    - education (education requirements)
-    - soft_skills (soft skills mentioned)
+# Placeholder for Advanced Keyword Extraction
+def advanced_keyword_extraction(job_description_text: str) -> Dict[str, Any]:
+    """ 
+    Placeholder for a more advanced keyword extraction logic.
+    This should return a dict compatible with SemanticMatcher, e.g.:
+    { "keywords": [ 
+        { "keyword": "Python", "context": "Experience with Python...", "relevance_score": 0.9, "skill_type": "hard skill" },
+        { "keyword": "Teamwork", "context": "Ability to work in a team...", "relevance_score": 0.8, "skill_type": "soft skill" }
+      ] 
+    }
+    For now, it does a very basic split and assigns default values.
     """
-    
-    result = call_openai_api(system_prompt, user_prompt)
-    
-    # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
-    structured_data = json_match.group(1) if json_match else result
-    
-    try:
-        return json.loads(structured_data)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON from OpenAI: {e}")
-        raise ValueError("Failed to extract keywords from job description")
-
-def optimize_resume(resume_data, job_keywords):
-    """Optimize resume based on job keywords"""
-    system_prompt = "You are a resume optimization assistant."
-    user_prompt = f"""
-    Optimize this resume for the job requirements:
-    
-    RESUME:
-    {json.dumps(resume_data, indent=2)}
-    
-    JOB KEYWORDS:
-    {json.dumps(job_keywords, indent=2)}
-    
-    Format your response as JSON with the same structure as the resume,
-    but with optimized content that emphasizes relevant skills and experience.
-    """
-    
-    result = call_openai_api(system_prompt, user_prompt)
-    
-    # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
-    structured_data = json_match.group(1) if json_match else result
-    
-    try:
-        return json.loads(structured_data)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON from OpenAI: {e}")
-        raise ValueError("Failed to optimize resume")
-
-def match_skills(resume_data, job_keywords):
-    """Match resume skills against job requirements"""
-    system_prompt = "You are a resume analysis assistant."
-    user_prompt = f"""
-    Compare these resume skills against job requirements:
-    
-    RESUME:
-    {json.dumps(resume_data, indent=2)}
-    
-    JOB KEYWORDS:
-    {json.dumps(job_keywords, indent=2)}
-    
-    Format your response as JSON with these keys:
-    - matching_skills (skills present in both)
-    - missing_skills (skills in job but not resume)
-    - skill_match_percentage (percentage of job skills found in resume)
-    - recommendations (array of suggestions)
-    """
-    
-    result = call_openai_api(system_prompt, user_prompt)
-    
-    # Extract JSON from the result (might be wrapped in markdown code blocks)
-    json_match = re.search(r'```(?:json)?\s*(.*?)```', result, re.DOTALL)
-    structured_data = json_match.group(1) if json_match else result
-    
-    try:
-        return json.loads(structured_data)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing JSON from OpenAI: {e}")
-        raise ValueError("Failed to match skills")
+    logger.warning("Using placeholder advanced_keyword_extraction. Implement proper logic.")
+    keywords = []
+    # Simple split for demonstration - REPLACE THIS
+    potential_keywords = re.split(r'[\n.,;!?\s]+', job_description_text)
+    for kw in potential_keywords:
+        if len(kw) > 2 and len(kw) < 25: # Basic filtering
+            keywords.append({
+                "keyword": kw.strip(),
+                "context": f"Mentioned in job description: ...{kw[:50]}...", # Example context
+                "relevance_score": 0.7, # Default score
+                "skill_type": "hard skill" if any(c.isdigit() for c in kw) else "soft skill" # Basic guess
+            })
+    return {"keywords": keywords[:50]} # Limit number of keywords for now
 
 def generate_latex_resume(resume_data):
     """Generate LaTeX resume from structured data"""
@@ -615,7 +593,7 @@ def create_app():
             )
         
         # Check if the file has an allowed extension
-        allowed_extensions = {'pdf', 'docx', 'txt'}
+        allowed_extensions = ALLOWED_EXTENSIONS
         file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
         if file_ext not in allowed_extensions:
             return app.create_error_response(
@@ -660,14 +638,13 @@ def create_app():
     
     @app.route('/api/optimize', methods=['POST'])
     def optimize_resume_endpoint():
-        """Optimize a resume with a job description."""
+        """Optimize a resume using SemanticMatcher and ResumeEnhancer."""
         # Handle invalid JSON in the request
         if request.content_type == 'application/json':
             try:
-                # Explicitly parse the JSON
                 data = json.loads(request.data.decode('utf-8') if request.data else '{}')
             except json.JSONDecodeError:
-                return app.create_error_response("InvalidJSON", "Could not parse JSON data from request", 400)
+                return app.create_error_response("InvalidJSON", "Could not parse JSON data", 400)
         else:
             return app.create_error_response("InvalidContentType", "Content-Type must be application/json", 400)
         
@@ -676,53 +653,95 @@ def create_app():
                 return app.create_error_response("MissingData", "No JSON data in request", 400)
             
             resume_id = data.get('resume_id')
-            job_description = data.get('job_description')
+            job_description_data = data.get('job_description') # Expecting {"description": "..."}
             
             if not resume_id:
-                return app.create_error_response("MissingParameter", "Missing required field: resume_id", 400)
+                return app.create_error_response("MissingParameter", "Missing: resume_id", 400)
             
-            if not job_description:
-                return app.create_error_response("MissingParameter", "Missing required field: job_description", 400)
+            if not job_description_data or not isinstance(job_description_data, dict) or 'description' not in job_description_data:
+                return app.create_error_response("MissingParameter", "Missing or invalid: job_description (must be an object with a 'description' key)", 400)
             
-            # Check if the resume exists
-            uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-            resume_file = os.path.join(uploads_dir, f"{resume_id}.json")
+            job_description_text = job_description_data['description']
+            if not job_description_text:
+                 return app.create_error_response("MissingParameter", "Job description text cannot be empty", 400)
+
+            logger.info(f"Starting optimization for resume_id: {resume_id}")
+
+            # --- Load Original Parsed Resume Data --- 
+            # Using local storage path defined earlier (UPLOAD_FOLDER)
+            resume_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+            logger.info(f"Looking for parsed resume at: {resume_file_path}")
+            if not os.path.exists(resume_file_path):
+                logger.error(f"Parsed resume file not found for ID: {resume_id}")
+                return app.create_error_response("NotFound", f"Parsed resume data for ID {resume_id} not found. Ensure it was uploaded correctly.", 404)
             
-            if not os.path.exists(resume_file):
-                return app.create_error_response("NotFound", f"Resume with ID {resume_id} not found", 404)
+            with open(resume_file_path, 'r', encoding='utf-8') as f:
+                original_resume_data = json.load(f)
+            logger.info(f"Loaded original parsed resume data for ID: {resume_id}")
             
-            # Load the resume data
-            with open(resume_file, 'r') as f:
-                resume_data = json.load(f)
+            # --- Keyword Extraction (Using Placeholder) --- 
+            # !!! Replace with actual advanced keyword extraction implementation !!!
+            logger.info("Extracting keywords from job description (using placeholder)...")
+            keywords_data = advanced_keyword_extraction(job_description_text) 
+            logger.info(f"Placeholder keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
             
-            # Extract keywords from job description
-            job_text = job_description.get('description', '')
-            job_title = job_description.get('title', 'Software Engineer')
+            # --- Semantic Matching --- 
+            logger.info("Initializing SemanticMatcher...")
+            # API key is automatically picked up from env var by the class constructor
+            matcher = SemanticMatcher() 
+            logger.info("Running semantic matching process...")
+            # Use default similarity threshold from the matcher class for now
+            match_results = matcher.process_keywords_and_resume(keywords_data, original_resume_data)
+            matches_by_bullet = match_results.get("matches_by_bullet", {})
+            logger.info(f"Semantic matching complete. Found matches for {len(matches_by_bullet)} bullets.")
+
+            # --- Resume Enhancement --- 
+            logger.info("Initializing ResumeEnhancer...")
+            enhancer = ResumeEnhancer() 
+            logger.info("Running resume enhancement process...")
+            # Use default max keyword usage from enhancer class for now
+            enhanced_resume_data, modifications = enhancer.enhance_resume(original_resume_data, matches_by_bullet)
+            logger.info(f"Resume enhancement complete. {len(modifications)} modifications made.")
+
+            # --- Save Enhanced Resume --- 
+            # Using local storage path defined earlier (OUTPUT_FOLDER)
+            output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
+            logger.info(f"Saving enhanced resume to: {output_file_path}")
+            with open(output_file_path, 'w', encoding='utf-8') as f:
+                json.dump(enhanced_resume_data, f, indent=2)
             
-            # Process with OpenAI
-            keywords = extract_keywords(job_text)
-            optimized_resume = optimize_resume(resume_data, keywords)
-            analysis = match_skills(resume_data, keywords)
-            
-            # Save the optimized resume
-            output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
-            os.makedirs(output_dir, exist_ok=True)
-            output_file = os.path.join(output_dir, f"{resume_id}.json")
-            
-            with open(output_file, 'w') as f:
-                json.dump(optimized_resume, f, indent=2)
-            
+            # --- Prepare Analysis Data for Response --- 
+            # Construct a basic analysis object based on matcher results/enhancer modifications
+            # !!! This needs refinement based on actual frontend needs and matcher output details !!!
+            analysis_data = {
+                "matched_keywords_by_bullet": matches_by_bullet, # Detailed matches used for enhancement
+                "enhancement_modifications": modifications, # List of actual changes made
+                "deduplicated_keywords_count": match_results.get("statistics", {}).get("deduplicated_keywords", 0),
+                "bullets_with_matches": match_results.get("statistics", {}).get("bullets_with_matches", 0),
+                # Add more analysis like overall match percentage if calculated
+            }
+            logger.info("Prepared analysis data for response.")
+
+            # --- Return Success Response --- 
             return jsonify({
                 "status": "success",
-                "message": "Resume optimized successfully",
+                "message": "Resume optimized successfully using advanced workflow",
                 "resume_id": resume_id,
-                "data": optimized_resume,
-                "analysis": analysis
+                "data": enhanced_resume_data, # The enhanced resume content
+                "analysis": analysis_data # The analysis/match details
             })
             
         except Exception as e:
-            logger.error(f"Error optimizing resume: {str(e)}")
-            return app.create_error_response("ProcessingError", f"Error optimizing resume: {str(e)}", 500)
+            # Log the full error with traceback for debugging
+            logger.error(f"Error optimizing resume {resume_id}: {str(e)}", exc_info=True)
+            # Track error in diagnostic system
+            if diagnostic_system:
+                 diagnostic_system.increment_error_count(f"OptimizeError_{e.__class__.__name__}", str(e))
+            return app.create_error_response(
+                "ProcessingError", 
+                f"Error optimizing resume: {e.__class__.__name__} - {str(e)}", 
+                500
+            )
     
     @app.route('/api/download/<resume_id>/<format_type>', methods=['GET'])
     def download_resume(resume_id, format_type):
@@ -731,23 +750,36 @@ def create_app():
             return app.create_error_response("InvalidFormat", 
                 f"Unsupported format: {format_type}. Supported formats: json, pdf, latex", 400)
         
-        # Check if optimized resume exists
-        outputs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
-        resume_file = os.path.join(outputs_dir, f"{resume_id}.json")
+        # --- Determine which file to load (enhanced first, fallback to original) --- 
+        outputs_dir = app.config['OUTPUT_FOLDER']
+        uploads_dir = app.config['UPLOAD_FOLDER']
         
-        if not os.path.exists(resume_file):
-            # Check if original resume exists as fallback
-            uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-            resume_file = os.path.join(uploads_dir, f"{resume_id}.json")
-            
-            if not os.path.exists(resume_file):
-                return app.create_error_response("NotFound", f"Resume with ID {resume_id} not found", 404)
+        enhanced_file = os.path.join(outputs_dir, f"{resume_id}_enhanced.json")
+        original_file = os.path.join(uploads_dir, f"{resume_id}.json")
+        
+        resume_file_to_load = None
+        if os.path.exists(enhanced_file):
+            resume_file_to_load = enhanced_file
+            logger.info(f"Found enhanced resume for download: {enhanced_file}")
+        elif os.path.exists(original_file):
+             # Allow downloading original if enhanced doesn't exist (e.g., if optimize wasn't run)
+             resume_file_to_load = original_file
+             logger.info(f"Enhanced resume not found, falling back to original parsed resume: {original_file}")
+        else:
+            logger.error(f"No resume file (enhanced or original) found for ID: {resume_id}")
+            return app.create_error_response("NotFound", f"No resume data found for ID {resume_id}", 404)
         
         # Load the resume data
-        with open(resume_file, 'r') as f:
-            resume_data = json.load(f)
+        try:
+            with open(resume_file_to_load, 'r', encoding='utf-8') as f:
+                resume_data = json.load(f)
+        except Exception as e:
+             logger.error(f"Error loading resume JSON from {resume_file_to_load}: {str(e)}", exc_info=True)
+             return app.create_error_response("FileReadError", f"Error loading resume data: {str(e)}", 500)
         
+        # --- Generate requested format --- 
         if format_type == 'json':
+            logger.info(f"Serving JSON for resume ID: {resume_id}")
             # Return the JSON data directly
             return jsonify({
                 "status": "success",
@@ -756,34 +788,67 @@ def create_app():
             })
         
         elif format_type == 'latex':
-            # Generate LaTeX content using OpenAI
-            latex_content = generate_latex_resume(resume_data)
-            
-            response = Response(
-                latex_content,
-                mimetype='application/x-latex',
-                headers={'Content-Disposition': f'attachment; filename={resume_id}.tex'}
-            )
-            return response
-        
-        elif format_type == 'pdf':
             try:
-                # Generate LaTeX content
-                latex_content = generate_latex_resume(resume_data)
-                
-                # For a real implementation, we would convert this to PDF
-                # For this prototype, we'll return the LaTeX with PDF mimetype
-                mock_pdf_content = f"% PDF mock for {resume_id}\n\n{latex_content}"
+                logger.info(f"Generating LaTeX for resume ID: {resume_id}")
+                # Generate LaTeX content using OpenAI (or a template engine)
+                latex_content = generate_latex_resume(resume_data) # Uses existing function
                 
                 response = Response(
-                    mock_pdf_content,
+                    latex_content,
+                    mimetype='application/x-latex',
+                    headers={'Content-Disposition': f'attachment; filename={resume_id}.tex'}
+                )
+                logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
+                return response
+            except Exception as e:
+                logger.error(f"Error generating LaTeX for resume {resume_id}: {str(e)}", exc_info=True)
+                return app.create_error_response("LatexGenerationError", f"Error generating LaTeX: {str(e)}", 500)
+
+        elif format_type == 'pdf':
+            try:
+                logger.info(f"Generating PDF (via LaTeX) for resume ID: {resume_id}")
+                # Generate LaTeX content first
+                latex_content = generate_latex_resume(resume_data)
+                
+                # --- PDF Generation Logic --- 
+                # !!! Placeholder: Requires pdflatex installed on the system !!!
+                # !!! Needs error handling, temp file management, security checks !!!
+                logger.warning("PDF generation via pdflatex is a placeholder. Requires pdflatex installation and proper implementation.")
+                
+                # Example using pdflatex library (ensure installed: pip install pdflatex)
+                # from pdflatex import PDFLaTeX
+                # temp_latex_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_temp.tex")
+                # with open(temp_latex_path, 'w', encoding='utf-8') as f:
+                #     f.write(latex_content)
+                # 
+                # try:
+                #     pdf_path = PDFLaTeX.from_texfile(temp_latex_path).create_pdf(keep_pdf_file=True)
+                #     with open(pdf_path, 'rb') as f_pdf:
+                #          pdf_content = f_pdf.read()
+                #     # Clean up temporary files (tex, aux, log, pdf)
+                #     # ... (add cleanup logic) ...
+                # except Exception as pdf_e:
+                #      logger.error(f"pdflatex execution failed: {pdf_e}")
+                #      raise RuntimeError(f"PDF conversion failed: {pdf_e}")
+                # finally:
+                #     # Ensure temp tex file is removed
+                #     if os.path.exists(temp_latex_path): os.remove(temp_latex_path)
+                
+                # Using mock PDF content for now
+                mock_pdf_content = f"% PDF mock for {resume_id}\n\n{latex_content}".encode('utf-8')
+                pdf_content = mock_pdf_content
+                # --- End PDF Generation Logic ---
+                
+                response = Response(
+                    pdf_content,
                     mimetype='application/pdf',
                     headers={'Content-Disposition': f'attachment; filename={resume_id}.pdf'}
                 )
+                logger.info(f"Successfully generated PDF (mock) for resume ID: {resume_id}")
                 return response
             except Exception as e:
-                logger.error(f"Error generating PDF: {str(e)}")
-                return app.create_error_response("ProcessingError", f"Error generating PDF: {str(e)}", 500)
+                logger.error(f"Error generating PDF for resume {resume_id}: {str(e)}", exc_info=True)
+                return app.create_error_response("PdfGenerationError", f"Error generating PDF: {str(e)}", 500)
     
     @app.route('/status')
     def status():
