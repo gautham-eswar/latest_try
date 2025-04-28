@@ -16,7 +16,7 @@ click>=8.0.0,<9.0.0
 # PDF processing - use binary packages when possible
 PyPDF2==3.0.1
 pdfminer.six==20221105
-python-docx==0.8.11
+python-docx==1.1.2
 docx2txt==0.8
 
 # Base packages with minimal dependencies
@@ -30,4 +30,7 @@ supabase==2.4.0
 
 # Testing tools
 pytest==8.0.0
-pytest-mock==3.12.0 
+pytest-mock==3.12.0
+
+# Add packaging for version comparison
+packaging>=21.0 

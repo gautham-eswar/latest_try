@@ -32,6 +32,10 @@ from werkzeug.utils import secure_filename
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer
 
+# File processing imports
+from PyPDF2 import PdfReader
+import docx2txt
+
 # --- BEGIN CODE VERIFICATION LOGGING ---
 # Add logging to verify the running code for OpenAI initialization
 # This helps diagnose deployment/caching issues.
@@ -125,49 +129,49 @@ try:
 except ImportError:
     logger.warning("Diagnostic system module not found. Some features will be disabled.")
 
-def extract_text_from_file(file_path):
-    """Extract text from files based on their extension"""
-    # NOTE: This function currently only handles reading text files.
-    # Proper extraction for PDF/DOCX needs to be implemented here.
+def extract_text_from_file(file_path: Path) -> str:
+    """Extract text from TXT, PDF, and DOCX files."""
     file_ext = file_path.suffix.lower()
     logger.info(f"Attempting to extract text from {file_path} (extension: {file_ext})")
     
-    if file_ext == '.txt':
-        try:
+    text = ""
+    try:
+        if file_ext == '.txt':
             with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            logger.error(f"Error reading text file {file_path}: {e}")
-            raise IOError(f"Could not read text file: {e}") from e
-    elif file_ext == '.pdf':
-        # Placeholder: Implement actual PDF extraction (e.g., using PyPDF2 or pdfminer.six)
-        logger.warning(f"PDF text extraction not implemented for {file_path}. Returning placeholder.")
-        return f"Placeholder PDF content for {file_path.name}. Please implement PDF extraction."
-        # Example with PyPDF2 (ensure installed: pip install pypdf2)
-        # try:
-        #     from PyPDF2 import PdfReader
-        #     reader = PdfReader(file_path)
-        #     text = ""
-        #     for page in reader.pages:
-        #         text += page.extract_text() + "\n"
-        #     return text
-        # except Exception as e:
-        #     logger.error(f"Error extracting PDF text from {file_path}: {e}")
-        #     raise IOError(f"Could not extract text from PDF: {e}") from e
-    elif file_ext == '.docx':
-        # Placeholder: Implement actual DOCX extraction (e.g., using python-docx or docx2txt)
-        logger.warning(f"DOCX text extraction not implemented for {file_path}. Returning placeholder.")
-        return f"Placeholder DOCX content for {file_path.name}. Please implement DOCX extraction."
-        # Example with docx2txt (ensure installed: pip install docx2txt)
-        # try:
-        #     import docx2txt
-        #     return docx2txt.process(file_path)
-        # except Exception as e:
-        #     logger.error(f"Error extracting DOCX text from {file_path}: {e}")
-        #     raise IOError(f"Could not extract text from DOCX: {e}") from e
-    else:
-        logger.error(f"Unsupported file type for text extraction: {file_ext}")
-        raise ValueError(f"Unsupported file type: {file_ext}")
+                text = f.read()
+        elif file_ext == '.pdf':
+            try:
+                reader = PdfReader(file_path)
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                         text += page_text + "\n"
+                if not text:
+                     logger.warning(f"PyPDF2 extracted no text from {file_path}. File might be image-based or empty.")
+            except Exception as pdf_err:
+                 logger.error(f"Error extracting PDF text using PyPDF2 from {file_path}: {pdf_err}", exc_info=True)
+                 # Optionally, could try pdfminer.six here as a fallback
+                 raise IOError(f"Could not extract text from PDF: {pdf_err}") from pdf_err
+        elif file_ext == '.docx':
+            try:
+                text = docx2txt.process(file_path)
+            except Exception as docx_err:
+                 logger.error(f"Error extracting DOCX text using docx2txt from {file_path}: {docx_err}", exc_info=True)
+                 raise IOError(f"Could not extract text from DOCX: {docx_err}") from docx_err
+        else:
+            logger.error(f"Unsupported file type for text extraction: {file_ext}")
+            raise ValueError(f"Unsupported file type: {file_ext}")
+            
+        logger.info(f"Successfully extracted ~{len(text)} characters from {file_path.name}")
+        return text
+        
+    except FileNotFoundError:
+        logger.error(f"File not found during text extraction: {file_path}")
+        raise
+    except Exception as e:
+        logger.error(f"General error during text extraction for {file_path}: {e}", exc_info=True)
+        # Re-raise as a more specific error or a generic one
+        raise IOError(f"Failed to process file {file_path.name}: {e}") from e
 
 def call_openai_api(system_prompt, user_prompt, max_retries=3):
     """Call OpenAI API with retry logic and proper error handling."""
@@ -742,6 +746,8 @@ def create_app():
         else:
             return app.create_error_response("InvalidContentType", "Content-Type must be application/json", 400)
         
+        job_id = None # Initialize job_id for diagnostics
+        overall_status = "error" # Default status
         try:
             if not data:
                 return app.create_error_response("MissingData", "No JSON data in request", 400)
@@ -759,7 +765,16 @@ def create_app():
             if not job_description_text:
                  return app.create_error_response("MissingParameter", "Job description text cannot be empty", 400)
 
-            logger.info(f"Starting optimization for resume_id: {resume_id}")
+            # --- Start Diagnostic Tracking --- 
+            if diagnostic_system:
+                 # Use resume_id and maybe part of job desc for job identifier
+                 job_desc_snippet = job_description_text[:50].replace('\n', ' ') + '...'
+                 job_id = diagnostic_system.start_pipeline_job(resume_id, 'api_optimize', job_desc_snippet)
+                 if not job_id:
+                      logger.warning(f"Failed to start diagnostic pipeline job for resume {resume_id}")
+                      job_id = None # Ensure it's None if failed
+            
+            logger.info(f"Starting optimization for resume_id: {resume_id} (Job ID: {job_id})")
 
             # --- Load Original Parsed Resume Data (from Supabase) --- 
             logger.info(f"Loading original parsed resume {resume_id} from Supabase...")
@@ -796,28 +811,79 @@ def create_app():
                  logger.error(f"Failed to load original_resume_data for {resume_id} after DB/fallback checks.")
                  return app.create_error_response("ProcessingError", f"Could not load data for resume {resume_id}", 500)
                  
-            # --- Keyword Extraction (Using OpenAI) --- 
-            logger.info("Extracting detailed keywords from job description using OpenAI...")
-            keywords_data = extract_detailed_keywords(job_description_text) 
-            logger.info(f"Detailed keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
+            # --- Keyword Extraction --- 
+            stage_name = 'Keyword Extractor'
+            start_time = time.time()
+            keywords_data = None
+            stage_status = 'error'
+            stage_message = 'Extraction failed'
+            try:
+                 logger.info(f"Job {job_id}: Extracting detailed keywords...")
+                 keywords_data = extract_detailed_keywords(job_description_text)
+                 kw_count = len(keywords_data.get('keywords', []))
+                 logger.info(f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords.")
+                 stage_status = 'healthy'
+                 stage_message = f"Extracted {kw_count} keywords"
+            except Exception as e:
+                 logger.error(f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True)
+                 stage_message = f"Extraction failed: {e.__class__.__name__}"
+                 # Re-raise to stop processing
+                 raise
+            finally:
+                duration = time.time() - start_time
+                if diagnostic_system and job_id:
+                     diagnostic_system.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
             
             # --- Semantic Matching --- 
-            logger.info("Initializing SemanticMatcher...")
-            # API key is automatically picked up from env var by the class constructor
-            matcher = SemanticMatcher() 
-            logger.info("Running semantic matching process...")
-            # Use default similarity threshold from the matcher class for now
-            match_results = matcher.process_keywords_and_resume(keywords_data, original_resume_data)
-            matches_by_bullet = match_results.get("matches_by_bullet", {})
-            logger.info(f"Semantic matching complete. Found matches for {len(matches_by_bullet)} bullets.")
+            stage_name = 'Semantic Matcher'
+            start_time = time.time()
+            match_results = None
+            matches_by_bullet = {}
+            stage_status = 'error'
+            stage_message = 'Matching failed'
+            try:
+                 logger.info(f"Job {job_id}: Initializing SemanticMatcher...")
+                 matcher = SemanticMatcher()
+                 logger.info(f"Job {job_id}: Running semantic matching process...")
+                 match_results = matcher.process_keywords_and_resume(keywords_data, original_resume_data)
+                 matches_by_bullet = match_results.get("matches_by_bullet", {})
+                 bullets_matched = len(matches_by_bullet)
+                 logger.info(f"Job {job_id}: Semantic matching complete. Found matches for {bullets_matched} bullets.")
+                 stage_status = 'healthy'
+                 stage_message = f"Matched {bullets_matched} bullets"
+            except Exception as e:
+                 logger.error(f"Job {job_id}: Semantic Matching failed: {e}", exc_info=True)
+                 stage_message = f"Matching failed: {e.__class__.__name__}"
+                 raise
+            finally:
+                duration = time.time() - start_time
+                if diagnostic_system and job_id:
+                     diagnostic_system.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
 
             # --- Resume Enhancement --- 
-            logger.info("Initializing ResumeEnhancer...")
-            enhancer = ResumeEnhancer() 
-            logger.info("Running resume enhancement process...")
-            # Use default max keyword usage from enhancer class for now
-            enhanced_resume_data, modifications = enhancer.enhance_resume(original_resume_data, matches_by_bullet)
-            logger.info(f"Resume enhancement complete. {len(modifications)} modifications made.")
+            stage_name = 'Resume Enhancer'
+            start_time = time.time()
+            enhanced_resume_data = None
+            modifications = []
+            stage_status = 'error'
+            stage_message = 'Enhancement failed'
+            try:
+                logger.info(f"Job {job_id}: Initializing ResumeEnhancer...")
+                enhancer = ResumeEnhancer()
+                logger.info(f"Job {job_id}: Running resume enhancement process...")
+                enhanced_resume_data, modifications = enhancer.enhance_resume(original_resume_data, matches_by_bullet)
+                mods_count = len(modifications)
+                logger.info(f"Job {job_id}: Resume enhancement complete. {mods_count} modifications made.")
+                stage_status = 'healthy'
+                stage_message = f"Made {mods_count} modifications"
+            except Exception as e:
+                 logger.error(f"Job {job_id}: Resume Enhancement failed: {e}", exc_info=True)
+                 stage_message = f"Enhancement failed: {e.__class__.__name__}"
+                 raise
+            finally:
+                duration = time.time() - start_time
+                if diagnostic_system and job_id:
+                     diagnostic_system.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
 
             # --- Prepare Analysis Data --- 
             # Construct a basic analysis object (can be refined)
@@ -827,17 +893,17 @@ def create_app():
                 "statistics": match_results.get("statistics", {}),
                 "job_keywords_used": keywords_data.get('keywords', []) # Include the keywords extracted
             }
-            logger.info("Prepared analysis data.")
+            logger.info(f"Job {job_id}: Prepared analysis data.")
 
             # --- Save Enhanced Resume & Analysis (to Supabase) --- 
-            logger.info(f"Attempting to save enhanced resume {resume_id} to Supabase...")
+            logger.info(f"Job {job_id}: Attempting to save enhanced resume to Supabase...")
             if isinstance(db, FallbackDatabase):
                  logger.warning(f"Using FallbackDatabase for saving enhanced resume {resume_id}. Data will not be persisted.")
                  # Optionally save locally if using fallback
                  output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
                  with open(output_file_path, 'w', encoding='utf-8') as f:
                      json.dump({"enhanced_data": enhanced_resume_data, "analysis_data": analysis_data}, f, indent=2)
-                 logger.info(f"Saved enhanced resume JSON locally (fallback): {output_file_path}")
+                 logger.info(f"Job {job_id}: Saved enhanced resume locally (fallback): {output_file_path}")
             else:
                 # Upsert into Supabase 'enhanced_resumes' table
                 # Assuming table `enhanced_resumes` exists with columns:
@@ -861,13 +927,15 @@ def create_app():
                         # Don't necessarily fail the whole request, but log warning
                         logger.warning("Failed to confirm enhanced data save in Supabase.")
                     else:
-                        logger.info(f"Successfully saved enhanced resume {resume_id} to Supabase.")
+                        logger.info(f"Job {job_id}: Successfully saved enhanced resume {resume_id} to Supabase.")
                 except Exception as db_save_e:
-                     logger.error(f"Error saving enhanced resume {resume_id} to Supabase: {db_save_e}", exc_info=True)
+                     logger.error(f"Job {job_id}: Error saving enhanced resume {resume_id} to Supabase: {db_save_e}", exc_info=True)
                      # Don't fail the request, but log the error. Frontend still gets results.
                      logger.warning("Proceeding with response despite database save error for enhanced data.")
 
             # --- Return Success Response --- 
+            overall_status = "healthy" # Mark as healthy if we reach here
+            logger.info(f"Job {job_id}: Optimization completed successfully.")
             return jsonify({
                 "status": "success",
                 "message": "Resume optimized successfully using advanced workflow",
@@ -877,9 +945,9 @@ def create_app():
             })
             
         except Exception as e:
-            # Log the full error with traceback for debugging
-            logger.error(f"Error optimizing resume {resume_id}: {str(e)}", exc_info=True)
-            # Track error in diagnostic system
+            # Error already logged in specific stage or here
+            logger.error(f"Job {job_id}: Optimization failed: {e.__class__.__name__} - {str(e)}", exc_info=True)
+            overall_status = "error"
             if diagnostic_system:
                  diagnostic_system.increment_error_count(f"OptimizeError_{e.__class__.__name__}", str(e))
             return app.create_error_response(
@@ -887,6 +955,11 @@ def create_app():
                 f"Error optimizing resume: {e.__class__.__name__} - {str(e)}", 
                 500
             )
+        finally:
+             # --- Complete Diagnostic Tracking --- 
+             if diagnostic_system and job_id:
+                  logger.info(f"Completing diagnostic job {job_id} with status {overall_status}")
+                  diagnostic_system.complete_pipeline_job(job_id, overall_status)
     
     @app.route('/api/download/<resume_id>/<format_type>', methods=['GET'])
     def download_resume(resume_id, format_type):
