@@ -3,7 +3,7 @@ services:
     name: resume-optimizer
     env: python
     buildCommand: pip install --no-cache-dir -r requirements-render.txt
-    startCommand: python render_entrypoint.py --port $PORT
+    startCommand: gunicorn --bind 0.0.0.0:$PORT "working_app:create_app()"
     healthCheckPath: /api/health
     plan: free
     autoDeploy: true
