@@ -1355,8 +1355,8 @@ def create_app():
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use)
-                response = Response(
-                    latex_content,
+            response = Response(
+                latex_content,
                     mimetype="application/x-latex",
                     headers={
                         "Content-Disposition": f"attachment; filename={resume_id}.tex"
@@ -1364,7 +1364,7 @@ def create_app():
                 )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
             return response
-            
+        
             except Exception as e:
                 logger.error(
                     f"Error generating LaTeX for resume {resume_id}: {str(e)}",
