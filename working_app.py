@@ -137,7 +137,7 @@ def extract_text_from_file(file_path: Path) -> str:
     text = ""
     try:
         if file_ext == '.txt':
-            with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
                 text = f.read()
         elif file_ext == '.pdf':
             try:
@@ -654,8 +654,8 @@ def create_app():
         # Generate a unique ID for the resume
         resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
         file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-        filename = secure_filename(f"{resume_id}.{file_ext}")
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            filename = secure_filename(f"{resume_id}.{file_ext}")
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
 
         db = None # Initialize db to None
         try:
@@ -681,9 +681,9 @@ def create_app():
             if isinstance(db, FallbackDatabase):
                  logger.warning(f"Using FallbackDatabase for resume {resume_id}. Data will not be persisted.")
                  # Optionally, save locally if using fallback?
-                 output_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+            output_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
                  with open(output_file, 'w', encoding='utf-8') as f:
-                     json.dump(parsed_resume, f, indent=2)
+                json.dump(parsed_resume, f, indent=2)
                  logger.info(f"Saved parsed resume JSON locally (fallback): {output_file}")
             else:
                 # Insert into Supabase 'resumes' table
@@ -1047,17 +1047,17 @@ def create_app():
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use) # Use loaded data
-                response = Response(
-                    latex_content,
-                    mimetype='application/x-latex',
-                    headers={'Content-Disposition': f'attachment; filename={resume_id}.tex'}
-                )
+            response = Response(
+                latex_content,
+                mimetype='application/x-latex',
+                headers={'Content-Disposition': f'attachment; filename={resume_id}.tex'}
+            )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
-                return response
+            return response
             except Exception as e:
                 logger.error(f"Error generating LaTeX for resume {resume_id}: {str(e)}", exc_info=True)
                 return app.create_error_response("LatexGenerationError", f"Error generating LaTeX: {str(e)}", 500)
-
+        
         elif format_type == 'pdf':
             try:
                 logger.info(f"Generating PDF (via LaTeX) for resume ID: {resume_id}")
@@ -1536,10 +1536,10 @@ def get_db() -> Client:
             #     logger.warning(f"Supabase connection test failed: {db_test_e}. Falling back.")
             #     return FallbackDatabase() # Fallback if test fails
             return supabase
-        except ImportError:
+    except ImportError:
             logger.warning("Supabase library not installed. Using fallback database.")
-            return FallbackDatabase()
-        except Exception as e:
+        return FallbackDatabase()
+    except Exception as e:
             logger.error(f"Failed to create Supabase client: {str(e)}. Using fallback database.", exc_info=True)
             return FallbackDatabase()
     else:

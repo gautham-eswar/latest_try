@@ -50,10 +50,27 @@ A web application that optimizes resumes based on job descriptions using AI.
 
 ## API Endpoints
 
-- `POST /api/upload`: Upload a resume file
-- `POST /api/optimize`: Optimize a resume with a job description
-- `GET /api/resume/:id`: Get a resume by ID
-- `GET /api/resume/:id/download`: Download an enhanced resume
+- `POST /api/upload`: Upload a resume file (PDF, DOCX, TXT). Returns parsed JSON and `resume_id`.
+- `POST /api/optimize`: Takes `resume_id` and `job_description` text. Triggers the full analysis and enhancement pipeline. Returns enhanced resume JSON and analysis results.
+- `GET /api/download/:resume_id/:format`: Download the enhanced resume in the specified format (`json`, `pdf`, `latex`). `:resume_id` is obtained from the `/api/upload` response.
+- `GET /api/health`: Health check endpoint (JSON). Returns 200 even on partial failures for monitoring services.
+- `GET /diagnostic/diagnostics`: HTML diagnostics dashboard.
+
+**Note:** The API endpoints described here reflect the *intended* functionality for the frontend. See the 'Backend Considerations' section below.
+
+## Frontend Development (Lovable)
+
+A detailed prompt for fixing the frontend functionality using Lovable has been created in `Lovable.md`. This prompt outlines the required UI components, user workflow, API interactions, and display logic, adhering to the existing visual theme.
+
+## Backend Considerations & Recent Changes
+
+*   **OpenAI API Issue:** The previous `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'` has been **resolved**. This was likely due to implicit proxy handling in the Render environment conflicting with the OpenAI library. The fix involved explicitly disabling environment proxy detection via `httpx.Client(trust_env=False)`.
+*   **Dependencies:** OpenAI library version aligned to `1.6.1` across `requirements.txt` and `requirements-render.txt`.
+*   **Backend Refactoring Needed:**
+    *   The current `/api/optimize` endpoint in `working_app.py` uses a simpler OpenAI-based flow for parsing and keyword extraction. It does **not** yet utilize the more advanced `SemanticMatcher` (`embeddings.py`) and `ResumeEnhancer` (`enhancer.py`) classes.
+    *   The backend needs to be refactored to integrate this advanced workflow into the `/api/optimize` endpoint to fully support the functionality described in the `Lovable.md` prompt.
+    *   **Persistence:** The current implementation relies heavily on local file storage (`./uploads`, `./output`). For scalability and proper state management, this should be refactored to use a database like Supabase. Intended tables might include `resumes` (parsed), `job_descriptions`, `keywords`, `matches`, `enhanced_resumes`.
+*   **Diagnostics:** The diagnostics system (`diagnostic_system.py`) has been enhanced with more detailed logging, especially around OpenAI client initialization and dependency checking.
 
 ## Testing
 
