@@ -1014,14 +1014,15 @@ def create_app():
                     'pipeline_step': "Keyword Extraction",
                     'resume_id': resume_id,
                     'job_description': job_description_text,
-                    'resume_bullet_points': original_resume_data  # Placeholder
+                    'resume_bullet_points': original_resume_data,
+                    'error_message': str(e)
                 })
                 logger.error(
                     f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True
                 )
                 stage_message = f"Extraction failed: {e.__class__.__name__}"
                 # Re-raise to stop processing
-                raise
+                raise e
             finally:
                 duration = time.time() - start_time
                 if diagnostic_system and job_id:
