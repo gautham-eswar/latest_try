@@ -67,7 +67,7 @@ def log_file_snippet(filepath, start_marker, end_marker, lines=15):
             snippet = "\\n".join(snippet_lines[:lines]) + "\\n..."
 
         logging.info(f"--- Verifying code in {filepath} ---")
-        logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
+        # logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
         logging.info(f"--- End verification for {filepath} ---")
         # Check for OpenAI client initialization
         if "OpenAI(api_key=" in snippet:
@@ -1009,6 +1009,13 @@ def create_app():
                 stage_status = "healthy"
                 stage_message = f"Extracted {kw_count} keywords"
             except Exception as e:
+                db.insert('resume_optimizer_errors', {
+                    'id': resume_id,
+                    'pipeline_step': "Keyword Extraction",
+                    'resume_id': resume_id,
+                    'job_description': job_description_text,
+                    'resume_bullet_points': original_resume_data  # Placeholder
+                })
                 logger.error(
                     f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True
                 )
