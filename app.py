@@ -341,7 +341,7 @@ def create_app():
         resume_id = f"resume_{int(time.time())}_{uuid.uuid4().hex[:8]}"
         
         # Store resume details in database
-        db_client.insert('resumes', {
+        db_client.insert('resumes_new', {
             'id': resume_id,
             'filename': filename,
             'path': file_path,

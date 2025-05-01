@@ -21,9 +21,12 @@ import copy  # Added for deep copying resume data
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
+<<<<<<< HEAD
 from typing import Dict, List, Any, Optional, Tuple  # Import necessary types
 from supabase import create_client, Client  # Import Supabase client
 from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
+=======
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
 
 from flask import Flask, jsonify, request, render_template, g, Response, current_app
 from flask_cors import CORS
@@ -706,8 +709,13 @@ def create_app():
 
     @app.route("/api/upload", methods=["POST"])
     def upload_resume():
+<<<<<<< HEAD
         """Upload, parse, and save a resume file to Supabase."""
         if "file" not in request.files:
+=======
+        """Upload and parse a resume file."""
+        if 'file' not in request.files:
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
             return app.create_error_response(
                 "MissingFile", "No file part in the request", 400
             )
@@ -729,6 +737,7 @@ def create_app():
             )
         
         # Generate a unique ID for the resume
+<<<<<<< HEAD
         resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
         file_ext = (
             file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
@@ -737,19 +746,22 @@ def create_app():
         file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
         db = None  # Initialize db to None
+=======
+        resume_id = f"resume_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
         try:
-            # 1. Save the uploaded file locally (optional, could upload directly to Supabase storage)
+            # Save the uploaded file
+            filename = secure_filename(f"{resume_id}.{file_ext}")
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
-            logger.info(f"Saved uploaded file locally to: {file_path}")
             
-            # 2. Extract text from the file
-            logger.info("Extracting text from uploaded file...")
+            # Extract text from the file
             resume_text = extract_text_from_file(Path(file_path))
-            logger.info(f"Extracted {len(resume_text)} characters.")
             
-            # 3. Parse the resume text using OpenAI
-            logger.info("Parsing resume text using OpenAI...")
+            # Parse the resume text using OpenAI
             parsed_resume = parse_resume(resume_text)
+<<<<<<< HEAD
             logger.info("Resume parsed successfully.")
 
             # 4. Save parsed data to Supabase
@@ -846,6 +858,26 @@ def create_app():
                 "ProcessingError", 
                 f"Error processing resume: {e.__class__.__name__} - {str(e)}",
                 500,
+=======
+            
+            # Save the parsed data
+            output_file = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+            with open(output_file, 'w') as f:
+                json.dump(parsed_resume, f, indent=2)
+            
+            return jsonify({
+                "status": "success",
+                "message": "Resume uploaded and parsed successfully",
+                "resume_id": resume_id,
+                "data": parsed_resume
+            })
+        except Exception as e:
+            logger.error(f"Error processing resume: {str(e)}")
+            return app.create_error_response(
+                "ProcessingError", 
+                f"Error processing resume: {str(e)}", 
+                500
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
             )
     
     @app.route("/api/optimize", methods=["POST"])
@@ -914,6 +946,7 @@ def create_app():
                     )
                     job_id = None  # Ensure it's None if failed
 
+<<<<<<< HEAD
             logger.info(
                 f"Starting optimization for resume_id: {resume_id} (Job ID: {job_id})"
             )
@@ -992,6 +1025,35 @@ def create_app():
                     f"Could not load data for resume {resume_id}",
                     500,
                 )
+=======
+            # --- Load Original Parsed Resume Data --- 
+            # Using local storage path defined earlier (UPLOAD_FOLDER)
+            resume_file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{resume_id}.json")
+            logger.info(f"Looking for parsed resume at: {resume_file_path}")
+            if not os.path.exists(resume_file_path):
+                logger.error(f"Parsed resume file not found for ID: {resume_id}")
+                return app.create_error_response("NotFound", f"Parsed resume data for ID {resume_id} not found. Ensure it was uploaded correctly.", 404)
+            
+            with open(resume_file_path, 'r', encoding='utf-8') as f:
+                original_resume_data = json.load(f)
+            logger.info(f"Loaded original parsed resume data for ID: {resume_id}")
+            
+            # --- Keyword Extraction (Using OpenAI) --- 
+            logger.info("Extracting detailed keywords from job description using OpenAI...")
+            # Use the new detailed extraction function
+            keywords_data = extract_detailed_keywords(job_description_text) 
+            logger.info(f"Detailed keyword extraction yielded {len(keywords_data.get('keywords', []))} keywords.")
+            
+            # --- Semantic Matching --- 
+            logger.info("Initializing SemanticMatcher...")
+            # API key is automatically picked up from env var by the class constructor
+            matcher = SemanticMatcher() 
+            logger.info("Running semantic matching process...")
+            # Use default similarity threshold from the matcher class for now
+            match_results = matcher.process_keywords_and_resume(keywords_data, original_resume_data)
+            matches_by_bullet = match_results.get("matches_by_bullet", {})
+            logger.info(f"Semantic matching complete. Found matches for {len(matches_by_bullet)} bullets.")
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
 
             # --- Keyword Extraction ---
             stage_name = "Keyword Extractor"
@@ -1022,6 +1084,7 @@ def create_app():
                         job_id, stage_name, stage_status, duration, stage_message
                     )
 
+<<<<<<< HEAD
             # --- Semantic Matching ---
             stage_name = "Semantic Matcher"
             start_time = time.time()
@@ -1178,6 +1241,26 @@ def create_app():
                     logger.warning(
                         "Proceeding with response despite database save error for enhanced data."
                     )
+=======
+            # --- Save Enhanced Resume --- 
+            # Using local storage path defined earlier (OUTPUT_FOLDER)
+            output_file_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_enhanced.json")
+            logger.info(f"Saving enhanced resume to: {output_file_path}")
+            with open(output_file_path, 'w', encoding='utf-8') as f:
+                json.dump(enhanced_resume_data, f, indent=2)
+            
+            # --- Prepare Analysis Data for Response --- 
+            # Construct a basic analysis object based on matcher results/enhancer modifications
+            # !!! This needs refinement based on actual frontend needs and matcher output details !!!
+            analysis_data = {
+                "matched_keywords_by_bullet": matches_by_bullet, # Detailed matches used for enhancement
+                "enhancement_modifications": modifications, # List of actual changes made
+                "deduplicated_keywords_count": match_results.get("statistics", {}).get("deduplicated_keywords", 0),
+                "bullets_with_matches": match_results.get("statistics", {}).get("bullets_with_matches", 0),
+                # Add more analysis like overall match percentage if calculated
+            }
+            logger.info("Prepared analysis data for response.")
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
 
             # --- Return Success Response ---
             overall_status = "healthy"  # Mark as healthy if we reach here
@@ -1218,6 +1301,7 @@ def create_app():
 
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])
     def download_resume(resume_id, format_type):
+<<<<<<< HEAD
         """Download a resume in different formats, loading data from Supabase."""
         if format_type not in ["json", "pdf", "latex"]:
             return app.create_error_response(
@@ -1361,6 +1445,60 @@ def create_app():
                     headers={
                         "Content-Disposition": f"attachment; filename={resume_id}.tex"
                     },
+=======
+        """Download a resume in different formats."""
+        if format_type not in ['json', 'pdf', 'latex']:
+            return app.create_error_response("InvalidFormat", 
+                f"Unsupported format: {format_type}. Supported formats: json, pdf, latex", 400)
+        
+        # --- Determine which file to load (enhanced first, fallback to original) --- 
+        outputs_dir = app.config['OUTPUT_FOLDER']
+        uploads_dir = app.config['UPLOAD_FOLDER']
+        
+        enhanced_file = os.path.join(outputs_dir, f"{resume_id}_enhanced.json")
+        original_file = os.path.join(uploads_dir, f"{resume_id}.json")
+        
+        resume_file_to_load = None
+        if os.path.exists(enhanced_file):
+            resume_file_to_load = enhanced_file
+            logger.info(f"Found enhanced resume for download: {enhanced_file}")
+        elif os.path.exists(original_file):
+             # Allow downloading original if enhanced doesn't exist (e.g., if optimize wasn't run)
+             resume_file_to_load = original_file
+             logger.info(f"Enhanced resume not found, falling back to original parsed resume: {original_file}")
+        else:
+            logger.error(f"No resume file (enhanced or original) found for ID: {resume_id}")
+            return app.create_error_response("NotFound", f"No resume data found for ID {resume_id}", 404)
+        
+        # Load the resume data
+        try:
+            with open(resume_file_to_load, 'r', encoding='utf-8') as f:
+                resume_data = json.load(f)
+        except Exception as e:
+             logger.error(f"Error loading resume JSON from {resume_file_to_load}: {str(e)}", exc_info=True)
+             return app.create_error_response("FileReadError", f"Error loading resume data: {str(e)}", 500)
+        
+        # --- Generate requested format --- 
+        if format_type == 'json':
+            logger.info(f"Serving JSON for resume ID: {resume_id}")
+            # Return the JSON data directly
+            return jsonify({
+                "status": "success",
+                "resume_id": resume_id,
+                "data": resume_data
+            })
+        
+        elif format_type == 'latex':
+            try:
+                logger.info(f"Generating LaTeX for resume ID: {resume_id}")
+                # Generate LaTeX content using OpenAI (or a template engine)
+                latex_content = generate_latex_resume(resume_data) # Uses existing function
+                
+                response = Response(
+                    latex_content,
+                    mimetype='application/x-latex',
+                    headers={'Content-Disposition': f'attachment; filename={resume_id}.tex'}
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
                 )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
             return response
@@ -1377,8 +1515,50 @@ def create_app():
         elif format_type == "pdf":
             try:
                 logger.info(f"Generating PDF (via LaTeX) for resume ID: {resume_id}")
+<<<<<<< HEAD
                 latex_content = generate_latex_resume(resume_data_to_use)
                 # ... (PDF generation logic remains the same - still placeholder) ...
+=======
+                # Generate LaTeX content first
+                latex_content = generate_latex_resume(resume_data)
+                
+                # --- PDF Generation Logic --- 
+                # !!! Placeholder: Requires pdflatex installed on the system !!!
+                # !!! Needs error handling, temp file management, security checks !!!
+                logger.warning("PDF generation via pdflatex is a placeholder. Requires pdflatex installation and proper implementation.")
+                
+                # Example using pdflatex library (ensure installed: pip install pdflatex)
+                # from pdflatex import PDFLaTeX
+                # temp_latex_path = os.path.join(app.config['OUTPUT_FOLDER'], f"{resume_id}_temp.tex")
+                # with open(temp_latex_path, 'w', encoding='utf-8') as f:
+                #     f.write(latex_content)
+                # 
+                # try:
+                #     pdf_path = PDFLaTeX.from_texfile(temp_latex_path).create_pdf(keep_pdf_file=True)
+                #     with open(pdf_path, 'rb') as f_pdf:
+                #          pdf_content = f_pdf.read()
+                #     # Clean up temporary files (tex, aux, log, pdf)
+                #     # ... (add cleanup logic) ...
+                # except Exception as pdf_e:
+                #      logger.error(f"pdflatex execution failed: {pdf_e}")
+                #      raise RuntimeError(f"PDF conversion failed: {pdf_e}")
+                # finally:
+                #     # Ensure temp tex file is removed
+                #     if os.path.exists(temp_latex_path): os.remove(temp_latex_path)
+                
+                # Using mock PDF content for now
+                mock_pdf_content = f"% PDF mock for {resume_id}\n\n{latex_content}".encode('utf-8')
+                pdf_content = mock_pdf_content
+                # --- End PDF Generation Logic ---
+                
+                response = Response(
+                    pdf_content,
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename={resume_id}.pdf'}
+                )
+                logger.info(f"Successfully generated PDF (mock) for resume ID: {resume_id}")
+                return response
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
             except Exception as e:
                 logger.error(
                     f"Error generating PDF for resume {resume_id}: {str(e)}",
@@ -1891,6 +2071,7 @@ class FallbackDatabase:
                 
         return TableQuery(self, name)
 
+<<<<<<< HEAD
 
 def get_db() -> Client:
     """Get database client with Supabase priority and fallback."""
@@ -1925,6 +2106,21 @@ def get_db() -> Client:
             return FallbackDatabase()
     else:
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
+=======
+def get_db():
+    """Get database client with comprehensive error handling."""
+    try:
+        # First try to import and use the real database
+        from database import create_database_client
+        client = create_database_client()
+        logger.info("Connected to primary database")
+        return client
+    except ImportError:
+        logger.warning("Database module not available. Using fallback database.")
+        return FallbackDatabase()
+    except Exception as e:
+        logger.warning(f"Database connection failed: {str(e)}. Using fallback database.")
+>>>>>>> parent of 78211d1 (refactor: Implement Supabase persistence for upload/optimize/download)
         return FallbackDatabase()
 
 
