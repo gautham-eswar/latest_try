@@ -12,9 +12,11 @@ from pathlib import Path
 import traceback
 import uuid
 from collections import deque
+import time
 
 import httpx
 from flask import Blueprint, jsonify, render_template, current_app, request
+from working_app import extract_detailed_keywords, SemanticMatcher, ResumeEnhancer
 
 # Configure logging
 logging.basicConfig(
@@ -1001,51 +1003,135 @@ class DiagnosticSystem:
         
         @self.blueprint.route('/test-pipeline')
         def test_pipeline():
-            """Run a test of the resume processing pipeline."""
+            """Run a simplified, real test of the core optimization pipeline components."""
+            
+            job_id = None
+            overall_status = 'error' # Default to error
+            test_resume_id = f"test_pipeline_{int(time.time())}"
+            
             try:
-                # Create a simple test job
-                job_id = self.start_pipeline_job('test-resume', 'pdf', 'This is a test job description')
+                # --- Dummy Data --- 
+                dummy_resume_data = {
+                    "name": "Test User",
+                    "contact": {"email": "test@example.com"},
+                    "skills": ["Python", "Flask", "Basic SQL"],
+                    "experience": [
+                        {
+                            "company": "TestCo",
+                            "title": "Tester",
+                            "responsibilities/achievements": [
+                                "Developed test scripts using Python.",
+                                "Collaborated with developers to fix bugs."
+                            ]
+                        }
+                    ]
+                }
+                dummy_job_description = "Looking for a Python developer with experience in web frameworks like Flask or Django. Must have strong SQL skills and ability to work in a team."
                 
-                # Simulate pipeline stages with random success/failure
-                import random
-                import time
+                # --- Start Diagnostic Job --- 
+                job_id = self.start_pipeline_job(test_resume_id, 'test_pipeline', dummy_job_description[:100])
+                if not job_id:
+                     logger.error("Failed to start diagnostic job for test pipeline.")
+                     raise Exception("Could not start diagnostic job tracking.")
                 
+                results = {}
+                
+                # --- Stage 1: Keyword Extraction --- 
+                stage_name = 'Keyword Extractor'
+                start_time = time.time()
+                keywords_data = None
+                stage_status = 'error'
+                stage_message = 'Extraction failed'
+                try:
+                    keywords_data = extract_detailed_keywords(dummy_job_description)
+                    kw_count = len(keywords_data.get('keywords', []))
+                    stage_status = 'healthy'
+                    stage_message = f"Extracted {kw_count} keywords"
+                    results['keywords'] = keywords_data
+                except Exception as e:
+                    logger.error(f"Test Pipeline - Keyword Extraction failed: {e}", exc_info=True)
+                    stage_message = f"Failed: {e.__class__.__name__}"
+                    raise # Stop test if this fails
+                finally:
+                    duration = time.time() - start_time
+                    self.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
+
+                # --- Stage 2: Semantic Matching --- 
+                stage_name = 'Semantic Matcher'
+                start_time = time.time()
+                match_results = None
+                matches_by_bullet = {}
+                stage_status = 'error'
+                stage_message = 'Matching failed'
+                try:
+                    matcher = SemanticMatcher()
+                    match_results = matcher.process_keywords_and_resume(keywords_data, dummy_resume_data)
+                    matches_by_bullet = match_results.get("matches_by_bullet", {})
+                    bullets_matched = len(matches_by_bullet)
+                    stage_status = 'healthy'
+                    stage_message = f"Matched {bullets_matched} bullets"
+                    results['matches'] = match_results
+                except Exception as e:
+                    logger.error(f"Test Pipeline - Semantic Matching failed: {e}", exc_info=True)
+                    stage_message = f"Failed: {e.__class__.__name__}"
+                    raise # Stop test if this fails
+                finally:
+                    duration = time.time() - start_time
+                    self.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
+
+                # --- Stage 3: Resume Enhancement --- 
+                stage_name = 'Resume Enhancer'
+                start_time = time.time()
+                enhanced_resume_data = None
+                modifications = []
+                stage_status = 'error'
+                stage_message = 'Enhancement failed'
+                try:
+                    enhancer = ResumeEnhancer()
+                    enhanced_resume_data, modifications = enhancer.enhance_resume(dummy_resume_data, matches_by_bullet)
+                    mods_count = len(modifications)
+                    stage_status = 'healthy'
+                    stage_message = f"Made {mods_count} modifications"
+                    results['enhanced_resume'] = enhanced_resume_data
+                    results['modifications'] = modifications
+                except Exception as e:
+                    logger.error(f"Test Pipeline - Resume Enhancement failed: {e}", exc_info=True)
+                    stage_message = f"Failed: {e.__class__.__name__}"
+                    raise # Stop test if this fails
+                finally:
+                    duration = time.time() - start_time
+                    self.record_pipeline_stage(job_id, stage_name, stage_status, duration, stage_message)
+                
+                # If all stages passed
                 overall_status = 'healthy'
-                stages = [s['name'] for s in self.pipeline_stages]
-                
-                for stage in stages:
-                    # Simulate processing time
-                    duration = random.uniform(0.5, 3.0)
-                    time.sleep(random.uniform(0.1, 0.5))  # Short sleep to be responsive
-                    
-                    # Random success rate for demonstration
-                    status = random.choices(
-                        ['healthy', 'warning', 'error'],
-                        weights=[0.8, 0.15, 0.05],
-                        k=1
-                    )[0]
-                    
-                    if status != 'healthy':
-                        overall_status = status
-                    
-                    self.record_pipeline_stage(job_id, stage, status, duration)
-                
-                # Complete the job
-                self.complete_pipeline_job(job_id, overall_status)
-                
+                logger.info(f"Test pipeline job {job_id} completed successfully.")
                 return jsonify({
                     'status': 'success',
-                    'message': 'Pipeline test completed',
+                    'message': 'Test pipeline executed successfully.',
                     'job_id': job_id,
-                    'overall_status': overall_status
+                    'results_summary': {
+                         'keywords_extracted': len(results.get('keywords', {}).get('keywords', [])),
+                         'bullets_matched': len(results.get('matches', {}).get('matches_by_bullet', {})),
+                         'modifications_made': len(results.get('modifications', []))
+                    }
+                    # Optionally return results['enhanced_resume'] if needed, but keep it concise
                 })
                 
             except Exception as e:
-                logger.error(f"Pipeline test failed: {str(e)}")
+                # Error logged in specific stage
+                overall_status = 'error'
+                logger.error(f"Test pipeline job {job_id} failed: {e.__class__.__name__}")
+                # Increment general error count
+                self.increment_error_count(f"TestPipelineError_{e.__class__.__name__}", str(e))
                 return jsonify({
                     'status': 'error',
-                    'message': f"Pipeline test failed: {str(e)}"
+                    'message': f"Test pipeline failed: {e.__class__.__name__} - {str(e)}",
+                    'job_id': job_id
                 }), 500
+            finally:
+                 # Ensure job is marked completed, even on error
+                 if job_id:
+                      self.complete_pipeline_job(job_id, overall_status)
         
         @self.blueprint.route('/diagnostics')
         def diagnostics_page():
