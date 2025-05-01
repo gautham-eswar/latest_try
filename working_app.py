@@ -317,10 +317,11 @@ def extract_detailed_keywords(
     4.  `skill_type`: Classify as 'hard skill' (technical, measurable), 'soft skill' (interpersonal), 'qualification' (degree, certificate), 'tool' (software, platform), or 'responsibility'.
 
     JOB DESCRIPTION:
-    """
+    
     {job_description_text}
-    """
+    
 
+    Ensure the context snippet is directly from the provided text.
     Return ONLY a JSON object containing a single key "keywords", which is a list of objects, each having the keys "keyword", "context", "relevance_score", and "skill_type".
     Example Format:
     {{
@@ -330,7 +331,6 @@ def extract_detailed_keywords(
         {{ "keyword": "Bachelor's Degree", "context": "Bachelor's Degree in Computer Science required.", "relevance_score": 1.0, "skill_type": "qualification" }}
       ]
     }}
-    Ensure the context snippet is directly from the provided text.
     """
 
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
