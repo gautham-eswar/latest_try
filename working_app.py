@@ -1009,7 +1009,7 @@ def create_app():
                 stage_status = "healthy"
                 stage_message = f"Extracted {kw_count} keywords"
             except Exception as e:
-                db.table("resumes_new").insert({
+                db.table("resume_optimizer_errors").insert({
                     'id': resume_id,
                     'pipeline_step': "Keyword Extraction",
                     'resume_id': resume_id,
