@@ -764,10 +764,10 @@ def create_app():
                     app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
                 )
                 with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(parsed_resume, f, indent=2)
-                logger.info(
-                    f"Saved parsed resume JSON locally (fallback): {output_file}"
-                )
+                    json.dump(parsed_resume, f, indent=2)
+                    logger.info(
+                        f"Saved parsed resume JSON locally (fallback): {output_file}"
+                    )
             else:
                 # Insert into Supabase 'resumes_new' table
                 logger.info(f"Inserting into Supabase table: resumes_new")
@@ -1355,15 +1355,15 @@ def create_app():
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use)
-            response = Response(
-                latex_content,
-                    mimetype="application/x-latex",
-                    headers={
-                        "Content-Disposition": f"attachment; filename={resume_id}.tex"
-                    },
-                )
+                response = Response(
+                    latex_content,
+                        mimetype="application/x-latex",
+                        headers={
+                            "Content-Disposition": f"attachment; filename={resume_id}.tex"
+                        },
+                    )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
-            return response
+                return response
         
             except Exception as e:
                 logger.error(
@@ -1914,15 +1914,15 @@ def get_db() -> Client:
             #      logger.warning(f"Supabase connection test failed (Unknown Error): {db_test_e}. Falling back.")
             #      return FallbackDatabase()
             return supabase
-    except ImportError:
+        except ImportError:
             logger.warning("Supabase library not installed. Using fallback database.")
-        return FallbackDatabase()
-    except Exception as e:
-            logger.error(
-                f"Failed to create Supabase client: {str(e)}. Using fallback database.",
-                exc_info=True,
-            )
             return FallbackDatabase()
+        except Exception as e:
+                logger.error(
+                    f"Failed to create Supabase client: {str(e)}. Using fallback database.",
+                    exc_info=True,
+                )
+                return FallbackDatabase()
     else:
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
         return FallbackDatabase()
