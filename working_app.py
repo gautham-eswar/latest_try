@@ -1009,14 +1009,14 @@ def create_app():
                 stage_status = "healthy"
                 stage_message = f"Extracted {kw_count} keywords"
             except Exception as e:
-                db.insert('resume_optimizer_errors', {
+                db.table("resumes_new").insert({
                     'id': resume_id,
                     'pipeline_step': "Keyword Extraction",
                     'resume_id': resume_id,
                     'job_description': job_description_text,
                     'resume_bullet_points': original_resume_data,
                     'error_message': str(e)
-                })
+                }).execute()
                 logger.error(
                     f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True
                 )
