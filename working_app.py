@@ -295,21 +295,31 @@ def parse_resume(resume_text):
         raise ValueError("Failed to parse structured data from resume")
 
 
+# --- Start Replacement (Whole Function) ---
 def extract_detailed_keywords(
     job_description_text: str, max_retries=3
 ) -> Dict[str, Any]:
     """
     Extract detailed keywords from job description using OpenAI,
     attempting to get context, relevance, and skill type.
+    Includes validation for non-JSON responses and fallback logic
+    to repair slightly malformed JSON responses.
     Returns a dictionary structured for SemanticMatcher.
     """
     logger.info("Extracting detailed keywords using OpenAI...")
+    # Add input validation check
+    if not job_description_text or len(job_description_text) < 20: # Arbitrary minimum length
+        logger.warning(f"Job description text is too short or empty. Skipping OpenAI call.")
+        return {"keywords": []} # Return empty structure
+
     system_prompt = """
-    You are an expert HR analyst specializing in extracting structured keywords from job descriptions. 
+    You are an expert HR analyst specializing in extracting structured keywords from job descriptions.
     Focus on identifying distinct skills (hard and soft), experiences, tools, qualifications, and responsibilities.
     """
+    # NOTE: Using the original prompt structure, not the simplified one with markers.
+    # Added instruction for failure case.
     user_prompt = f"""
-    Analyze the following job description and extract key requirements. 
+    Analyze the following job description and extract key requirements.
     For each requirement, identify:
     1.  `keyword`: The core skill, tool, qualification, or concept (1-5 words).
     2.  `context`: A short snippet from the job description where the keyword appears, providing context.
@@ -331,11 +341,15 @@ def extract_detailed_keywords(
       ]
     }}
     Ensure the context snippet is directly from the provided text.
+    IMPORTANT: Ensure the 'keywords' list contains valid JSON objects separated by commas, with no trailing comma after the last object. The entire output MUST be valid JSON.
+    IMPORTANT: If you cannot extract any meaningful keywords from the text for any reason, you MUST return an empty list like this: {{\\"keywords\\": []}}. DO NOT return conversational text or explanations.
     """
 
+    # Log the input being sent (first 100 chars)
+    logger.debug(f"Sending JD to OpenAI: {job_description_text[:100]}...")
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
-    
-     # Check if the response looks like JSON before trying to parse
+
+    # Check if the response looks like JSON before trying to parse
     raw_result_stripped = raw_result.strip()
     if not raw_result_stripped.startswith('{'):
         logger.error(f"OpenAI did not return JSON format. Response: {raw_result_stripped[:500]}...")
@@ -362,18 +376,7 @@ def extract_detailed_keywords(
         logger.info("Extracted JSON object from within markdown block.")
 
 
-    # Extract JSON from the result (might be wrapped in markdown code blocks)
-    logger.debug(f"Raw keyword extraction result from OpenAI: {raw_result[:500]}...")
-    json_match = re.search(
-        r"```(?:json)?\s*({.*?})\s*```", raw_result, re.DOTALL | re.IGNORECASE
-    )
-    if not json_match:
-        # Fallback: try finding JSON without backticks if the model didn't use them
-        json_match = re.search(r"({.*?})", raw_result, re.DOTALL)
-
-    structured_data_str = json_match.group(1) if json_match else raw_result
-
-    # --- START OF NEW CODE BLOCK ---
+    # --- START OF JSON Parsing and Repair Block ---
     try:
         # Attempt to parse the extracted JSON string
         parsed_data = json.loads(structured_data_str)
@@ -460,7 +463,8 @@ def extract_detailed_keywords(
         )
         # Ensure the original exception type and message are propagated if possible
         raise ValueError(f"Unexpected error during keyword processing: {str(e)}") from e
-    # --- END OF NEW CODE BLOCK ---
+    # --- END OF JSON Parsing and Repair Block ---
+# --- End Replacement (Whole Function) ---
 
 
 def generate_latex_resume(resume_data):
