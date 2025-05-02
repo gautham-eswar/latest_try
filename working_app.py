@@ -848,7 +848,7 @@ def create_app():
                     app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
                 )
                 with open(output_file, "w", encoding="utf-8") as f:
-                            json.dump(parsed_resume, f, indent=2)
+                        json.dump(parsed_resume, f, indent=2)
                 logger.info(
                     f"Saved parsed resume JSON locally (fallback): {output_file}"
                 )
@@ -1440,7 +1440,7 @@ def create_app():
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use)
                 response = Response(
-                latex_content,
+                    latex_content,
                     mimetype="application/x-latex",
                     headers={
                         "Content-Disposition": f"attachment; filename={resume_id}.tex"
@@ -1982,35 +1982,28 @@ def get_db() -> Client:
     supabase_key = os.environ.get("SUPABASE_KEY")
 
     # --- Start Replacement ---
+    # --- Start Exact Code ---
     if supabase_url and supabase_key:
         try:
             # Attempt to create a Supabase client
             supabase: Client = create_client(supabase_url, supabase_key)
             logger.info("Supabase client created successfully.")
-            # Optional: Perform a quick connection test?
-            # try:
-            #     # Use the correct table name for the test
-            #     supabase.table('resumes_new').select('id', count='exact').limit(0).execute()
-            #     logger.info("Supabase connection test successful.")
-            # except PostgrestAPIError as db_test_e:
-            #     logger.warning(f"Supabase connection test failed ({db_test_e.code}): {db_test_e.message}. Falling back.")
-            #     return FallbackDatabase() # Fallback if test fails
-            # except Exception as db_test_e:
-            #      logger.warning(f"Supabase connection test failed (Unknown Error): {db_test_e}. Falling back.")
-            #      return FallbackDatabase()
+            # ... (Optional connection test commented out) ...
             return supabase
         except ImportError: # Aligned with try
             logger.warning("Supabase library not installed. Using fallback database.")
-            return FallbackDatabase()
+            return FallbackDatabase() # Indented  under except
         except Exception as e: # Aligned with try
             logger.error(
                 f"Failed to create Supabase client: {str(e)}. Using fallback database.",
                 exc_info=True,
             )
-            return FallbackDatabase()
+            return FallbackDatabase() # Indented under except
     else: # Aligned with if
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
-        return FallbackDatabase()
+        return FallbackDatabase() # Indented under else
+    # --- End Exact Code ---
+# (End of get_db function)
     # --- End Replacement ---
     
 
