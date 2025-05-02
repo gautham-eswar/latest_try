@@ -362,7 +362,7 @@ def extract_detailed_keywords(
             )
             return parsed_data
         else:
-            logger.error(f"Parsed keyword JSON has incorrect structure: {parsed_data}")
+            logger.error(f"Parsed keyword JSON has incorrect structure: {raw_result}")
             raise ValueError("Keyword extraction result has invalid structure.")
 
     except json.JSONDecodeError as e:
