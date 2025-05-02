@@ -11,6 +11,7 @@ import logging
 import copy
 import re
 from typing import Dict, List, Any, Optional, Tuple, Set
+import httpx
 
 # Import OpenAI
 try:
@@ -44,8 +45,16 @@ class ResumeEnhancer:
         if not self.api_key:
             raise ValueError("OpenAI API key is required")
         
-        # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key)
+        # Use explicit httpx client to avoid proxy issues on Render
+        try:
+            # Explicitly create httpx client, disabling environment proxy usage
+            httpx_client = httpx.Client(trust_env=False)
+            self.client = OpenAI(api_key=self.api_key, http_client=httpx_client)
+            logger.info("ResumeEnhancer: OpenAI client initialized successfully with custom httpx client.")
+        except Exception as e:
+            logger.error(f"ResumeEnhancer: Failed to initialize OpenAI client: {e}", exc_info=True)
+            raise RuntimeError(f"ResumeEnhancer: Could not initialize OpenAI client - {e}") from e
+        
         self.model = model
         
         # Track which bullets have been modified
