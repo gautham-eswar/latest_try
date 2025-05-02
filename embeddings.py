@@ -11,6 +11,7 @@ import logging
 import numpy as np
 from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
+import httpx
 
 # Import OpenAI
 try:
@@ -44,8 +45,19 @@ class SemanticMatcher:
         if not self.api_key:
             raise ValueError("OpenAI API key not provided or found in environment variables")
         
-        # Initialize OpenAI client
-        self.client = OpenAI(api_key=self.api_key)
+        # Use explicit httpx client to avoid proxy issues on Render
+        try:
+            # Explicitly create httpx client, disabling environment proxy usage
+            httpx_client = httpx.Client(trust_env=False)
+            self.client = OpenAI(api_key=self.api_key, http_client=httpx_client)
+            logger.info("SemanticMatcher: OpenAI client initialized successfully with custom httpx client.")
+        except Exception as e:
+            logger.error(f"SemanticMatcher: Failed to initialize OpenAI client: {e}", exc_info=True)
+            # Depending on desired behavior, either raise the error or handle it
+            # For now, let's raise it to make the failure clear
+            raise RuntimeError(f"SemanticMatcher: Could not initialize OpenAI client - {e}") from e
+            # self.client = None # Or set client to None if you want to handle errors downstream
+        
         self.model = model
         
         # Default similarity threshold
