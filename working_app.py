@@ -335,6 +335,33 @@ def extract_detailed_keywords(
 
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
     
+     # Check if the response looks like JSON before trying to parse
+    raw_result_stripped = raw_result.strip()
+    if not raw_result_stripped.startswith('{'):
+        logger.error(f"OpenAI did not return JSON format. Response: {raw_result_stripped[:500]}...")
+        # Raise specific error for non-JSON response
+        raise ValueError(f"OpenAI returned non-JSON response: {raw_result_stripped[:200]}...")
+
+    # Attempt to extract JSON block if present (e.g., within markdown)
+    logger.debug(f"Raw keyword extraction result from OpenAI (Passed initial '{'{'} check'): {raw_result[:500]}...")
+    json_match = re.search(
+        r"```(?:json)?\s*({.*?})\s*```", raw_result, re.DOTALL | re.IGNORECASE
+    )
+    if not json_match:
+        # Fallback: Check if the raw result itself is the JSON object (already validated startswith('{'))
+        if raw_result_stripped.endswith('}'):
+             structured_data_str = raw_result_stripped
+             logger.info("Using raw API response as JSON object (no markdown found).")
+        else:
+            # If it starts with { but isn't wrapped and doesn't end with }, it's likely incomplete/malformed
+            # Log this case and let the repair logic try to handle it
+            logger.warning("Response starts with '{' but not clearly identifiable as complete JSON object or markdown block. Proceeding to parsing/repair attempt.")
+            structured_data_str = raw_result_stripped
+    else:
+        structured_data_str = json_match.group(1) # Use the content inside the markdown block
+        logger.info("Extracted JSON object from within markdown block.")
+
+
     # Extract JSON from the result (might be wrapped in markdown code blocks)
     logger.debug(f"Raw keyword extraction result from OpenAI: {raw_result[:500]}...")
     json_match = re.search(
