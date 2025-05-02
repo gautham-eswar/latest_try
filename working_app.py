@@ -67,7 +67,7 @@ def log_file_snippet(filepath, start_marker, end_marker, lines=15):
             snippet = "\\n".join(snippet_lines[:lines]) + "\\n..."
 
         logging.info(f"--- Verifying code in {filepath} ---")
-        # logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
+        logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
         logging.info(f"--- End verification for {filepath} ---")
         # Check for OpenAI client initialization
         if "OpenAI(api_key=" in snippet:
@@ -317,11 +317,10 @@ def extract_detailed_keywords(
     4.  `skill_type`: Classify as 'hard skill' (technical, measurable), 'soft skill' (interpersonal), 'qualification' (degree, certificate), 'tool' (software, platform), or 'responsibility'.
 
     JOB DESCRIPTION:
-    
+    """
     {job_description_text}
-    
+    """
 
-    Ensure the context snippet is directly from the provided text.
     Return ONLY a JSON object containing a single key "keywords", which is a list of objects, each having the keys "keyword", "context", "relevance_score", and "skill_type".
     Example Format:
     {{
@@ -331,6 +330,7 @@ def extract_detailed_keywords(
         {{ "keyword": "Bachelor's Degree", "context": "Bachelor's Degree in Computer Science required.", "relevance_score": 1.0, "skill_type": "qualification" }}
       ]
     }}
+    Ensure the context snippet is directly from the provided text.
     """
 
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
@@ -346,6 +346,7 @@ def extract_detailed_keywords(
 
     structured_data_str = json_match.group(1) if json_match else raw_result
 
+    # --- START OF NEW CODE BLOCK ---
     try:
         # Attempt to parse the extracted JSON string
         parsed_data = json.loads(structured_data_str)
@@ -358,25 +359,81 @@ def extract_detailed_keywords(
         ):
             # Further validation could check individual keyword objects
             logger.info(
-                f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords."
+                f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords (initial parse)."
             )
             return parsed_data
         else:
-            logger.error(f"Parsed keyword JSON has incorrect structure: {raw_result}")
-            raise ValueError("Keyword extraction result has invalid structure.")
+            logger.error(f"Parsed keyword JSON has incorrect structure (initial parse): {parsed_data}")
+            # If structure is wrong even if JSON is valid, trigger repair attempt
+            raise json.JSONDecodeError("Incorrect structure, attempting repair", structured_data_str, 0)
 
     except json.JSONDecodeError as e:
-        logger.error(
-            f"Error parsing keyword JSON from OpenAI: {e}. Raw data: {structured_data_str[:500]}..."
-        )
-        # Fallback: maybe try the placeholder logic here if needed?
-        # For now, raise the error to indicate failure.
-        raise ValueError(f"Failed to parse keywords JSON from OpenAI response: {e}. Raw data: {raw_result}")
+        original_error_msg = str(e)
+        logger.warning(f"Initial JSON parsing failed: {original_error_msg}. Attempting robust repair...")
+        repaired_keywords = []
+        parsed_data = None # Initialize to None
+
+        # Try to extract content within the "keywords": [...] list first for focused search
+        # This regex tries to find the list content, handling potential whitespace
+        list_content_match = re.search(r'"keywords"\s*:\s*\[(.*?)\]', structured_data_str, re.DOTALL)
+        content_to_search = structured_data_str # Default to searching the whole string
+
+        if list_content_match:
+            content_to_search = list_content_match.group(1)
+            logger.info("Repair attempt: Found keywords list structure, searching within its content.")
+        else:
+            logger.warning("Repair attempt: Could not find standard 'keywords': [...] structure, searching entire response string.")
+
+        # Regex to find potential JSON objects: starts with '{', ends with '}' non-greedily.
+        # It attempts to capture complete objects even if commas are missing between them.
+        # Matches { ... } pairs, being careful about nested braces might be complex,
+        # this simpler approach targets top-level objects assuming keywords aren't deeply nested.
+        object_pattern = re.compile(r'(\{.*?\})(?=\s*\{|\s*$|\s*,?\s*\])', re.DOTALL)
+
+        potential_objects = object_pattern.findall(content_to_search)
+        logger.info(f"Repair attempt: Found {len(potential_objects)} potential keyword objects using regex.")
+
+        for i, obj_str in enumerate(potential_objects):
+            obj_str = obj_str.strip()
+            if not obj_str: continue # Skip empty matches
+
+            try:
+                # Clean up potential trailing comma JUST IN CASE the regex included it accidentally
+                obj_str_cleaned = obj_str.rstrip(',')
+                keyword_obj = json.loads(obj_str_cleaned)
+
+                # Basic validation of the parsed object's structure
+                if isinstance(keyword_obj, dict) and all(k in keyword_obj for k in ["keyword", "context", "relevance_score", "skill_type"]):
+                    repaired_keywords.append(keyword_obj)
+                    # logger.debug(f"Repair successful for object {i+1}.") # Optional: too verbose?
+                else:
+                    logger.warning(f"Repaired object {i+1} lacks expected keys or is not dict: {obj_str_cleaned[:100]}...")
+
+            except json.JSONDecodeError as repair_e:
+                logger.warning(f"Could not parse potential object {i+1} during repair: {obj_str_cleaned[:100]}... Error: {repair_e}")
+            except Exception as general_repair_e:
+                 logger.warning(f"Unexpected error parsing potential object {i+1} during repair: {obj_str_cleaned[:100]}... Error: {general_repair_e}")
+
+        # Check if repair was successful
+        if repaired_keywords:
+            parsed_data = {"keywords": repaired_keywords}
+            logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
+            # Return the successfully repaired data
+            return parsed_data
+        else:
+            # If repair fails, raise the original error message for clarity, including raw data snippet
+            logger.error(f"JSON repair failed. Could not salvage any valid keyword objects from raw data: {structured_data_str[:500]}...")
+            # Raise a ValueError containing the original error and context
+            raise ValueError(f"Failed to parse keywords JSON from OpenAI response, and repair attempt failed. Original error: {original_error_msg}. Raw data snippet: {structured_data_str[:500]}...")
+
     except Exception as e:
+        # Catch any other unexpected errors during the process
         logger.error(
             f"Unexpected error during keyword extraction processing: {e}", exc_info=True
         )
-        raise
+        # Ensure the original exception type and message are propagated if possible
+        raise ValueError(f"Unexpected error during keyword processing: {str(e)}") from e
+    # --- END OF NEW CODE BLOCK ---
 
 
 def generate_latex_resume(resume_data):
@@ -764,10 +821,10 @@ def create_app():
                     app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
                 )
                 with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(parsed_resume, f, indent=2)
-                    logger.info(
-                        f"Saved parsed resume JSON locally (fallback): {output_file}"
-                    )
+                json.dump(parsed_resume, f, indent=2)
+                logger.info(
+                    f"Saved parsed resume JSON locally (fallback): {output_file}"
+                )
             else:
                 # Insert into Supabase 'resumes_new' table
                 logger.info(f"Inserting into Supabase table: resumes_new")
@@ -1009,20 +1066,12 @@ def create_app():
                 stage_status = "healthy"
                 stage_message = f"Extracted {kw_count} keywords"
             except Exception as e:
-                db.table("resume_optimizer_errors").insert({
-                    'id': str(uuid.uuid4()),
-                    'pipeline_step': "Keyword Extraction",
-                    'resume_id': resume_id,
-                    'job_description': job_description_text,
-                    'resume_bullet_points': original_resume_data,
-                    'error_message': str(e)
-                }).execute()
                 logger.error(
                     f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True
                 )
                 stage_message = f"Extraction failed: {e.__class__.__name__}"
                 # Re-raise to stop processing
-                raise e
+                raise
             finally:
                 duration = time.time() - start_time
                 if diagnostic_system and job_id:
@@ -1363,22 +1412,22 @@ def create_app():
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use)
-                response = Response(
-                    latex_content,
-                        mimetype="application/x-latex",
-                        headers={
-                            "Content-Disposition": f"attachment; filename={resume_id}.tex"
-                        },
-                    )
+            response = Response(
+                latex_content,
+                    mimetype="application/x-latex",
+                    headers={
+                        "Content-Disposition": f"attachment; filename={resume_id}.tex"
+                    },
+                )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
-                return response
+            return response
         
             except Exception as e:
                 logger.error(
                     f"Error generating LaTeX for resume {resume_id}: {str(e)}",
                     exc_info=True,
                 )
-                return app.create_error_response(
+            return app.create_error_response(
                     "LatexGenerationError", f"Error generating LaTeX: {str(e)}", 500
                 )
 
@@ -1922,15 +1971,15 @@ def get_db() -> Client:
             #      logger.warning(f"Supabase connection test failed (Unknown Error): {db_test_e}. Falling back.")
             #      return FallbackDatabase()
             return supabase
-        except ImportError:
+    except ImportError:
             logger.warning("Supabase library not installed. Using fallback database.")
-            return FallbackDatabase()
-        except Exception as e:
-                logger.error(
-                    f"Failed to create Supabase client: {str(e)}. Using fallback database.",
-                    exc_info=True,
-                )
-                return FallbackDatabase()
+        return FallbackDatabase()
+    except Exception as e:
+            logger.error(
+                f"Failed to create Supabase client: {str(e)}. Using fallback database.",
+                exc_info=True,
+            )
+        return FallbackDatabase()
     else:
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
         return FallbackDatabase()
