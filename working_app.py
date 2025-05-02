@@ -367,7 +367,7 @@ def extract_detailed_keywords(
 
     except json.JSONDecodeError as e:
         logger.error(
-            f"Error parsing keyword JSON from OpenAI: {e}. Raw data: {structured_data_str[:500]}..."
+            f"Error parsing keyword JSON from OpenAI: {e}. Raw data: {structured_data_str}..."
         )
         # Fallback: maybe try the placeholder logic here if needed?
         # For now, raise the error to indicate failure.
