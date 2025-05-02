@@ -821,7 +821,7 @@ def create_app():
                     app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
                 )
                 with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(parsed_resume, f, indent=2)
+                            json.dump(parsed_resume, f, indent=2)
                 logger.info(
                     f"Saved parsed resume JSON locally (fallback): {output_file}"
                 )
@@ -1412,7 +1412,7 @@ def create_app():
             try:
                 logger.info(f"Generating LaTeX for resume ID: {resume_id}")
                 latex_content = generate_latex_resume(resume_data_to_use)
-            response = Response(
+                response = Response(
                 latex_content,
                     mimetype="application/x-latex",
                     headers={
@@ -1420,7 +1420,7 @@ def create_app():
                     },
                 )
                 logger.info(f"Successfully generated LaTeX for resume ID: {resume_id}")
-            return response
+                return response
         
             except Exception as e:
                 logger.error(
@@ -1954,6 +1954,7 @@ def get_db() -> Client:
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
 
+    # --- Start Replacement ---
     if supabase_url and supabase_key:
         try:
             # Attempt to create a Supabase client
@@ -1971,18 +1972,20 @@ def get_db() -> Client:
             #      logger.warning(f"Supabase connection test failed (Unknown Error): {db_test_e}. Falling back.")
             #      return FallbackDatabase()
             return supabase
-    except ImportError:
+        except ImportError: # Aligned with try
             logger.warning("Supabase library not installed. Using fallback database.")
-        return FallbackDatabase()
-    except Exception as e:
+            return FallbackDatabase()
+        except Exception as e: # Aligned with try
             logger.error(
                 f"Failed to create Supabase client: {str(e)}. Using fallback database.",
                 exc_info=True,
             )
-        return FallbackDatabase()
-    else:
+            return FallbackDatabase()
+    else: # Aligned with if
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
         return FallbackDatabase()
+    # --- End Replacement ---
+    
 
 
 # Ensure extract_text_from_file is defined before create_app if needed globally,
