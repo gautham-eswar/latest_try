@@ -250,7 +250,7 @@ class ResumeEnhancer:
         # Prepare keyword information for prompt
         keyword_text = ""
         for idx, kw in enumerate(keywords):
-            keyword_text += f"{idx+1}. {kw['keyword']}\n   Context from job description: {kw['context']}\n"
+            keyword_text += f"{idx+1}. {kw['keyword']}\\n   Context from job description: {kw['context']}\\n"
         
         # Create prompt for bullet enhancement
         prompt = f"""

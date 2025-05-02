@@ -382,9 +382,9 @@ IMPORTANT: Ensure the 'keywords' list contains valid JSON objects separated by c
 IMPORTANT: If you cannot extract any meaningful keywords from the text for any reason, you MUST return an empty list like this: {{\\"keywords\\": []}}. DO NOT return conversational text or explanations.
 
 ---JOB_DESCRIPTION_START---
-{job_description_text}
+        {job_description_text}
 ---JOB_DESCRIPTION_END---
-"""
+    """
     # --- End Replacement for user_prompt ---
 
     # Log the input being sent (first 100 chars)
