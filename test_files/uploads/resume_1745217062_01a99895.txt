@@ -1,0 +1,88 @@
+MICHAEL A. RODRIGUEZ
+Senior Software Architect & Machine Learning Engineer
+michael.rodriguez@example.com | (555) 234-7890 | San Francisco, CA | linkedin.com/in/michaelrodriguez
+
+PROFESSIONAL SUMMARY
+Innovative Senior Software Architect and Machine Learning Engineer with 12+ years of experience designing and implementing scalable, distributed systems and advanced ML solutions. Expert in cloud architecture, real-time data processing, and microservices design. Proven track record of leading cross-functional teams to deliver mission-critical applications that support millions of users. Passionate about solving complex technical challenges and mentoring junior engineers.
+
+TECHNICAL SKILLS
+• Languages: Python, Java, Scala, TypeScript, Go, C++, SQL, Rust
+• Frameworks: TensorFlow, PyTorch, Apache Spark, Spring Boot, React, Angular, FastAPI, Django
+• Cloud & Infrastructure: AWS (Certified Solutions Architect), GCP, Azure, Kubernetes, Docker, Terraform
+• Databases: PostgreSQL, MongoDB, Cassandra, Redis, Elasticsearch, Neo4j, DynamoDB
+• MLOps: MLflow, Kubeflow, Airflow, SageMaker, Databricks, Weights & Biases
+• Data Engineering: Kafka, Flink, Snowflake, dbt, Hadoop, Spark Streaming
+• DevOps: CI/CD (Jenkins, GitHub Actions), Prometheus, Grafana, ELK Stack, Datadog
+• Security: OAuth 2.0, OIDC, SSL/TLS, encryption standards, penetration testing
+
+PROFESSIONAL EXPERIENCE
+
+TECH INNOVATIONS INC., San Francisco, CA
+Principal Software Architect & ML Engineering Lead | Jan 2020 - Present
+• Led architecture and development of a next-generation recommendation engine that increased user engagement by 42% and revenue by $18M annually, using advanced deep learning models and real-time feature processing.
+• Designed and implemented a cloud-native, microservices-based platform that reduced infrastructure costs by 35% while improving system reliability to 99.99% uptime.
+• Architected a scalable data pipeline handling 10TB of daily data, reducing processing latency from hours to minutes, enabling real-time business insights.
+• Spearheaded the adoption of MLOps practices across the organization, reducing model deployment time from weeks to hours and increasing experiment velocity by 300%.
+• Mentored and coached a team of 15 engineers, improving team productivity and code quality while reducing technical debt by 40%.
+• Established company-wide engineering standards and best practices, resulting in improved code quality, security, and maintainability across all products.
+• Collaborated with executive leadership to develop technology roadmaps and strategic initiatives, aligning technical capabilities with business objectives.
+
+DATAWISE TECHNOLOGIES, Palo Alto, CA
+Senior Software Engineer, Machine Learning | Mar 2017 - Dec 2019
+• Developed an automated anomaly detection system for IoT sensor data that reduced false alarms by 75% and improved issue detection time by 60%.
+• Built a distributed stream processing platform handling 1M+ events per second with sub-second latency, enabling real-time decision making for critical business processes.
+• Implemented a continuous training pipeline for ML models that improved model accuracy by 25% through automated retraining on new data.
+• Led integration of federated learning techniques that preserved user privacy while improving model performance on edge devices by 30%.
+• Redesigned authentication and authorization systems, enhancing security posture and achieving SOC2 compliance.
+• Collaborated with product teams to define and implement data-driven features that increased user retention by 28%.
+• Reduced infrastructure costs by 40% through optimization of cloud resources and implementation of auto-scaling policies.
+
+CLOUD SYSTEMS INC., Seattle, WA
+Software Engineer, Backend Services | Jun 2014 - Feb 2017
+• Built high-throughput API services handling 50,000+ requests per second with 99.99% availability using microservices architecture.
+• Implemented distributed caching solution that reduced database load by 65% and improved API response times by 200ms.
+• Developed comprehensive monitoring and alerting system that reduced MTTR (Mean Time to Resolution) from hours to minutes.
+• Created automated deployment pipelines that reduced deployment time from days to minutes and eliminated deployment-related incidents.
+• Optimized database queries and schema design, improving application performance by 40% during peak load periods.
+• Contributed to open-source projects related to distributed systems and cloud-native applications.
+• Mentored junior engineers through code reviews, pair programming, and technical knowledge sharing sessions.
+
+NEXUS SOLUTIONS, Boston, MA
+Software Developer | Aug 2011 - May 2014
+• Developed and maintained backend services for financial data processing, ensuring accuracy and compliance with regulatory requirements.
+• Built RESTful APIs that enabled integration with third-party systems, expanding product capabilities and market reach.
+• Implemented automated testing suite that increased code coverage from 40% to 85% and reduced regression bugs by 70%.
+• Collaborated in migration from monolithic architecture to service-oriented design, improving scalability and developer productivity.
+• Contributed to database design and optimization efforts that supported 10x growth in data volume.
+• Participated in 24/7 on-call rotation, ensuring system reliability and rapid incident response.
+
+EDUCATION
+• Master of Science in Computer Science, Stanford University, 2011
+  - Specialization: Machine Learning and Artificial Intelligence
+  - GPA: 3.92/4.0
+
+• Bachelor of Science in Computer Engineering, Massachusetts Institute of Technology, 2009
+  - Minor: Mathematics
+  - GPA: 3.85/4.0
+
+CERTIFICATIONS
+• AWS Certified Solutions Architect – Professional
+• Google Cloud Professional Data Engineer
+• Microsoft Certified: Azure Solutions Architect Expert
+• Certified Kubernetes Administrator (CKA)
+• TensorFlow Developer Certificate
+
+PATENTS & PUBLICATIONS
+• Patent: "Distributed System for Real-time Data Processing and Analysis" (US Patent #12,345,678)
+• Publication: "Advances in Neural Network Architectures for Time-Series Forecasting," IEEE International Conference on Machine Learning, 2019
+• Publication: "Scalable Microservices: Lessons from the Field," ACM International Conference on Software Engineering, 2018
+
+OPEN SOURCE CONTRIBUTIONS
+• Core Contributor: TensorFlow Extended (TFX)
+• Maintainer: Distributed Computing Framework (12K+ GitHub stars)
+• Contributor: Kubernetes, Apache Kafka, Spring Framework
+
+LANGUAGES
+• English (Native)
+• Spanish (Fluent)
+• Mandarin Chinese (Intermediate) 

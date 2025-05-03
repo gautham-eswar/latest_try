@@ -1,0 +1,61 @@
+{
+  "contact": {
+    "name": "John Smith",
+    "email": "john.smith@example.com",
+    "phone": "(555) 123-4567",
+    "location": "San Francisco, CA"
+  },
+  "summary": "Experienced software engineer with 5+ years of expertise in Python, Flask, and API development. Skilled in designing scalable web applications and implementing robust backend systems.",
+  "skills": [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "SQL",
+    "Flask",
+    "Django",
+    "React",
+    "Express.js",
+    "Git",
+    "Docker",
+    "AWS",
+    "CI/CD pipelines",
+    "PostgreSQL",
+    "MongoDB",
+    "Unit testing",
+    "Integration testing",
+    "pytest"
+  ],
+  "experience": [
+    {
+      "title": "Senior Software Engineer",
+      "company": "TechCorp Inc.",
+      "date_range": "Jan 2021 - Present",
+      "description": [
+        "Designed and implemented RESTful APIs using Flask for the company's flagship product",
+        "Optimized database queries resulting in 40% reduction in response time",
+        "Mentored junior developers and conducted code reviews"
+      ]
+    },
+    {
+      "title": "Software Engineer",
+      "company": "WebSolutions Inc.",
+      "date_range": "Mar 2018 - Dec 2020",
+      "description": [
+        "Developed microservices using Python and Flask",
+        "Implemented automated testing resulting in 90% code coverage",
+        "Deployed applications to AWS using Docker and Kubernetes"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "degree": "Bachelor of Science in Computer Science",
+      "institution": "University of California, Berkeley",
+      "date_range": "2014-2018"
+    }
+  ],
+  "certifications": [
+    "AWS Certified Developer Associate",
+    "Docker Certified Associate"
+  ]
+}
