@@ -14,17 +14,16 @@ import uuid
 from collections import deque
 import time
 
-import httpx
 from flask import Blueprint, jsonify, render_template, current_app, request
 from Pipeline.keyword_extraction import extract_keywords
 
-from embeddings import SemanticMatcher
-from enhancer import ResumeEnhancer
+from Pipeline.embeddings import SemanticMatcher
+from Pipeline.enhancer import ResumeEnhancer
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(levelname)s - %(message)s'
 )
 logger = logging.getLogger('diagnostic_system')
 

@@ -13,8 +13,8 @@ from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
-from embeddings import SemanticMatcher
-from enhancer import ResumeEnhancer
+from Pipeline.embeddings import SemanticMatcher
+from Pipeline.enhancer import ResumeEnhancer
 
 
 logging.basicConfig(
