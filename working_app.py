@@ -14,7 +14,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
-from werkzeug.utils import secure_filename
 
 # Import the advanced modules
 from Endpoints.diagnostics import diagnostics_page
@@ -25,10 +24,8 @@ from Pipeline.keyword_extraction import extract_keywords
 from Pipeline.optimizer import enhance_resume
 from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, upload_resume
 
-from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
-
 
 
 # Load environment variables
@@ -215,7 +212,7 @@ def create_app():
         job_id = None  # Initialize job_id for diagnostics
         overall_status = "error"  # Default status
         try:
-            enhance_resume(data)
+            return enhance_resume(data)
             
         except Exception as e:
             # Error already logged in specific stage or here
