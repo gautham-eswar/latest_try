@@ -36,7 +36,7 @@ def extract_keywords(
     """
     # NOTE: Using the original prompt structure, not the simplified one with markers.
     # Added instruction for failure case.
-    with open("prompts/extract_keywords.txt") as file:
+    with open("pipeline/prompts/extract_keywords.txt") as file:
         user_prompt = file.read().replace("@job_description_txt", job_description_text)
 
 

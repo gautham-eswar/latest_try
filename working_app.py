@@ -26,8 +26,8 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 # Import the advanced modules
-from Pipeline.keyword_extraction import extract_keywords
-from Pipeline.resume_parsing import extract_text_from_file, parse_resume
+from pipeline.keyword_extraction import extract_keywords
+from pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.openai_interface import call_openai_api
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer

@@ -14,8 +14,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
-
 def extract_text_from_file(file_path: Path) -> str:
     """Extract text from TXT, PDF, and DOCX files."""
     file_ext = file_path.suffix.lower()
@@ -77,14 +75,12 @@ def extract_text_from_file(file_path: Path) -> str:
         raise IOError(f"Failed to process file {file_path.name}: {e}") from e
 
 
-
-
 def parse_resume(resume_text):
     """Parse resume text into structured data"""
     system_prompt = "You are a resume parsing assistant. Extract structured information from resumes."
         # Inside parse_resume function
     # --- Start Replacement for user_prompt ---
-    with open("prompts/parse_resume.txt") as file:
+    with open("pipeline/prompts/parse_resume.txt") as file:
         user_prompt = file.read().replace("@resume_text", resume_text)
     
     result = call_openai_api(system_prompt, user_prompt)
