@@ -39,18 +39,6 @@ def log_openai_dependencies():
         except (ImportError, AttributeError):
             logger.warning("httpx version information not available")
         
-        # Log all installed packages to check for conflicts
-        import pkg_resources
-        logger.info("Listing all installed packages that might affect OpenAI:")
-        relevant_packages = ['openai', 'httpx', 'aiohttp', 'requests', 'urllib3']
-        for pkg_name in relevant_packages:
-            try:
-                version = pkg_resources.get_distribution(pkg_name).version
-                logger.info(f"  - {pkg_name}: {version}")
-            except pkg_resources.DistributionNotFound:
-                logger.info(f"  - {pkg_name}: Not installed")
-        
-        # Check Python version
         import sys
         logger.info(f"Python version: {sys.version}")
         
