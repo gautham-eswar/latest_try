@@ -3,16 +3,12 @@ Working Resume Optimizer Flask App with proper port handling
 """
 
 import os
-import sys
 import logging
 from datetime import datetime, timedelta
 import uuid
-import platform
 import json
-import psutil
 from pathlib import Path
 import time
-import requests
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException, NotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -23,15 +19,12 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 # Import the advanced modules
+from Endpoints.diagnostics import diagnostics_page
 from Endpoints.status import get_status
 from Pipeline.keyword_extraction import extract_keywords
-from Pipeline.latex_generation import generate_latex_resume
 from Pipeline.resume_handling import download_resume, upload_resume
-from Pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.database import FallbackDatabase, get_db
 from Endpoints.health import health_analysis
-from Services.openai_interface import OPENAI_API_BASE, OPENAI_API_KEY, call_openai_api
-from Services.utils import format_size, format_uptime, get_component_status, get_uptime, START_TIME
 from Services.diagnostic_system import get_diagnostic_system
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer
@@ -592,7 +585,7 @@ def create_app():
     @app.route("/diagnostic/diagnostics")
     def diagnostics_endpoint():
         """Show diagnostic information."""
-        return 
+        return diagnostics_page()
 
     @app.route("/api/test/simulate-failure")
     def test_simulate_failure():

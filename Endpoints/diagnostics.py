@@ -18,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def u():
+def diagnostics_page():
     # Get system information
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
