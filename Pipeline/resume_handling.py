@@ -1,11 +1,12 @@
 import json
+import logging
 import os
 from pathlib import Path
 import time
 import uuid
-from venv import logger
+
 from flask import Response, jsonify
-from supabase import PostgrestAPIError
+from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
 from werkzeug.utils import secure_filename
 
 from Pipeline.latex_generation import generate_latex_resume
@@ -16,8 +17,15 @@ from Services.diagnostic_system import get_diagnostic_system
 
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 
 diagnostic_system = get_diagnostic_system()
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 
 def upload_resume(app, file):
 

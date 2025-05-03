@@ -2,8 +2,9 @@ import logging
 
 from flask import jsonify, render_template
 import psutil
-from Services import diagnostic_system
+
 from Services.database import get_db
+from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import get_component_status, get_uptime
 
 
@@ -12,8 +13,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+diagnostic_system = get_diagnostic_system()
 
-def get_status():
+def status_page():
     try:
         components = get_component_status()
     except Exception as e:

@@ -1,8 +1,10 @@
 
+from datetime import datetime
 from pathlib import Path
 import time
+import uuid
 
-from flask import current_app
+from flask import current_app, g, jsonify
 import requests
 
 from Services.openai_interface import OPENAI_API_BASE, OPENAI_API_KEY
@@ -38,6 +40,24 @@ def format_size(size_bytes):
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.2f} PB"
+
+# Utility function for creating error responses
+def create_error_response(error_type, message, status_code):
+    """Create a standardized error response following the error schema."""
+    return (
+        jsonify(
+            {
+        "error": error_type,
+        "message": message,
+        "status_code": status_code,
+                "transaction_id": getattr(g, "transaction_id", None)
+                or str(uuid.uuid4()),
+                "timestamp": datetime.now().isoformat(),
+            }
+        ),
+        status_code,
+    )
+
 
 def get_component_status():
     """Get status of all system components"""
