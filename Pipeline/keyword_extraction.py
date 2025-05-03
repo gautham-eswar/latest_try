@@ -36,7 +36,7 @@ def extract_keywords(
     """
     # NOTE: Using the original prompt structure, not the simplified one with markers.
     # Added instruction for failure case.
-    with open("pipeline/prompts/extract_keywords.txt") as file:
+    with open("Pipeline/prompts/extract_keywords.txt") as file:
         user_prompt = file.read().replace("@job_description_txt", job_description_text)
 
 
@@ -71,7 +71,6 @@ def extract_keywords(
         logger.info("Extracted JSON object from within markdown block.")
 
 
-    # --- START OF JSON Parsing and Repair Block ---
     try:
         # Attempt to parse the extracted JSON string
         parsed_data = json.loads(structured_data_str)
@@ -101,7 +100,7 @@ def extract_keywords(
         # Try to extract content within the "keywords": [...] list first for focused search
         # This regex tries to find the list content, handling potential whitespace
         list_content_match = re.search(r'"keywords"\s*:\s*\[(.*?)\]', structured_data_str, re.DOTALL)
-        content_to_search = structured_data_str # Default to searching the whole string
+        content_to_search = structured_data_str 
 
         if list_content_match:
             content_to_search = list_content_match.group(1)

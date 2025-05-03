@@ -80,7 +80,7 @@ def parse_resume(resume_text):
     system_prompt = "You are a resume parsing assistant. Extract structured information from resumes."
         # Inside parse_resume function
     # --- Start Replacement for user_prompt ---
-    with open("pipeline/prompts/parse_resume.txt") as file:
+    with open("Pipeline/prompts/parse_resume.txt") as file:
         user_prompt = file.read().replace("@resume_text", resume_text)
     
     result = call_openai_api(system_prompt, user_prompt)

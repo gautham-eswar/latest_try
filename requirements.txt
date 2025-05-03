@@ -1,7 +1,6 @@
 # Web Framework
 flask==2.2.3
 Werkzeug==2.2.3
-gunicorn==23.0.0
 flask-cors==3.0.10
 
 # Environment Variables
