@@ -26,6 +26,10 @@ diagnostic_system = get_diagnostic_system()
 
 
 def enhance_resume(data):
+
+    job_id = None  # Initialize job_id for diagnostics
+    overall_status = "error"  # Default status
+    
     resume_id = data.get("resume_id")
     job_description_data = data.get(
         "job_description"
