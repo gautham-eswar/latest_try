@@ -979,19 +979,3 @@ def create_app():
             return "", 204
     
     return app
-
-
-def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-
-
-
-
-
-    # --- End Exact Code ---
-# (End of get_db function)
-    # --- End Replacement ---
-    

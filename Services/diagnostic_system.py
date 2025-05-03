@@ -16,7 +16,10 @@ import time
 
 import httpx
 from flask import Blueprint, jsonify, render_template, current_app, request
-from working_app import extract_detailed_keywords, SemanticMatcher, ResumeEnhancer
+from Pipeline.keyword_extraction import extract_keywords
+
+from embeddings import SemanticMatcher
+from enhancer import ResumeEnhancer
 
 # Configure logging
 logging.basicConfig(
@@ -1028,7 +1031,7 @@ class DiagnosticSystem:
                 stage_status = 'error'
                 stage_message = 'Extraction failed'
                 try:
-                    keywords_data = extract_detailed_keywords(dummy_job_description)
+                    keywords_data = extract_keywords(dummy_job_description)
                     kw_count = len(keywords_data.get('keywords', []))
                     stage_status = 'healthy'
                     stage_message = f"Extracted {kw_count} keywords"
