@@ -45,6 +45,8 @@ def log_openai_dependencies():
     except Exception as e:
         logger.error(f"Error getting dependency information: {str(e)}")
 
+
+
 class DiagnosticSystem:
     """Comprehensive diagnostic system for monitoring application health."""
     
@@ -1267,3 +1269,18 @@ def track_transaction(diagnostic_system):
                 
         return decorated_function
     return decorator 
+
+diagnostic_sistem = None
+def get_diagnostic_system():
+    global diagnostic_sistem
+
+    if not diagnostic_sistem:
+        try:
+            diagnostic_system = DiagnosticSystem()
+            logger.info("Diagnostic system initialized successfully")
+        except ImportError:
+            logger.warning(
+                "Diagnostic system module not found. Some features will be disabled."
+            )
+
+    return diagnostic_sistem
