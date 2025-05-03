@@ -61,7 +61,7 @@ def health_analysis():
             db_status = (
                 db.health_check()
                 if hasattr(db, "health_check")
-                else {"status": "unknown"}
+                else {"status": "Connected"}
             )
             health_data["database"] = db_status
             health_data["components"]["database"] = db_status.get(

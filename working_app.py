@@ -23,14 +23,15 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 # Import the advanced modules
+from Endpoints.status import get_status
 from Pipeline.keyword_extraction import extract_keywords
 from Pipeline.latex_generation import generate_latex_resume
 from Pipeline.resume_handling import download_resume, upload_resume
 from Pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.database import FallbackDatabase, get_db
-from Services.health import health_analysis
+from Endpoints.health import health_analysis
 from Services.openai_interface import OPENAI_API_BASE, OPENAI_API_KEY, call_openai_api
-from Services.utils import format_size, format_uptime, get_uptime
+from Services.utils import format_size, format_uptime, get_component_status, get_uptime, START_TIME
 from Services.diagnostic_system import get_diagnostic_system
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer
@@ -46,7 +47,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-START_TIME = time.time()
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
@@ -59,51 +59,6 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 # Track application startup
 diagnostic_system = get_diagnostic_system()
 
-
-def get_component_status():
-    """Get status of all system components"""
-    components = {
-        "system": {"status": "healthy", "message": "System is operating normally"},
-        "database": {
-            "status": "warning",
-            "message": "Using in-memory database (no Supabase connection)",
-        },
-        "openai_api": {"status": "unknown", "message": "API key not tested"},
-        "file_system": {"status": "healthy", "message": "File system is writable"},
-    }
-    
-    # Test file system by attempting to write to a temp file
-    try:
-        temp_dir = Path("./temp")
-        temp_dir.mkdir(exist_ok=True)
-        test_file = temp_dir / "test_write.txt"
-        test_file.write_text("Test write operation")
-        test_file.unlink()
-        components["file_system"]["status"] = "healthy"
-    except Exception as e:
-        components["file_system"]["status"] = "error"
-        components["file_system"]["message"] = f"File system error: {str(e)}"
-    
-    # Test OpenAI API
-    try:
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        
-        response = requests.get(f"{OPENAI_API_BASE}/models", headers=headers)
-        
-        if response.status_code == 200:
-            components["openai_api"]["status"] = "healthy"
-            components["openai_api"]["message"] = "API connection successful"
-        else:
-            components["openai_api"]["status"] = "error"
-            components["openai_api"]["message"] = f"API error: {response.status_code}"
-    except Exception as e:
-        components["openai_api"]["status"] = "error"
-        components["openai_api"]["message"] = f"API connection error: {str(e)}"
-    
-    return components
 
 def handle_missing_api_key():
     """Return a standardized error response for missing API key"""
@@ -237,7 +192,7 @@ def create_app():
             )
 
         file = request.files["file"]
-        upload_resume(app, file)
+        return upload_resume(app, file)
 
     @app.route("/api/optimize", methods=["POST"])
     def optimize_resume_endpoint():
@@ -617,102 +572,7 @@ def create_app():
         """Display a system status page with detailed component information"""
         try:
             # Get component status with fallbacks
-            try:
-                components = get_component_status()
-            except Exception as e:
-                logger.error(f"Failed to get component status: {str(e)}")
-                components = {
-                    "database": {"status": "error", "message": str(e)},
-                    "system": {
-                        "status": "unknown",
-                        "message": "Could not retrieve system status",
-                    },
-                }
-            
-            # Get system metrics with fallbacks
-            try:
-                memory = psutil.virtual_memory()
-                cpu_percent = psutil.cpu_percent(interval=0.1)
-            except Exception as e:
-                logger.error(f"Failed to get system metrics: {str(e)}")
-                memory = None
-                cpu_percent = None
-            
-            # Determine overall system status based on component statuses
-            overall_status = "healthy"
-            for component in components.values():
-                if component.get("status") == "error":
-                    overall_status = "error"
-                    break
-                elif component.get("status") == "warning" and overall_status != "error":
-                    overall_status = "warning"
-            
-            # Create a database status object with fallbacks
-            try:
-                db = get_db()
-                db_check = (
-                    db.health_check()
-                    if hasattr(db, "health_check")
-                    else {"status": "unknown"}
-                )
-                database_status = {
-                    "status": db_check.get("status", "unknown"),
-                    "message": db_check.get("message", "Database status unknown"),
-                    "tables": db_check.get(
-                        "tables", ["resumes", "optimizations", "users"]
-                    ),  # Example tables
-                }
-            except Exception as e:
-                logger.error(f"Failed to check database status: {str(e)}")
-                database_status = {
-                    "status": "error",
-                    "message": f"Database error: {str(e)}",
-                    "tables": [],
-                }
-            
-            # System info with fallbacks
-            system_info = {
-                "uptime": get_uptime(),
-                "memory_usage": f"{memory.percent:.1f}%" if memory else "Unknown",
-                "cpu_usage": (
-                    f"{cpu_percent:.1f}%" if cpu_percent is not None else "Unknown"
-                ),
-            }
-            
-            # Recent transactions (placeholder) with fallbacks
-            try:
-                if diagnostic_system and hasattr(
-                    diagnostic_system, "transaction_history"
-                ):
-                    recent_transactions = diagnostic_system.transaction_history[:5]
-                else:
-                    recent_transactions = []
-            except Exception as e:
-                logger.error(f"Failed to get transaction history: {str(e)}")
-                recent_transactions = []
-            
-            # Render the template with error handling
-            try:
-                return render_template(
-                    "status.html",
-                                    system_info=system_info,
-                                    database_status=database_status,
-                    recent_transactions=recent_transactions,
-                )
-            except Exception as e:
-                logger.error(f"Error rendering status template: {str(e)}")
-                # Fall back to JSON response on template error
-                return (
-                    jsonify(
-                        {
-                    "status": overall_status,
-                    "system_info": system_info,
-                    "components": components,
-                            "error": f"Template error: {str(e)}",
-                        }
-                    ),
-                    200,
-                )  # Return 200 even for errors
+            return get_status()
             
         except Exception as e:
             # Catch-all exception handler with JSON fallback
@@ -730,131 +590,9 @@ def create_app():
             )  # Always return 200
 
     @app.route("/diagnostic/diagnostics")
-    def diagnostics():
+    def diagnostics_endpoint():
         """Show diagnostic information."""
-        # Get system information
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage("/")
-
-        # Fetch component status
-        try:
-            components = get_component_status()
-        except Exception as e:
-            logger.error(f"Failed to get component status for diagnostics: {str(e)}")
-            components = {
-                "system": {"status": "error", "message": "Failed to retrieve status"},
-                "database": {"status": "error", "message": str(e)},
-                "openai_api": {"status": "error", "message": str(e)},
-                "file_system": {"status": "error", "message": str(e)},
-            }
-
-        # Determine overall system status based on components
-        overall_status = "healthy"
-        for component_status in components.values():
-            if component_status.get("status") == "error":
-                overall_status = "error"
-                break
-            elif (
-                component_status.get("status") == "warning"
-                and overall_status != "error"
-            ):
-                overall_status = "warning"
-
-        # Placeholder for other variables (adjust as needed)
-        active_connections = 0  # Replace with actual logic if available
-        version = "0.1.0"  # Replace with actual version logic
-        title = "System Diagnostics"
-        env_vars_filtered = {
-            k: "***" if "key" in k.lower() or "token" in k.lower() else v
-            for k, v in os.environ.items()
-        }
-        
-        # Sample metrics
-        resume_processing_times = [1.2, 0.9, 1.5, 1.1, 1.3]
-        api_response_times = [0.2, 0.3, 0.1, 0.2, 0.1]
-        
-        # Sample requests
-        recent_requests = [
-            {
-                "id": f"req-{uuid.uuid4().hex[:8]}",
-                "method": "POST",
-                "endpoint": "/api/upload",
-                "status": 200,
-                "duration": 0.35,
-                "timestamp": (datetime.now() - timedelta(minutes=2)).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-            },
-            {
-                "id": f"req-{uuid.uuid4().hex[:8]}",
-                "method": "POST",
-                "endpoint": "/api/optimize",
-                "status": 200,
-                "duration": 1.24,
-                "timestamp": (datetime.now() - timedelta(minutes=1)).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-            },
-        ]
-        
-        # Prepare diagnostic info in structured format for template
-        system_info = {
-            "uptime": format_uptime(int(time.time() - START_TIME)),
-            "platform": platform.platform(),
-            "python_version": sys.version,
-            "cpu_count": psutil.cpu_count(),
-            "memory": {
-                "total": format_size(memory.total),
-                "available": format_size(memory.available),
-                "percent": memory.percent,
-            },
-            "disk": {
-                "total": format_size(disk.total),
-                "free": format_size(disk.free),
-                "percent": disk.percent,
-            },
-        }
-        
-        # Gracefully handle template rendering
-        try:
-            current_uptime = format_uptime(int(time.time() - START_TIME))
-            return render_template(
-                "diagnostics.html",
-                title=title,
-                system_status=overall_status,
-                active_connections=active_connections,
-                version=version,
-                components=components,
-                               system_info=system_info,
-                uptime=current_uptime,
-                               resume_processing_times=resume_processing_times,
-                               api_response_times=api_response_times,
-                               recent_requests=recent_requests,
-                transactions=[],
-                env_vars=env_vars_filtered,
-                pipeline_status={
-                    "status": "unknown",
-                    "message": "No pipeline data available",
-                },
-                               pipeline_stages=[],
-                               pipeline_history=[],
-                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            )
-        except Exception as e:
-            logger.error(
-                f"Error rendering diagnostics template: {str(e)}", exc_info=True
-            )
-            return (
-                jsonify(
-                    {
-                "status": "error",
-                        "error_type": type(e).__name__,
-                        "message": f"Error rendering diagnostics page: {str(e)}",
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                ),
-                500,
-            )
+        return 
 
     @app.route("/api/test/simulate-failure")
     def test_simulate_failure():

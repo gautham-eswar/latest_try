@@ -1,8 +1,11 @@
 
+from pathlib import Path
 import time
 
 from flask import current_app
+import requests
 
+from Services.openai_interface import OPENAI_API_BASE, OPENAI_API_KEY
 
 START_TIME = time.time()
 
@@ -35,3 +38,48 @@ def format_size(size_bytes):
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.2f} PB"
+
+def get_component_status():
+    """Get status of all system components"""
+    components = {
+        "system": {"status": "healthy", "message": "System is operating normally"},
+        "database": {
+            "status": "warning",
+            "message": "Using in-memory database (no Supabase connection)",
+        },
+        "openai_api": {"status": "unknown", "message": "API key not tested"},
+        "file_system": {"status": "healthy", "message": "File system is writable"},
+    }
+    
+    # Test file system by attempting to write to a temp file
+    try:
+        temp_dir = Path("./temp")
+        temp_dir.mkdir(exist_ok=True)
+        test_file = temp_dir / "test_write.txt"
+        test_file.write_text("Test write operation")
+        test_file.unlink()
+        components["file_system"]["status"] = "healthy"
+    except Exception as e:
+        components["file_system"]["status"] = "error"
+        components["file_system"]["message"] = f"File system error: {str(e)}"
+    
+    # Test OpenAI API
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        
+        response = requests.get(f"{OPENAI_API_BASE}/models", headers=headers)
+        
+        if response.status_code == 200:
+            components["openai_api"]["status"] = "healthy"
+            components["openai_api"]["message"] = "API connection successful"
+        else:
+            components["openai_api"]["status"] = "error"
+            components["openai_api"]["message"] = f"API error: {response.status_code}"
+    except Exception as e:
+        components["openai_api"]["status"] = "error"
+        components["openai_api"]["message"] = f"API connection error: {str(e)}"
+    
+    return components
