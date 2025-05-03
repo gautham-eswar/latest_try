@@ -22,7 +22,7 @@ OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output
 diagnostic_system = get_diagnostic_system()
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 

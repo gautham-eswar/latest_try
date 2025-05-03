@@ -8,7 +8,7 @@ from supabase import create_client, Client  # Import Supabase client
 
 # Configure logging
 logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
