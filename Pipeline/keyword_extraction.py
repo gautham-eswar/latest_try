@@ -1,5 +1,3 @@
-
-
 import json
 import logging
 import re
@@ -38,31 +36,9 @@ def extract_keywords(
     """
     # NOTE: Using the original prompt structure, not the simplified one with markers.
     # Added instruction for failure case.
-    # --- Start Replacement for user_prompt ---
-    user_prompt = f"""Analyze the job description provided below between the markers ---JOB_DESCRIPTION_START--- and ---JOB_DESCRIPTION_END---. Extract key requirements.
-For each requirement, identify:
-1.  `keyword`: The core skill, tool, qualification, or concept (1-5 words).
-2.  `context`: A short snippet from the job description where the keyword appears, providing context.
-3.  `relevance_score`: Estimate the importance of this keyword for the role on a scale of 0.1 to 1.0 (e.g., 1.0 for required, 0.7 for preferred, 0.5 for mentioned).
-4.  `skill_type`: Classify as 'hard skill' (technical, measurable), 'soft skill' (interpersonal), 'qualification' (degree, certificate), 'tool' (software, platform), or 'responsibility'.
+    with open("prompts/extract_keywords.txt") as file:
+        user_prompt = file.read().replace("@job_description_txt", job_description_text)
 
-Return ONLY a JSON object containing a single key "keywords", which is a list of objects, each having the keys "keyword", "context", "relevance_score", and "skill_type".
-Example Format:
-{{
-  "keywords": [
-    {{ "keyword": "Python", "context": "Experience with Python for scripting...", "relevance_score": 0.9, "skill_type": "hard skill" }},
-    {{ "keyword": "Team Collaboration", "context": "...strong ability for team collaboration.", "relevance_score": 0.8, "skill_type": "soft skill" }}
-  ]
-}}
-Ensure the context snippet is directly from the provided text.
-IMPORTANT: Ensure the 'keywords' list contains valid JSON objects separated by commas, with no trailing comma after the last object. The entire output MUST be valid JSON.
-IMPORTANT: If you cannot extract any meaningful keywords from the text for any reason, you MUST return an empty list like this: {{\\"keywords\\": []}}. DO NOT return conversational text or explanations.
-
----JOB_DESCRIPTION_START---
-        {job_description_text}
----JOB_DESCRIPTION_END---
-    """
-    # --- End Replacement for user_prompt ---
 
     # Log the input being sent (first 100 chars)
     logger.debug(f"Sending JD to OpenAI: {job_description_text[:100]}...")
