@@ -109,23 +109,6 @@ def generate_latex_resume(resume_data):
     return latex_content
 
 
-def get_system_info():
-    """Get basic system information"""
-    process = psutil.Process(os.getpid())
-    memory = psutil.virtual_memory()
-    
-    return {
-        "platform": platform.platform(),
-        "python_version": sys.version,
-        "cpu_count": psutil.cpu_count(),
-        "memory": {
-            "total": round(memory.total / (1024 * 1024 * 1024), 2),  # GB
-            "available": round(memory.available / (1024 * 1024 * 1024), 2),  # GB
-            "percent": memory.percent,
-        },
-        "process_memory_mb": process.memory_info().rss / 1024 / 1024,
-    }
-
 
 def get_component_status():
     """Get status of all system components"""
