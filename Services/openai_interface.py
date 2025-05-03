@@ -2,8 +2,10 @@
 
 import logging
 import os
+import sys
 import time
 
+from dotenv import load_dotenv
 import requests
 
 
@@ -13,7 +15,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# OpenAI API settings
+load_dotenv()
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    logger.critical(
+        "OPENAI_API_KEY environment variable is not set. Cannot proceed without API key."
+    )
+    sys.exit(1)
 
+OPENAI_API_BASE = "https://api.openai.com/v1"
 
 def call_openai_api(system_prompt, user_prompt, max_retries=3):
     """Call OpenAI API with retry logic and proper error handling."""

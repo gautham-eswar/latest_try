@@ -30,7 +30,9 @@ from Pipeline.keyword_extraction import extract_keywords
 from Pipeline.latex_generation import generate_latex_resume
 from Pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.database import FallbackDatabase, get_db
-from Services.openai_interface import call_openai_api
+from Services.health import health_analysis
+from Services.openai_interface import OPENAI_API_BASE, OPENAI_API_KEY, call_openai_api
+from Services.utils import format_size, format_uptime, get_uptime
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer
 
@@ -50,15 +52,6 @@ ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 
-# OpenAI API settings
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    logger.critical(
-        "OPENAI_API_KEY environment variable is not set. Cannot proceed without API key."
-    )
-    sys.exit(1)
-
-OPENAI_API_BASE = "https://api.openai.com/v1"
 
 # Create directories if they don't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -123,12 +116,7 @@ def get_component_status():
     return components
 
 
-def get_uptime():
-    """Get application uptime in human readable format"""
-    start_time = current_app.config.get("START_TIME", START_TIME)
-    uptime_seconds = time.time() - start_time
-    
-    return format_uptime(uptime_seconds)
+
 
 
 def handle_missing_api_key():
@@ -252,104 +240,7 @@ def create_app():
         Actual component status is included in the response body so clients
         can determine the true system health while Render continues to see a healthy service.
         """
-        try:
-            health_data = {
-                "status": "healthy",
-                "uptime": get_uptime(),
-                "timestamp": datetime.now().isoformat(),
-                "components": {},
-            }
-            
-            # Get system metrics with detailed error handling
-            try:
-                memory = psutil.virtual_memory()
-                disk = psutil.disk_usage("/")
-                
-                health_data["memory"] = {
-                    "status": "healthy",
-                    "total": format_size(memory.total),
-                    "available": format_size(memory.available),
-                    "percent": memory.percent,
-                }
-                
-                health_data["disk"] = {
-                    "status": "healthy",
-                    "total": format_size(disk.total),
-                    "free": format_size(disk.free),
-                    "percent": disk.percent,
-                }
-                
-                health_data["components"]["system_resources"] = "healthy"
-            except Exception as e:
-                logger.warning(f"Error getting system metrics: {str(e)}")
-                health_data["status"] = "degraded"
-                health_data["memory"] = {"status": "error", "message": str(e)}
-                health_data["disk"] = {"status": "error", "message": str(e)}
-                health_data["components"]["system_resources"] = "error"
-            
-            # Check database with detailed error handling
-            try:
-                db = get_db()
-                db_status = (
-                    db.health_check()
-                    if hasattr(db, "health_check")
-                    else {"status": "unknown"}
-                )
-                health_data["database"] = db_status
-                health_data["components"]["database"] = db_status.get(
-                    "status", "unknown"
-                )
-                if db_status.get("status") == "error":
-                    health_data["status"] = "degraded"
-            except Exception as e:
-                logger.warning(f"Database health check failed: {str(e)}")
-                health_data["database"] = {"status": "error", "message": str(e)}
-                health_data["components"]["database"] = "error"
-                health_data["status"] = "degraded"
-            
-            # Check OpenAI API connection
-            try:
-                headers = {
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                }
-                response = requests.get(
-                    f"{OPENAI_API_BASE}/models", headers=headers, timeout=5
-                )
-                
-                if response.status_code == 200:
-                    health_data["openai"] = {"status": "healthy"}
-                    health_data["components"]["openai"] = "healthy"
-                else:
-                    health_data["openai"] = {
-                        "status": "error", 
-                        "message": f"API returned status {response.status_code}",
-                    }
-                    health_data["components"]["openai"] = "error"
-                    health_data["status"] = "degraded"
-            except Exception as e:
-                logger.warning(f"OpenAI API check failed: {str(e)}")
-                health_data["openai"] = {"status": "error", "message": str(e)}
-                health_data["components"]["openai"] = "error"
-                health_data["status"] = "degraded"
-            
-            # Always return 200 for Render's health check
-            return jsonify(health_data), 200
-            
-        except Exception as e:
-            # Even if everything fails, return 200 with error details
-            logger.error(f"Critical error in health check: {str(e)}")
-            return (
-                jsonify(
-                    {
-                "status": "critical",
-                "message": f"Health check encountered a critical error: {str(e)}",
-                "error_type": type(e).__name__,
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                ),
-                200,
-            )  # Still return 200 for Render
+        return health_analysis()
 
     @app.route("/api/upload", methods=["POST"])
     def upload_resume():
@@ -1409,29 +1300,9 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def format_size(size_bytes):
-    """Format bytes to human readable size."""
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.2f} PB"
 
 
-def format_uptime(seconds):
-    """Format seconds to human readable uptime."""
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
-    
-    if days > 0:
-        return f"{int(days)}d {int(hours)}h {int(minutes)}m"
-    elif hours > 0:
-        return f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-    elif minutes > 0:
-        return f"{int(minutes)}m {int(seconds)}s"
-    else:
-        return f"{int(seconds)}s"
+
 
 
     # --- End Exact Code ---
