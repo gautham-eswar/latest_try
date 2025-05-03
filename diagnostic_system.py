@@ -634,12 +634,7 @@ class DiagnosticSystem:
                         logger.error(f"TypeError during OpenAI client initialization: {str(te)}")
                         if "got an unexpected keyword argument" in str(te):
                             logger.error("This appears to be an API compatibility issue. Checking openai version again.")
-                            try:
-                                import pkg_resources
-                                installed_version = pkg_resources.get_distribution("openai").version
-                                logger.error(f"Confirmed openai version from pkg_resources: {installed_version}")
-                            except Exception as pkg_e:
-                                logger.error(f"Could not confirm version via pkg_resources: {pkg_e}")
+                            
                         return {
                             'status': 'error',
                             'message': f'OpenAI API initialization error: {str(te)}',

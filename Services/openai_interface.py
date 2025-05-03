@@ -9,9 +9,11 @@ import requests
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
 
 def call_openai_api(system_prompt, user_prompt, max_retries=3):
     """Call OpenAI API with retry logic and proper error handling."""
