@@ -30,6 +30,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 # Import the advanced modules
+from Services.openai_interface import call_openai_api
 from embeddings import SemanticMatcher
 from enhancer import ResumeEnhancer
 
@@ -37,73 +38,6 @@ from enhancer import ResumeEnhancer
 from PyPDF2 import PdfReader
 import docx2txt
 
-
-# --- BEGIN CODE VERIFICATION LOGGING ---
-# Add logging to verify the running code for OpenAI initialization
-# This helps diagnose deployment/caching issues.
-def log_file_snippet(filepath, start_marker, end_marker, lines=15):
-    try:
-        if not os.path.exists(filepath):
-            logging.warning(f"Code verification: File not found at {filepath}")
-            return
-        with open(filepath, "r") as f:
-            content = f.read()
-        start_index = content.find(start_marker)
-        if start_index == -1:
-            logging.warning(
-                f"Code verification: Start marker '{start_marker}' not found in {filepath}"
-            )
-            return
-        end_index = content.find(end_marker, start_index)
-        if end_index == -1:
-            end_index = (
-                start_index + 1000
-            )  # Approx limit if end marker not found nearby
-
-        snippet = content[start_index:end_index].strip()
-        # Limit lines for clarity
-        snippet_lines = snippet.split("\\n")
-        if len(snippet_lines) > lines:
-            snippet = "\\n".join(snippet_lines[:lines]) + "\\n..."
-
-        logging.info(f"--- Verifying code in {filepath} ---")
-        # logging.info(f"Snippet around '{start_marker}':\\n{snippet}")
-        logging.info(f"--- End verification for {filepath} ---")
-        # Check for OpenAI client initialization
-        if "OpenAI(api_key=" in snippet:
-            logging.info(
-                f"Verification successful: OpenAI client initialization found in {filepath} snippet."
-            )
-        else:
-            logging.warning(
-                f"Verification FAILED: OpenAI client initialization NOT found in {filepath} snippet."
-            )
-
-    except Exception as e:
-        logging.error(f"Code verification: Error reading {filepath}: {str(e)}")
-
-
-try:
-    # Get the directory of the current script
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Log diagnostic_system.py snippet
-    ds_path = os.path.join(current_dir, "diagnostic_system.py")
-    log_file_snippet(ds_path, "def check_openai(self):", "def check_file_system(self):")
-
-    # Log embeddings.py snippet
-    emb_path = os.path.join(current_dir, "embeddings.py")
-    log_file_snippet(
-        emb_path, "class SemanticMatcher:", "def process_keywords_and_resume"
-    )
-
-    # Log enhancer.py snippet
-    enh_path = os.path.join(current_dir, "enhancer.py")
-    log_file_snippet(enh_path, "class ResumeEnhancer:", "def enhance_resume")
-
-except Exception as e:
-    logging.error(f"Code verification: Top-level error during file reading: {str(e)}")
-# --- END CODE VERIFICATION LOGGING ---
 
 # Load environment variables
 load_dotenv()
@@ -208,61 +142,6 @@ def extract_text_from_file(file_path: Path) -> str:
         raise IOError(f"Failed to process file {file_path.name}: {e}") from e
 
 
-def call_openai_api(system_prompt, user_prompt, max_retries=3):
-    """Call OpenAI API with retry logic and proper error handling."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        logger.critical(
-            "OPENAI_API_KEY environment variable is not set. Cannot proceed without API key."
-        )
-        raise ValueError(
-            "OpenAI API key is not configured. Please set the OPENAI_API_KEY environment variable."
-        )
-    
-    base_url = "https://api.openai.com/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    
-    data = {
-        "model": "gpt-3.5-turbo",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.5,
-    }
-    
-    for attempt in range(1, max_retries + 1):
-        try:
-            logger.info(f"Making OpenAI API request (attempt {attempt}/{max_retries})")
-            response = requests.post(base_url, headers=headers, json=data, timeout=30)
-            logger.info(f"OpenAI API response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                result = response.json()
-                if "choices" in result and len(result["choices"]) > 0:
-                    return result["choices"][0]["message"]["content"]
-                raise ValueError("Invalid response format from OpenAI API")
-            elif response.status_code == 401:
-                raise ValueError("OpenAI API key is invalid")
-            else:
-                logger.error(
-                    f"OpenAI API request failed with status {response.status_code}: {response.text}"
-                )
-                if attempt < max_retries:
-                    time.sleep(2**attempt)  # Exponential backoff
-                else:
-                    raise ValueError(
-                        f"OpenAI API request failed after {max_retries} attempts"
-                    )
-        except requests.exceptions.RequestException as e:
-            logger.error(f"OpenAI API request error: {str(e)}")
-            if attempt < max_retries:
-                time.sleep(2**attempt)
-            else:
-                raise ValueError(f"OpenAI API request error: {str(e)}")
-    
-    # This should not be reached due to the raise in the loop, but just in case
-    raise ValueError("Failed to get a response from OpenAI API")
 
 
 def parse_resume(resume_text):
