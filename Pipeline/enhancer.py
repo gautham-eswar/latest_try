@@ -238,23 +238,24 @@ class ResumeEnhancer:
     
     def _enhance_bullet_with_keywords(self, bullet: str, keywords: List[Dict[str, Any]]) -> str:
         """
-        Enhance a bullet point with multiple keywords.
+        Enhance a single bullet point with given keywords using OpenAI.
         
         Args:
-            bullet: Original bullet text
-            keywords: Keywords to incorporate
+            bullet: The original bullet point text
+            keywords: List of keyword dictionaries to incorporate
             
         Returns:
-            str: Enhanced bullet text
+            str: The enhanced bullet point, or the original if enhancement fails.
         """
-        # Prepare keyword information for prompt
-        keyword_text = ""
-        for idx, kw in enumerate(keywords):
-            keyword_text += f"{idx+1}. {kw['keyword']}\\n   Context from job description: {kw['context']}\\n"
+        if not keywords:
+            return bullet
+
+        # Prepare keyword list for prompt
+        keyword_text = ", ".join([f"'{kw['keyword']}' ({kw['skill_type']})" for kw in keywords])
         
-        # Create prompt for bullet enhancement
+        # Construct the prompt with stronger emphasis on conciseness
         prompt = f"""
-        Task: Enhance the following resume bullet point by naturally incorporating the specified keywords.
+        Task: Enhance the following resume bullet point by naturally and CONCISELY incorporating the specified keywords.
 
         Original bullet point:
         "{bullet}"
@@ -263,45 +264,45 @@ class ResumeEnhancer:
         {keyword_text}
 
         Requirements:
-        1. MUST include ALL the keywords in the enhanced bullet point
-        2. MUST preserve ALL numbers, percentages, and metrics EXACTLY as they appear
-        3. MUST maintain the original meaning, achievements, and scope of work
-        4. MUST keep the same professional tone and tense
-        5. Changes should be minimal and natural - only make changes needed to incorporate keywords
-        6. Final bullet MUST sound natural and professional
-        7. If impossible to include all keywords naturally, prioritize the ones listed first
+        1. MUST include ALL the keywords in the enhanced bullet point.
+        2. MUST preserve ALL numbers, percentages, and metrics EXACTLY as they appear.
+        3. MUST maintain the original meaning, achievements, and scope of work.
+        4. MUST keep the same professional tone and tense.
+        5. Changes should be MINIMAL and NATURAL - only make changes absolutely necessary to incorporate keywords.
+        6. The final bullet point MUST be CONCISE and flow naturally. AVOID unnecessary words or overly complex sentences.
+        7. If impossible to include all keywords naturally, prioritize the ones listed first.
 
         Enhanced bullet point:
         """
         
+        logger.debug(f"Enhancing bullet: '{bullet[:50]}...' with keywords: {keyword_text}")
+        logger.debug(f"Prompt sent to OpenAI:\\n{prompt}")
+
         try:
-            # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional resume writer specializing in keyword optimization while maintaining factual accuracy."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": "You are an expert resume editor."},
+                    {"role": "user", "content": prompt},
                 ],
-                temperature=0.3,  # Lower temperature for more consistent output
-                max_tokens=512
+                max_tokens=150,  # Keep max tokens reasonable
+                temperature=0.3, # Lower temperature for more predictable output
             )
             
-            # Extract the enhanced bullet
+            # Extract the enhanced bullet point from the response
             enhanced_bullet = response.choices[0].message.content.strip()
             
-            # Clean up the response (remove quotes if present)
-            if enhanced_bullet.startswith('"') and enhanced_bullet.endswith('"'):
-                enhanced_bullet = enhanced_bullet[1:-1]
-            
-            # Clean up any extra spaces
-            enhanced_bullet = re.sub(r'\s+', ' ', enhanced_bullet).strip()
-            
+            # Basic check for empty response
+            if not enhanced_bullet:
+                logger.warning("OpenAI returned an empty response for bullet enhancement.")
+                return bullet
+
+            logger.info(f"Successfully enhanced bullet: '{bullet[:30]}...' -> '{enhanced_bullet[:50]}...'")
             return enhanced_bullet
-            
+
         except Exception as e:
-            logger.error(f"Error enhancing bullet: {str(e)}")
-            # Return original if enhancement fails
-            return bullet
+            logger.error(f"Error enhancing bullet '{bullet[:50]}...': {str(e)}")
+            return bullet # Return original bullet on error
     
     def _validate_enhancement(self, original: str, enhanced: str, keywords: List[str]) -> bool:
         """
