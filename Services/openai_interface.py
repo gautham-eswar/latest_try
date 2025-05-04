@@ -1,5 +1,3 @@
-
-
 import logging
 import os
 import sys
@@ -26,7 +24,7 @@ if not OPENAI_API_KEY:
 
 OPENAI_API_BASE = "https://api.openai.com/v1"
 
-def call_openai_api(system_prompt, user_prompt, max_retries=3):
+def call_openai_api(system_prompt, user_prompt, max_retries=3, model="gpt-4o"):
     """Call OpenAI API with retry logic and proper error handling."""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
@@ -41,7 +39,7 @@ def call_openai_api(system_prompt, user_prompt, max_retries=3):
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
     data = {
-        "model": "gpt-3.5-turbo",
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
