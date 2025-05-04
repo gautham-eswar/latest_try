@@ -1,50 +1,109 @@
-Parse the following resume text into a structured JSON format. Include the following sections:
-1. Personal Information (name, email, phone, location, website/LinkedIn)
-2. Summary/Objective
-3. Skills - categorize skills into:
-    - Technical Skills: Programming languages, tools, software, technical methodologies
-    - Soft Skills: Communication, leadership, teamwork, etc.
-4. Experience - For each position, extract:
-    - company
-    - title
-    - location (city, state, country, and if remote work is mentioned)
-    - employment_type (full-time, part-time, contract, internship)
-    - dates (start_date, end_date or "Present") (If there's only one date, it's the end_date)
-    - responsibilities/achievements (as an array of bullet points)
-5. Education - For each entry, extract:
-    - university (institution name)
-    - location (city, state, country)
-    - degree (type of degree: BA, BS, MS, PhD, etc.)
-    - specialization (major/field of study)
-    - honors (any honors, distinctions, awards)
-    - start_date (year)
-    - end_date (year or "Present")
-    - gpa (if available)
-    - additional_info (courses, activities, or any other relevant information)
-6. Projects (title, description, technologies used) (if the description has multiple bullet points, make sure to include them all in a structured manner)
-7. Certifications/Awards
-8. Languages
-9. Publications - For each publication:
-    - title
-    - authors
-    - journal/conference
-    - date
-    - url (if available)
-10. Volunteer Experience - For each position:
-    - organization
-    - role
-    - location
-    - dates
-    - description
-11. Misc (other sections that don't fit above)
+Your task is to meticulously parse the following resume text and structure it into a detailed JSON object. Adhere strictly to the specified format and pay close attention to extracting complete and accurate information, especially for bullet points within Experience and Projects.
 
-For the Skills section, be very careful to correctly categorize technical vs soft skills.
-Technical skills include specific tools, technologies, programming languages, and technical methodologies.
-Soft skills include interpersonal abilities, communication skills, character traits, and other leadership skills.
+JSON Output Structure:
+```json
+{
+  "Personal Information": {
+    "name": "string | null",
+    "email": "string | null",
+    "phone": "string | null",
+    "location": "string | null",
+    "website/LinkedIn": "string | null"
+  },
+  "Summary/Objective": "string | null",
+  "Skills": {
+    "Technical Skills": [
+      "string"
+    ],
+    "Soft Skills": [
+      "string"
+    ]
+  },
+  "Experience": [
+    {
+      "company": "string | null",
+      "title": "string | null",
+      "location": "string | null",
+      "employment_type": "string | null",
+      "dates": {
+        "start_date": "string (MM/YY or YYYY) | null",
+        "end_date": "string (MM/YY or YYYY or 'Present') | null"
+      },
+      "responsibilities/achievements": [
+        "string (complete bullet point)"
+      ]
+    }
+  ],
+  "Education": [
+    {
+      "university": "string | null",
+      "location": "string | null",
+      "degree": "string | null",
+      "specialization": "string | null",
+      "honors": "string | null",
+      "start_date": "string (YYYY) | null",
+      "end_date": "string (YYYY or 'Present') | null",
+      "gpa": "number | null",
+      "additional_info": "string | null"
+    }
+  ],
+  "Projects": [
+    {
+      "title": "string | null",
+      "description": [
+        "string (complete bullet point or paragraph)"
+      ],
+      "technologies_used": "string | null"
+    }
+  ],
+  "Certifications/Awards": [
+    "string"
+  ],
+  "Languages": [
+    {
+      "language": "string",
+      "proficiency": "string | null"
+    }
+  ],
+  "Publications": [
+    {
+      "title": "string | null",
+      "authors": "string | null",
+      "journal/conference": "string | null",
+      "date": "string | null",
+      "url": "string | null"
+    }
+  ],
+  "Volunteer Experience": [
+    {
+      "organization": "string | null",
+      "role": "string | null",
+      "location": "string | null",
+      "dates": {
+        "start_date": "string (MM/YY or YYYY) | null",
+        "end_date": "string (MM/YY or YYYY or 'Present') | null"
+      },
+      "description": "string | null"
+    }
+  ],
+  "Misc": "string | null"
+}
+```
+
+Parsing Instructions:
+
+1.  **Accuracy is Paramount:** Extract information precisely as it appears in the resume.
+2.  **Completeness:** Ensure all sections and fields defined in the JSON structure are populated if the information exists in the text. Use `null` if information is missing for a specific field.
+3.  **Bullet Points (CRITICAL):**
+    *   For `Experience -> responsibilities/achievements` and `Projects -> description`, extract each bullet point as a *complete, single string* within the array.
+    *   Carefully handle line breaks within a single bullet point; do *not* split a multi-line bullet point into multiple strings.
+    *   Preserve the original wording and formatting of each bullet point as much as possible.
+4.  **Dates:** Extract dates accurately. If only a year is provided, use the year. Use 'Present' if applicable.
+5.  **Skills Categorization:** Correctly differentiate between `Technical Skills` (specific tools, languages, software, methodologies) and `Soft Skills` (interpersonal abilities, communication, leadership).
+6.  **Null Values:** If a section (e.g., Volunteer Experience) or a specific field within an object (e.g., GPA) is not present in the resume, represent it as `null` in the JSON (or an empty array `[]` for list fields like Skills, Experience, etc., if the entire section is absent).
+7.  **Output Format:** Return ONLY the valid JSON object conforming to the structure above. Do not include any explanations, comments, or markdown formatting around the JSON.
 
 RESUME TEXT TO PARSE:
 ---RESUME_START---
 @resume_text
 ---RESUME_END---
-
-Return ONLY the JSON object.

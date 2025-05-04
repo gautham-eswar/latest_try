@@ -83,7 +83,8 @@ def parse_resume(resume_text):
     with open("Pipeline/prompts/parse_resume.txt") as file:
         user_prompt = file.read().replace("@resume_text", resume_text)
     
-    result = call_openai_api(system_prompt, user_prompt)
+    # Specify gpt-4o-mini for parsing
+    result = call_openai_api(system_prompt, user_prompt, model="gpt-4o-mini") 
 
     
     # Extract JSON from the result (might be wrapped in markdown code blocks)
