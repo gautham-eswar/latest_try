@@ -32,7 +32,7 @@ class ResumeEnhancer:
     Enhance resume bullet points with keywords while preserving meaning.
     """
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-3.5-turbo"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         """
         Initialize the ResumeEnhancer with OpenAI API key.
         
