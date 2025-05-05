@@ -178,9 +178,9 @@ def create_app():
     @app.route("/api/upload", methods=["POST"])
     def upload_resume_endpoint():
         """Upload, parse, and save a resume file to Supabase."""
-        logger.info(f"Files: {request.files.keys()}")
+        logger.info(f"Files: {request.form.keys()}")
 
-        if "user_id" not in request.files:
+        if "user_id" not in request.form.keys():
             return error_response(
                 "MissingUserId", f"No User ID provided in the request", 400
             )
@@ -189,7 +189,7 @@ def create_app():
                 "MissingFile", "No file in the request", 400
             )
 
-        user_id = request.files["user_id"]
+        user_id = request.form["user_id"]
         file = request.files["file"]
         
         if get_file_ext(file) not in ALLOWED_EXTENSIONS:
