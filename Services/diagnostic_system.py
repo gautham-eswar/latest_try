@@ -1272,7 +1272,7 @@ def track_transaction(diagnostic_system):
         return decorated_function
     return decorator 
 
-diagnostic_sistem = None
+diagnostic_sistem:DiagnosticSystem = None
 def get_diagnostic_system():
     global diagnostic_sistem
 

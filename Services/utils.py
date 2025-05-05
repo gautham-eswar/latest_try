@@ -41,22 +41,7 @@ def format_size(size_bytes):
         size_bytes /= 1024.0
     return f"{size_bytes:.2f} PB"
 
-# Utility function for creating error responses
-def create_error_response(error_type, message, status_code):
-    """Create a standardized error response following the error schema."""
-    return (
-        jsonify(
-            {
-        "error": error_type,
-        "message": message,
-        "status_code": status_code,
-                "transaction_id": getattr(g, "transaction_id", None)
-                or str(uuid.uuid4()),
-                "timestamp": datetime.now().isoformat(),
-            }
-        ),
-        status_code,
-    )
+
 
 
 def get_component_status():

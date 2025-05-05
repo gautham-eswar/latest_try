@@ -13,11 +13,19 @@ from Pipeline.latex_generation import generate_latex_resume
 from Pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
+from Services.errors import error_response
 
 
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
+
+
+def get_file_ext(file):
+    file_ext = (
+        file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
+    )
+    return file_ext
 
 diagnostic_system = get_diagnostic_system()
 
@@ -27,143 +35,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def upload_resume(app, file):
+def upload_resume(file, user_id):
 
-    if file.filename == "":
-        return app.create_error_response("EmptyFile", "No file selected", 400)
-    
-    # Check if the file has an allowed extension
-    allowed_extensions = ALLOWED_EXTENSIONS
-    file_ext = (
-        file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
-    )
-    if file_ext not in allowed_extensions:
-        return app.create_error_response(
-            "InvalidFileType",
-            f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}", 
-            400,
-        )
-    
     # Generate a unique ID for the resume
     resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
-    file_ext = (
-        file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
+
+    # Save file temporarily
+    file_ext = get_file_ext(file)
+    temp_filename = secure_filename(f"{resume_id}.{file_ext}")
+    file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+    file.save(file_path)
+
+    # Parse the resume
+    resume_text = extract_text_from_file(Path(file_path))
+    parsed_resume = parse_resume(resume_text)
+
+    # Upload resume to database
+    db = get_db()
+    response = db.table("resumes").insert({
+        "id": resume_id,
+        "user_id": user_id,
+        "data": parsed_resume,
+        "filename": file.filename, 
+    }).execute()
+
+    # Error or return
+    if not (hasattr(response, "data") and response.data):
+        raise Exception(
+            f"Database error: Failed to confirm insert. Details: {
+                getattr(response, "error", "Unknown error")
+            }"
+        )
+    return jsonify(
+        {
+        "status": "success",
+        "message": "Resume uploaded and parsed successfully",
+        "resume_id": resume_id,
+            "data": parsed_resume,
+        }
     )
-    filename = secure_filename(f"{resume_id}.{file_ext}")
-    file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-
-    db = None  # Initialize db to None
-    try:
-        # 1. Save the uploaded file locally (optional, could upload directly to Supabase storage)
-        file.save(file_path)
-        logger.info(f"Saved uploaded file locally to: {file_path}")
-        
-        # 2. Extract text from the file
-        logger.info("Extracting text from uploaded file...")
-        resume_text = extract_text_from_file(Path(file_path))
-        logger.info(f"Extracted {len(resume_text)} characters.")
-        
-        # 3. Parse the resume text using OpenAI
-        logger.info("Parsing resume text using OpenAI...")
-        parsed_resume = parse_resume(resume_text)
-        logger.info("Resume parsed successfully.")
-
-        # 4. Save parsed data to Supabase
-        logger.info(f"Attempting to save parsed resume {resume_id} to Supabase...")
-        db = get_db()
-
-        if isinstance(db, FallbackDatabase):
-            logger.warning(
-                f"Using FallbackDatabase for resume {resume_id}. Data will not be persisted."
-            )
-            output_file = os.path.join(
-                app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
-            )
-            with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(parsed_resume, f, indent=2)
-            logger.info(
-                f"Saved parsed resume JSON locally (fallback): {output_file}"
-            )
-        else:
-            # Insert into Supabase 'resumes_new' table
-            logger.info(f"Inserting into Supabase table: resumes_new")
-            data_to_insert = {
-                "id": resume_id,
-                "parsed_data": parsed_resume,
-                "original_filename": file.filename,  # Store original filename
-            }
-            try:
-                response = db.table("resumes_new").insert(data_to_insert).execute()
-                # More specific error check
-                # Note: Supabase Python V1 might not populate .error correctly on insert,
-                # checking for non-empty data is often more reliable for success.
-                if not (hasattr(response, "data") and response.data):
-                    logger.error(
-                        f"Supabase insert for {resume_id} into resumes_new returned no data, assuming failure."
-                    )
-                    # Attempt to get potential error details if possible (structure might vary)
-                    error_details = getattr(response, "error", None) or getattr(
-                        response, "message", "Unknown insert error"
-                    )
-                    raise Exception(
-                        f"Database error: Failed to confirm insert. Details: {error_details}"
-                    )
-                else:
-                    logger.info(
-                        f"Successfully saved parsed resume {resume_id} to Supabase (resumes_new)."
-                    )
-            except PostgrestAPIError as db_e:
-                logger.error(
-                    f"Supabase insert error for {resume_id} (Code: {db_e.code}): {db_e.message}",
-                    exc_info=True,
-                )
-                logger.error(
-                    f"DB Error Details: {db_e.details} | Hint: {db_e.hint}"
-                )
-                raise Exception(f"Database error ({db_e.code}): {db_e.message}")
-            except Exception as db_e:
-                logger.error(
-                    f"Unexpected error during Supabase insert for {resume_id}: {db_e}",
-                    exc_info=True,
-                )
-                raise  # Re-raise unexpected errors
-
-        # 5. Return success response
-        return jsonify(
-            {
-            "status": "success",
-            "message": "Resume uploaded and parsed successfully",
-            "resume_id": resume_id,
-                "data": parsed_resume,
-            }
-        )
-
-    except Exception as e:
-        # Log the full error with traceback for debugging
-        logger.error(
-            f"Error processing uploaded resume {resume_id}: {str(e)}", exc_info=True
-        )
-        # Track error in diagnostic system
-        if diagnostic_system:
-            diagnostic_system.increment_error_count(
-                f"UploadError_{e.__class__.__name__}", str(e)
-            )
-        # Attempt to clean up the saved local file if it exists
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-                logger.info(f"Cleaned up local file on error: {file_path}")
-            except OSError as rm_err:
-                logger.warning(
-                    f"Could not clean up local file {file_path} on error: {rm_err}"
-                )
-
-        return app.create_error_response(
-            "ProcessingError", 
-            f"Error processing resume: {e.__class__.__name__} - {str(e)}",
-            500,
-        )
-    
 
 def download_resume(app, resume_id, format_type):
     if format_type not in ["json", "pdf", "latex"]:

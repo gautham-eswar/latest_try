@@ -21,10 +21,10 @@ from Endpoints.health import health_page
 from Endpoints.status import status_page
 
 from Pipeline.optimizer import enhance_resume
-from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, upload_resume
+from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext, is_valid_upload_file, upload_resume
 
 from Services.diagnostic_system import get_diagnostic_system
-from Services.utils import create_error_response
+from Services.errors import error_response
 
 
 # Load environment variables
@@ -123,7 +123,7 @@ def create_app():
     
     
     # Make utility function available to route handlers
-    app.create_error_response = create_error_response
+    app.create_error_response = error_response
     
     # Basic routes
     @app.route("/")
@@ -178,13 +178,38 @@ def create_app():
     @app.route("/api/upload", methods=["POST"])
     def upload_resume_endpoint():
         """Upload, parse, and save a resume file to Supabase."""
+
+        if "user_id" not in request.files:
+            return error_response(
+                "MissingUserId", "Invalid User ID", 400
+            )
         if "file" not in request.files:
-            return app.create_error_response(
+            return error_response(
                 "MissingFile", "No file part in the request", 400
             )
 
+        user_id = request.files["user_id"]
         file = request.files["file"]
-        return upload_resume(app, file)
+        
+        if get_file_ext(file) not in ALLOWED_EXTENSIONS:
+            return error_response(
+            "InvalidFileType",
+            f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}", 
+            400,
+        )
+
+        try:
+            return upload_resume(file, user_id)
+        except Exception as e:
+            logger.error(
+                f"Error parsing/uploading resume: {str(e)}",
+                exc_info=True,
+            )
+            return error_response(
+                "Upload error", f"Error parsing/uploading resume: {str(e)}", 500
+            )
+
+
 
     @app.route("/api/optimize", methods=["POST"])
     def optimize_resume_endpoint():
@@ -199,6 +224,7 @@ def create_app():
                     return app.create_error_response(
                         "MissingData", "No JSON data in request", 400
                     )
+                
             except json.JSONDecodeError:
                 return app.create_error_response(
                     "InvalidJSON", "Could not parse JSON data", 400
@@ -207,11 +233,12 @@ def create_app():
             return app.create_error_response(
                 "InvalidContentType", "Content-Type must be application/json", 400
             )
-        
-        job_id = None  # Initialize job_id for diagnostics
-        overall_status = "error"  # Default status
+        job_id = None
         try:
-            return enhance_resume(data)
+            resume_id = data.get("resume_id")
+            job_description_data = data.get("job_description") 
+                 
+            return enhance_resume(resume_id, job_description_data)
             
         except Exception as e:
             # Error already logged in specific stage or here
