@@ -21,19 +21,16 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upload
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 
 
-def get_file_ext(file):
-    file_ext = (
-        file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
-    )
-    return file_ext
-
-diagnostic_system = get_diagnostic_system()
-
 logging.basicConfig(
     level=logging.INFO, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+def get_file_ext(file):
+    file_ext = (
+        file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
+    )
+    return file_ext
 
 def upload_resume(file, user_id):
 
@@ -61,10 +58,9 @@ def upload_resume(file, user_id):
 
     # Error or return
     if not (hasattr(response, "data") and response.data):
+        error_text = getattr(response, "error", "Unknown error")
         raise Exception(
-            f"Database error: Failed to confirm insert. Details: {
-                getattr(response, "error", "Unknown error")
-            }"
+            f"Database error: Failed to confirm insert. Details: {error_text}"
         )
     return jsonify(
         {
