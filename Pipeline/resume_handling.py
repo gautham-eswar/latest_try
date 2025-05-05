@@ -59,6 +59,10 @@ def upload_resume(file, user_id):
     # Error or return
     if not (hasattr(response, "data") and response.data):
         error_text = getattr(response, "error", "Unknown error")
+        logger.error(
+            f"Error parsing/uploading resume: {error_text}",
+            exc_info=True,
+        )
         raise Exception(
             f"Database error: Failed to confirm insert. Details: {error_text}"
         )
