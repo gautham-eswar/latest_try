@@ -21,7 +21,7 @@ from Endpoints.health import health_page
 from Endpoints.status import status_page
 
 from Pipeline.optimizer import enhance_resume
-from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext, is_valid_upload_file, upload_resume
+from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext, upload_resume
 
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
@@ -178,7 +178,7 @@ def create_app():
     @app.route("/api/upload", methods=["POST"])
     def upload_resume_endpoint():
         """Upload, parse, and save a resume file to Supabase."""
-        
+
         if "user_id" not in request.files:
             return error_response(
                 "MissingUserId", "Invalid User ID", 400
