@@ -178,6 +178,7 @@ def create_app():
     @app.route("/api/upload", methods=["POST"])
     def upload_resume_endpoint():
         """Upload, parse, and save a resume file to Supabase."""
+        logger.info(f"Files: {request.files.keys()}")
 
         if "user_id" not in request.files:
             return error_response(
