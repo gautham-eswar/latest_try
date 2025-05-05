@@ -53,7 +53,7 @@ def upload_resume(file, user_id):
         "id": resume_id,
         "user_id": user_id,
         "data": parsed_resume,
-        "filename": file.filename, 
+        "file_name": file.filename, 
     }).execute()
 
     # Error or return
