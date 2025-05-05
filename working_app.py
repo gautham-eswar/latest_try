@@ -181,7 +181,7 @@ def create_app():
 
         if "user_id" not in request.files:
             return error_response(
-                "MissingUserId", "Invalid User ID", 400
+                "MissingUserId", f"Invalid User ID \"{user_id}\"", 400
             )
         if "file" not in request.files:
             return error_response(
