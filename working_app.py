@@ -20,8 +20,10 @@ from Endpoints.diagnostics import diagnostics_page
 from Endpoints.health import health_page
 from Endpoints.status import status_page
 
+from Pipeline.resume_uploading import parse_and_upload_resume
 from Pipeline.optimizer import enhance_resume
-from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext, upload_resume
+from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
+
 
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
@@ -200,7 +202,7 @@ def create_app():
         )
 
         try:
-            return upload_resume(file, user_id)
+            return parse_and_upload_resume(file, user_id)
         except Exception as e:
             logger.error(
                 f"Error parsing/uploading resume: {str(e)}",

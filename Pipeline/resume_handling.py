@@ -10,7 +10,6 @@ from postgrest import APIError as PostgrestAPIError  # Import Supabase error typ
 from werkzeug.utils import secure_filename
 
 from Pipeline.latex_generation import generate_latex_resume
-from Pipeline.resume_parsing import extract_text_from_file, parse_resume
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
@@ -31,49 +30,6 @@ def get_file_ext(file):
         file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
     )
     return file_ext
-
-def upload_resume(file, user_id):
-
-    # Generate a unique ID for the resume
-    resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
-
-    # Save file temporarily
-    file_ext = get_file_ext(file)
-    temp_filename = secure_filename(f"{resume_id}.{file_ext}")
-    file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
-    file.save(file_path)
-
-    # Parse the resume
-    resume_text = extract_text_from_file(Path(file_path))
-    parsed_resume = parse_resume(resume_text)
-
-    # Upload resume to database
-    db = get_db()
-    response = db.table("resumes").insert({
-        "id": resume_id,
-        "user_id": user_id,
-        "data": parsed_resume,
-        "file_name": file.filename, 
-    }).execute()
-
-    # Error or return
-    if not (hasattr(response, "data") and response.data):
-        error_text = getattr(response, "error", "Unknown error")
-        logger.error(
-            f"Error parsing/uploading resume: {error_text}",
-            exc_info=True,
-        )
-        raise Exception(
-            f"Database error: Failed to confirm insert. Details: {error_text}"
-        )
-    return jsonify(
-        {
-        "status": "success",
-        "message": "Resume uploaded and parsed successfully",
-        "resume_id": resume_id,
-            "data": parsed_resume,
-        }
-    )
 
 def download_resume(app, resume_id, format_type):
     if format_type not in ["json", "pdf", "latex"]:
