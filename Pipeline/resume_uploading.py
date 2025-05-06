@@ -10,7 +10,7 @@ import uuid
 from PyPDF2 import PdfReader
 import docx2txt
 from flask import jsonify
-from Pipeline.resume_loading import UPLOAD_FOLDER, get_file_ext
+from Pipeline.resume_loading import ALLOWED_EXTENSIONS, UPLOAD_FOLDER, get_file_ext
 from werkzeug.utils import secure_filename
 
 from Services.database import get_db
@@ -28,8 +28,13 @@ def parse_and_upload_resume(file, user_id):
     # Generate a unique ID for the resume
     resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
 
-    # Save file temporarily
+    # Make sure the file has the right extension
     file_ext = get_file_ext(file)
+    if get_file_ext(file) not in ALLOWED_EXTENSIONS:
+        raise Exception(f"File type not allowed. Allowed types:\
+                        {', '.join(ALLOWED_EXTENSIONS)}")
+    
+    # Save file temporarily
     temp_filename = secure_filename(f"{resume_id}.{file_ext}")
     file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
     file.save(file_path)
@@ -57,12 +62,15 @@ def parse_and_upload_resume(file, user_id):
         raise Exception(
             f"Database error: Failed to confirm insert. Details: {error_text}"
         )
+    
     return jsonify(
         {
         "status": "success",
         "message": "Resume uploaded and parsed successfully",
-        "resume_id": resume_id,
-            "data": parsed_resume,
+            "data": {
+                "resume_id": resume_id,
+                "parsed_resume": parsed_resume
+                },
         }
     )
 
