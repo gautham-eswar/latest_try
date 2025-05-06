@@ -17,6 +17,8 @@ def get_db() -> Client:
     """Get database client with Supabase priority and fallback."""
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
+    supabase_email = os.environ.get("SUPABASE_EMAIL")
+    supabase_password = os.environ.get("SUPABASE_PASSWORD")
 
     # --- Start Replacement ---
     # --- Start Exact Code ---
@@ -24,6 +26,10 @@ def get_db() -> Client:
         try:
             # Attempt to create a Supabase client
             supabase: Client = create_client(supabase_url, supabase_key)
+            supabase.auth.sign_in_with_password({
+                "email": supabase_email, 
+                "password": supabase_password
+                })
             logger.info("Supabase client created successfully.")
             # ... (Optional connection test commented out) ...
             return supabase

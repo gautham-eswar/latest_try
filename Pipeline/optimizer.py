@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from flask import jsonify
 from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
@@ -25,32 +26,12 @@ logger = logging.getLogger(__name__)
 diagnostic_system = get_diagnostic_system()
 
 
-def enhance_resume(resume_id, user_id, job_description_data):
+def enhance_resume(resume_id, user_id, job_description_text):
 
-    job_id = None  # Initialize job_id for diagnostics
+    job_id = uuid.uuid4()  # Initialize job_id for diagnostics
     overall_status = "error"  # Default status
     
-    if not resume_id:
-        return create_error_response(
-            "MissingParameter", "Missing: resume_id", 400
-        )
-
-    if (
-        not job_description_data
-        or not isinstance(job_description_data, dict)
-        or "description" not in job_description_data
-    ):
-        return create_error_response(
-            "MissingParameter",
-            "Missing or invalid: job_description (must be an object with a 'description' key)",
-            400,
-        )
-
-    job_description_text = job_description_data["description"]
-    if not job_description_text:
-        return create_error_response(
-            "MissingParameter", "Job description text cannot be empty", 400
-        )
+    logger.info(f"Starting resume enhancement: User ID: {user_id} Resume ID: {resume_id} Job Description: {job_description_text[:100]}")
 
     # --- Start Diagnostic Tracking ---
     if diagnostic_system:

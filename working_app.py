@@ -212,8 +212,6 @@ def create_app():
                 "Upload error", f"Error parsing/uploading resume: {str(e)}", 500
             )
 
-
-
     @app.route("/api/optimize", methods=["POST"])
     def optimize_resume_endpoint():
         """Optimize a resume using SemanticMatcher and ResumeEnhancer."""
