@@ -27,12 +27,12 @@ def get_db() -> Client:
             # Attempt to create a Supabase client
             supabase: Client = create_client(supabase_url, supabase_key)
             logger.info("Supabase client created successfully.")
-            resp = supabase.auth.sign_in_with_password({
-                "email": supabase_email, 
-                "password": supabase_password
-                })
+            # resp = supabase.auth.sign_in_with_password({
+            #     "email": supabase_email, 
+            #     "password": supabase_password
+            #     })
             
-            print(str(resp))
+            # print(str(resp))
             # ... (Optional connection test commented out) ...
             return supabase
         except ImportError: # Aligned with try
