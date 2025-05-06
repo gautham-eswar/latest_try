@@ -216,54 +216,36 @@ def create_app():
     def optimize_resume_endpoint():
         """Optimize a resume using SemanticMatcher and ResumeEnhancer."""
         # Handle invalid JSON in the request
-        if request.content_type == "application/json":
-            try:
-                data = json.loads(
-                    request.data.decode("utf-8") if request.data else "{}"
-                )
-                if not data:
-                    return app.create_error_response(
-                        "MissingData", "No JSON data in request", 400
-                    )
-                
-            except json.JSONDecodeError:
-                return app.create_error_response(
-                    "InvalidJSON", "Could not parse JSON data", 400
-                )
-        else:
-            return app.create_error_response(
-                "InvalidContentType", "Content-Type must be application/json", 400
+
+        if "user_id" not in request.form.keys():
+            return error_response(
+                "MissingUserId", f"No User ID provided in the request", 400
             )
-        job_id = None
+        if "resume_id" not in request.form.keys():
+            return error_response(
+                "MissingResumeId", f"No Resume ID provided in the request", 400
+            )
+        if "job_description" not in request.form.keys():
+            return error_response(
+                "MissingJobDescription", f"No job description provided", 400
+            )
+        
         try:
-            resume_id = data.get("resume_id")
-            job_description_data = data.get("job_description") 
-                 
-            return enhance_resume(resume_id, job_description_data)
-            
+            resume_id = request.form["resume_id"]
+            user_id = request.form["user_id"]
+            job_description = request.form["job_description"]
+
+            return enhance_resume(resume_id, user_id, job_description)
+        
         except Exception as e:
-            # Error already logged in specific stage or here
             logger.error(
-                f"Job {job_id}: Optimization failed: {e.__class__.__name__} - {str(e)}",
+                f"Error enhancing resume: {str(e)}",
                 exc_info=True,
             )
-            overall_status = "error"
-            if diagnostic_system:
-                diagnostic_system.increment_error_count(
-                    f"OptimizeError_{e.__class__.__name__}", str(e)
-                )
-            return app.create_error_response(
-                "ProcessingError",
-                f"Error optimizing resume: {e.__class__.__name__} - {str(e)}",
-                500,
-            )
-        finally:
-            # --- Complete Diagnostic Tracking ---
-            if diagnostic_system and job_id:
-                logger.info(
-                    f"Completing diagnostic job {job_id} with status {overall_status}"
-                )
-                diagnostic_system.complete_pipeline_job(job_id, overall_status)
+            return error_response(
+                "Optimization error", 
+                f"""Error optimizing resume: {str(e)}. Resume ID:{resume_id}""",
+                500)
 
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])
     def download_resume_endpoint(resume_id, format_type):

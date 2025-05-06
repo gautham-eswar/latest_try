@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 diagnostic_system = get_diagnostic_system()
 
 
-def enhance_resume(resume_id, job_description_data):
+def enhance_resume(resume_id, user_id, job_description_data):
 
     job_id = None  # Initialize job_id for diagnostics
     overall_status = "error"  # Default status
