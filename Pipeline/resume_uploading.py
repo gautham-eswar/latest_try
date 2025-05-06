@@ -10,7 +10,7 @@ import uuid
 from PyPDF2 import PdfReader
 import docx2txt
 from flask import jsonify
-from Pipeline.resume_handling import UPLOAD_FOLDER, get_file_ext
+from Pipeline.resume_loading import UPLOAD_FOLDER, get_file_ext
 from werkzeug.utils import secure_filename
 
 from Services.database import get_db
@@ -22,6 +22,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def parse_and_upload_resume(file, user_id):
+
+    # Generate a unique ID for the resume
+    resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
+
+    # Save file temporarily
+    file_ext = get_file_ext(file)
+    temp_filename = secure_filename(f"{resume_id}.{file_ext}")
+    file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
+    file.save(file_path)
+
+    # Parse the resume
+    resume_text = extract_text_from_file(Path(file_path))
+    parsed_resume = parse_resume(resume_text)
+
+    # Upload resume to database
+    db = get_db()
+    response = db.table("resumes").insert({
+        "id": resume_id,
+        "user_id": user_id,
+        "data": parsed_resume,
+        "file_name": file.filename, 
+    }).execute()
+
+    # Error or return
+    if not (hasattr(response, "data") and response.data):
+        error_text = getattr(response, "error", "Unknown error")
+        logger.error(
+            f"Error parsing/uploading resume: {error_text}",
+            exc_info=True,
+        )
+        raise Exception(
+            f"Database error: Failed to confirm insert. Details: {error_text}"
+        )
+    return jsonify(
+        {
+        "status": "success",
+        "message": "Resume uploaded and parsed successfully",
+        "resume_id": resume_id,
+            "data": parsed_resume,
+        }
+    )
 
 def extract_text_from_file(file_path: Path) -> str:
     """Extract text from TXT, PDF, and DOCX files."""
@@ -104,46 +147,3 @@ def parse_resume(resume_text):
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON from OpenAI: {e}")
         raise ValueError("Failed to parse structured data from resume")
-
-def parse_and_upload_resume(file, user_id):
-
-    # Generate a unique ID for the resume
-    resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
-
-    # Save file temporarily
-    file_ext = get_file_ext(file)
-    temp_filename = secure_filename(f"{resume_id}.{file_ext}")
-    file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
-    file.save(file_path)
-
-    # Parse the resume
-    resume_text = extract_text_from_file(Path(file_path))
-    parsed_resume = parse_resume(resume_text)
-
-    # Upload resume to database
-    db = get_db()
-    response = db.table("resumes").insert({
-        "id": resume_id,
-        "user_id": user_id,
-        "data": parsed_resume,
-        "file_name": file.filename, 
-    }).execute()
-
-    # Error or return
-    if not (hasattr(response, "data") and response.data):
-        error_text = getattr(response, "error", "Unknown error")
-        logger.error(
-            f"Error parsing/uploading resume: {error_text}",
-            exc_info=True,
-        )
-        raise Exception(
-            f"Database error: Failed to confirm insert. Details: {error_text}"
-        )
-    return jsonify(
-        {
-        "status": "success",
-        "message": "Resume uploaded and parsed successfully",
-        "resume_id": resume_id,
-            "data": parsed_resume,
-        }
-    )

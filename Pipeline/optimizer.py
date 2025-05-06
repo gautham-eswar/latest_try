@@ -7,10 +7,12 @@ import time
 import uuid
 
 from flask import jsonify
-from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
+from postgrest import APIError as PostgrestAPIError
+from supabase import Client  # Import Supabase error type
 
+from Pipeline.job_tracking import create_optimization_job
 from Pipeline.keyword_extraction import extract_keywords
-from Pipeline.resume_handling import OUTPUT_FOLDER, UPLOAD_FOLDER
+from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, fetch_resume_data
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
@@ -28,131 +30,26 @@ diagnostic_system = get_diagnostic_system()
 
 def enhance_resume(resume_id, user_id, job_description_text):
 
-    job_id = uuid.uuid4()  # Initialize job_id for diagnostics
-    overall_status = "error"  # Default status
-    
     logger.info(f"Starting resume enhancement: User ID: {user_id} Resume ID: {resume_id} Job Description: {job_description_text[:100]}")
 
-    # --- Start Diagnostic Tracking ---
-    if diagnostic_system:
-        # Use resume_id and maybe part of job desc for job identifier
-        job_desc_snippet = job_description_text[:50].replace("\n", " ") + "..."
-        job_id = diagnostic_system.start_pipeline_job(
-            resume_id, "api_optimize", job_desc_snippet
-        )
-        if not job_id:
-            logger.warning(
-                f"Failed to start diagnostic pipeline job for resume {resume_id}"
-            )
-            job_id = None  # Ensure it's None if failed
-
-    logger.info(
-        f"Starting optimization for resume_id: {resume_id} (Job ID: {job_id})"
-    )
-
-    # --- Load Original Parsed Resume Data (from Supabase) ---
-    logger.info(
-        f"Loading original parsed resume {resume_id} from Supabase (table: resumes_new)..."
-    )
+    # Initialize Supabase client
     db = get_db()
-    original_resume_data = None
 
-    if isinstance(db, FallbackDatabase):
-        logger.warning(
-            f"Using FallbackDatabase for loading resume {resume_id}."
-        )
-        # Attempt to load from local file as fallback (if saved by upload)
-        resume_file_path = os.path.join(
-            UPLOAD_FOLDER, f"{resume_id}.json"
-        )
-        if os.path.exists(resume_file_path):
-            with open(resume_file_path, "r", encoding="utf-8") as f:
-                original_resume_data = json.load(f)
-            logger.info(f"Loaded resume {resume_id} from local fallback file.")
-        else:
-            logger.error(
-                f"FallbackDatabase active and local file for {resume_id} not found."
-            )
-            return create_error_response(
-                "NotFound", f"Resume {resume_id} not found (fallback).", 404
-            )
-    else:
-        # Fetch from Supabase 'resumes_new' table
-        try:
-            response = (
-                db.table("resumes_new")
-                .select("parsed_data")
-                .eq("id", resume_id)
-                .limit(1)
-                .execute()
-            )
-            if response.data:
-                original_resume_data = response.data[0]["parsed_data"]
-                logger.info(
-                    f"Successfully loaded resume {resume_id} from Supabase."
-                )
-            else:
-                logger.error(f"Resume {resume_id} not found in Supabase.")
-                return create_error_response(
-                    "NotFound", f"Resume {resume_id} not found.", 404
-                )
-        except PostgrestAPIError as db_e:
-            logger.error(
-                f"Error loading resume {resume_id} from Supabase (Code: {db_e.code}): {db_e.message}",
-                exc_info=True,
-            )
-            logger.error(
-                f"DB Error Details: {db_e.details} | Hint: {db_e.hint}"
-            )
-            raise Exception(
-                f"Database error loading resume ({db_e.code}): {db_e.message}"
-            )
-        except Exception as db_e:
-            logger.error(
-                f"Unexpected error loading resume {resume_id} from Supabase: {db_e}",
-                exc_info=True,
-            )
-            raise  # Re-raise unexpected errors
+    # Create optimization task in supabase (for tracking purposes)
+    job_id = create_optimization_job(db, resume_id, user_id, job_description_text)
+    
+    # Get the original parsed resume
+    original_resume_data = fetch_resume_data(db, resume_id, user_id)
 
-    # Ensure we have data before proceeding
-    if not original_resume_data:
-        logger.error(
-            f"Failed to load original_resume_data for {resume_id} after DB/fallback checks."
-        )
-        return create_error_response(
-            "ProcessingError",
-            f"Could not load data for resume {resume_id}",
-            500,
-        )
-
-    # --- Keyword Extraction ---
-    stage_name = "Keyword Extractor"
-    start_time = time.time()
-    keywords_data = None
-    stage_status = "error"
-    stage_message = "Extraction failed"
-    try:
-        logger.info(f"Job {job_id}: Extracting detailed keywords...")
-        keywords_data = extract_keywords(job_description_text)
-        kw_count = len(keywords_data.get("keywords", []))
-        logger.info(
-            f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
-        )
-        stage_status = "healthy"
-        stage_message = f"Extracted {kw_count} keywords"
-    except Exception as e:
-        logger.error(
-            f"Job {job_id}: Keyword Extraction failed: {e}", exc_info=True
-        )
-        stage_message = f"Extraction failed: {e.__class__.__name__}"
-        # Re-raise to stop processing
-        raise
-    finally:
-        duration = time.time() - start_time
-        if diagnostic_system and job_id:
-            diagnostic_system.record_pipeline_stage(
-                job_id, stage_name, stage_status, duration, stage_message
-            )
+    # Extract Keywords from Job description
+    keywords_data = extract_keywords(job_description_text)
+    kw_count = len(keywords_data.get("keywords", []))
+    logger.info(
+        f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
+    )
+    stage_status = "healthy"
+    stage_message = f"Extracted {kw_count} keywords"
+    
 
     # --- Semantic Matching ---
     stage_name = "Semantic Matcher"

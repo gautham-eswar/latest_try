@@ -7,6 +7,7 @@ import uuid
 
 from flask import Response, jsonify
 from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
+from supabase import Client
 from werkzeug.utils import secure_filename
 
 from Pipeline.latex_generation import generate_latex_resume
@@ -30,6 +31,40 @@ def get_file_ext(file):
         file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
     )
     return file_ext
+
+def fetch_resume_data(db:Client, resume_id, user_id):
+
+    logger.info(f"Fetching resume. Resume ID: {resume_id}")
+
+    response = (
+        db.table("resumes")
+        .select("*")
+        .eq("id", resume_id)
+        .single()
+        .execute()
+    )
+
+    if not (hasattr(response, "data") and response.data):
+        error_text = getattr(response, "error", "Unknown error")
+        logger.error(
+            f"Error fetching resume: {error_text}",
+            exc_info=True,
+        )
+        raise Exception(f"Error fetching resume with Resume ID: \
+                        {resume_id}. Error message: {error_text}")
+    
+    if not response.data["user_id"] == user_id:
+        error_msg = f"Error fetching resume with Resume ID: \
+                    {resume_id}. Invalid user"
+        logger.error(
+            error_msg,
+            exc_info=True,
+        )
+        raise Exception(error_msg)
+
+    logger.info(f"Fetched successfully: resume with ID: {resume_id}")
+    return response.data
+
 
 def download_resume(app, resume_id, format_type):
     if format_type not in ["json", "pdf", "latex"]:

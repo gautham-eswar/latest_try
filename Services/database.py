@@ -17,8 +17,6 @@ def get_db() -> Client:
     """Get database client with Supabase priority and fallback."""
     supabase_url = os.environ.get("SUPABASE_URL")
     supabase_key = os.environ.get("SUPABASE_KEY")
-    supabase_email = os.environ.get("SUPABASE_EMAIL")
-    supabase_password = os.environ.get("SUPABASE_PASSWORD")
 
     # --- Start Replacement ---
     # --- Start Exact Code ---
@@ -27,12 +25,7 @@ def get_db() -> Client:
             # Attempt to create a Supabase client
             supabase: Client = create_client(supabase_url, supabase_key)
             logger.info("Supabase client created successfully.")
-            # resp = supabase.auth.sign_in_with_password({
-            #     "email": supabase_email, 
-            #     "password": supabase_password
-            #     })
             
-            # print(str(resp))
             # ... (Optional connection test commented out) ...
             return supabase
         except ImportError: # Aligned with try
@@ -47,7 +40,7 @@ def get_db() -> Client:
     else: # Aligned with if
         logger.warning("SUPABASE_URL or SUPABASE_KEY not set. Using fallback database.")
         return FallbackDatabase() # Indented under else
-    
+
 
 class FallbackDatabase:
     """In-memory fallback database for when the main database is unavailable."""
