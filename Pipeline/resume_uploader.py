@@ -49,8 +49,7 @@ def upload_resume(resume_row):
             f"Database error: Failed to confirm insert. Details: {error_text}"
         )
     logger.info(f"Upload successful for resume with ID: {resume_id}")
-    logger.info(response.data)
-    return response.data
+    return response.data[0]
 
 
 def parse_and_upload_resume(file, user_id):
