@@ -10,6 +10,7 @@ import uuid
 from PyPDF2 import PdfReader
 import docx2txt
 from flask import jsonify
+from supabase import Client
 from Pipeline.resume_loading import ALLOWED_EXTENSIONS, UPLOAD_FOLDER, get_file_ext
 from werkzeug.utils import secure_filename
 
@@ -22,11 +23,37 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def generate_resume_id():
+    return f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
+
+def upload_resume(db: Client, resume_row):
+
+    if "id" not in resume_row.keys() or not resume_row["id"]:
+        resume_row["id"] = generate_resume_id()
+
+    resume_id = resume_row["id"]
+
+    logger.info(f"Starting resume upload for ID: {resume_id}")
+
+    response = db.table("resumes").insert(resume_row).execute()
+
+    # Error or return
+    if not (hasattr(response, "data") and response.data):
+        error_text = getattr(response, "error", "Unknown error")
+        logger.error(
+            f"Error parsing/uploading resume: {error_text}",
+            exc_info=True,
+        )
+        raise Exception(
+            f"Database error: Failed to confirm insert. Details: {error_text}"
+        )
+    logger.info(f"Upload successful for resume with ID: {resume_id}")
+
 
 def parse_and_upload_resume(file, user_id):
 
     # Generate a unique ID for the resume
-    resume_id = f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
+    resume_id = generate_resume_id()
 
     # Make sure the file has the right extension
     file_ext = get_file_ext(file)
@@ -45,23 +72,12 @@ def parse_and_upload_resume(file, user_id):
 
     # Upload resume to database
     db = get_db()
-    response = db.table("resumes").insert({
+    upload_resume(db, {
         "id": resume_id,
         "user_id": user_id,
         "data": parsed_resume,
         "file_name": file.filename, 
-    }).execute()
-
-    # Error or return
-    if not (hasattr(response, "data") and response.data):
-        error_text = getattr(response, "error", "Unknown error")
-        logger.error(
-            f"Error parsing/uploading resume: {error_text}",
-            exc_info=True,
-        )
-        raise Exception(
-            f"Database error: Failed to confirm insert. Details: {error_text}"
-        )
+    })
     
     return jsonify(
         {

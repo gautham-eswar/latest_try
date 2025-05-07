@@ -13,6 +13,7 @@ from supabase import Client  # Import Supabase error type
 from Pipeline.job_tracking import create_optimization_job
 from Pipeline.keyword_extraction import extract_keywords
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, fetch_resume_data
+from Pipeline.resume_uploading import generate_resume_id, upload_resume
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
@@ -134,84 +135,17 @@ def enhance_resume(resume_id, user_id, job_description_text):
 
     # --- Save Enhanced Resume & Analysis (to Supabase) ---
     logger.info(
-        f"Attempting to save/update enhanced resume {resume_id} in Supabase table enhanced_resumes..."
+        f"Attempting to save/update enhanced resume {resume_id} in Supabase table   ..."
     )
-    if isinstance(db, FallbackDatabase):
-        logger.warning(
-            f"Using FallbackDatabase for saving enhanced resume {resume_id}. Data will not be persisted."
-        )
-        # Optionally save locally if using fallback
-        output_file_path = os.path.join(
-            OUTPUT_FOLDER, f"{resume_id}_enhanced.json"
-        )
-        with open(output_file_path, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "enhanced_data": enhanced_resume_data,
-                    "analysis_data": analysis_data,
-                },
-                f,
-                indent=2,
-            )
-        logger.info(
-            f"Job {job_id}: Saved enhanced resume locally (fallback): {output_file_path}"
-        )
-    else:
-        # Upsert into Supabase 'enhanced_resumes' table
-        # Assuming table `enhanced_resumes` exists with columns:
-        # resume_id (text, primary key, fk->resumes.id),
-        # enhanced_data (jsonb),
-        # analysis_data (jsonb),
-        # created_at (timestamp)
-        data_to_upsert = {
-            "resume_id": resume_id,
-            "enhanced_data": enhanced_resume_data,
-            "analysis_data": analysis_data,
-        }
-        try:
-            response = (
-                db.table("enhanced_resumes").upsert(data_to_upsert).execute()
-            )
-            # More specific error check
-            if not (hasattr(response, "data") and response.data):
-                logger.error(
-                    f"Supabase upsert for enhanced {resume_id} returned no data, assuming failure."
-                )
-                error_details = getattr(response, "error", None) or getattr(
-                    response, "message", "Unknown upsert error"
-                )
-                # Don't raise here, just warn as per previous logic
-                logger.warning(
-                    f"Failed to confirm enhanced data save in Supabase. Details: {error_details}"
-                )
-            else:
-                logger.info(
-                    f"Successfully saved/updated enhanced resume {resume_id} to Supabase."
-                )
-        except PostgrestAPIError as db_e:
-            logger.error(
-                f"Supabase upsert error for enhanced {resume_id} (Code: {db_e.code}): {db_e.message}",
-                exc_info=True,
-            )
-            logger.error(
-                f"DB Error Details: {db_e.details} | Hint: {db_e.hint}"
-            )
-            # Don't fail the request, just log the error.
-            logger.warning(
-                "Proceeding with response despite database save error for enhanced data."
-            )
-        except Exception as db_save_e:
-            logger.error(
-                f"Job {job_id}: Error saving enhanced resume {resume_id} to Supabase: {db_save_e}",
-                exc_info=True,
-            )
-            # Don't fail the request, but log the error. Frontend still gets results.
-            logger.warning(
-                "Proceeding with response despite database save error for enhanced data."
-            )
+    
+    upload_resume({
+        "user_id": user_id,
+        "data": enhanced_resume_data,
+        "file_name": f"Enhanced - {original_resume["file_name"]}",
+        "enhancement_id": job_id
+    })
 
     # --- Return Success Response ---
-    overall_status = "healthy"  # Mark as healthy if we reach here
     logger.info(f"Job {job_id}: Optimization completed successfully.")
     return jsonify(
         {
