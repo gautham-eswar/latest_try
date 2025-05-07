@@ -41,9 +41,8 @@ def enhance_resume(resume_id, user_id, job_description_text):
     job_id = create_optimization_job(db, resume_id, user_id, job_description_text)
     
     # Get the original parsed resume
-    original_resume = fetch_resume_data(db, resume_id, user_id)
-    logger.info(str(original_resume))
-    original_resume_data = original_resume["data"]
+    original_resume_info = fetch_resume_data(db, resume_id, user_id)
+    original_resume_parsed = original_resume_info["data"]
 
     # Extract Keywords from Job description
     keywords_data = extract_keywords(job_description_text)
@@ -66,7 +65,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
         matcher = SemanticMatcher()
         logger.info(f"Job {job_id}: Running semantic matching process...")
         match_results = matcher.process_keywords_and_resume(
-            keywords_data, original_resume_data
+            keywords_data, original_resume_parsed
         )
         matches_by_bullet = match_results.get("matches_by_bullet", {})
         bullets_matched = len(matches_by_bullet)
@@ -100,7 +99,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
         enhancer = ResumeEnhancer()
         logger.info(f"Job {job_id}: Running resume enhancement process...")
         enhanced_resume_data, modifications = enhancer.enhance_resume(
-            original_resume_data, matches_by_bullet
+            original_resume_parsed, matches_by_bullet
         )
         mods_count = len(modifications)
         logger.info(
@@ -141,7 +140,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
     upload_resume({
         "user_id": user_id,
         "data": enhanced_resume_data,
-        "file_name": f"Enhanced - {original_resume['File_name']}",
+        "file_name": f"Enhanced - {original_resume_info['file_name']}",
         "enhancement_id": job_id
     })
 

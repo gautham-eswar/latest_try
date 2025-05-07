@@ -41,7 +41,7 @@ def extract_keywords(
 
 
     # Log the input being sent (first 100 chars)
-    logger.info(f"Sending JD to OpenAI: {job_description_text[:100]}...")
+    logger.info(f"Sending JD to OpenAI: {job_description_text[:40]}...")
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
 
     # Check if the response looks like JSON before trying to parse
