@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def create_optimization_job(db: Client, resume_id, user_id, job_description):
 
     logger.info("Creating job tracking at the database")
-    job_id = uuid.uuid4().hex
+    job_id = uuid.uuid4().hex   
     response = db.table("optimization_jobs").insert({
         "id": job_id,
         "user_id": user_id,

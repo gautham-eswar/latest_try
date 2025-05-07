@@ -94,7 +94,7 @@ class SemanticMatcher:
         bullet_points = self.extract_bullet_points(resume_data)
         
         # Step 4: Generate embeddings for bullet points
-        logger.info("Generating embeddings for bullet points")
+        logger.info(f"Generating embeddings for {len(bullet_points)} bullet points")
         bullets_with_embeddings = self.generate_bullet_embeddings(bullet_points)
         
         # Step 5: Calculate similarity and find matches

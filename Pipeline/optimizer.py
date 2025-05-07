@@ -47,8 +47,6 @@ def enhance_resume(resume_id, user_id, job_description_text):
     logger.info(
         f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
     )
-    stage_status = "healthy"
-    stage_message = f"Extracted {kw_count} keywords"
     
     
 
