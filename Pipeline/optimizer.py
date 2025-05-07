@@ -30,7 +30,8 @@ diagnostic_system = get_diagnostic_system()
 
 def enhance_resume(resume_id, user_id, job_description_text):
 
-    logger.info(f"Starting resume enhancement: User ID: {user_id} Resume ID: {resume_id} Job Description: {job_description_text[:100]}")
+    logger.info(f"Starting resume enhancement: User ID: {user_id} \
+                Resume ID: {resume_id} Job Description: {job_description_text[:40]}")
 
     # Initialize Supabase client
     db = get_db()
@@ -39,7 +40,9 @@ def enhance_resume(resume_id, user_id, job_description_text):
     job_id = create_optimization_job(db, resume_id, user_id, job_description_text)
     
     # Get the original parsed resume
-    original_resume_data = fetch_resume_data(db, resume_id, user_id)
+    original_resume = fetch_resume_data(db, resume_id, user_id)
+    logger.info(str(original_resume))
+    original_resume_data = original_resume["data"]
 
     # Extract Keywords from Job description
     keywords_data = extract_keywords(job_description_text)
