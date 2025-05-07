@@ -54,7 +54,7 @@ def update_optimization_job(job_id, data:dict):
         )
 
 
-def post_optimization_job(db: Client, job):
+def post_optimization_job(job):
 
     logger.info("Creating job tracking at the database")
 
