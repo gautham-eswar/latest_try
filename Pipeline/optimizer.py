@@ -134,10 +134,10 @@ def enhance_resume(resume_id, user_id, job_description_text):
 
     # --- Save Enhanced Resume & Analysis (to Supabase) ---
     logger.info(
-        f"Attempting to save/update enhanced resume {resume_id} in Supabase table   ..."
+        f"Attempting to save enhanced resume in Supabase table   ..."
     )
     
-    upload_resume({
+    upload_resume(db, {
         "user_id": user_id,
         "data": enhanced_resume_data,
         "file_name": f"Enhanced - {original_resume_info['file_name']}",
