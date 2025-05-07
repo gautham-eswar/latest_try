@@ -193,13 +193,6 @@ def create_app():
 
         user_id = request.form["user_id"]
         file = request.files["file"]
-        
-        if get_file_ext(file) not in ALLOWED_EXTENSIONS:
-            return error_response(
-            "InvalidFileType",
-            f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}", 
-            400,
-        )
 
         try:
             return parse_and_upload_resume(file, user_id)
@@ -217,13 +210,13 @@ def create_app():
         """Optimize a resume using SemanticMatcher and ResumeEnhancer."""
         # Handle invalid JSON in the request
 
-        if "user_id" not in request.form.keys():
-            return error_response(
-                "MissingUserId", f"No User ID provided in the request", 400
-            )
         if "resume_id" not in request.form.keys():
             return error_response(
                 "MissingResumeId", f"No Resume ID provided in the request", 400
+            )
+        if "user_id" not in request.form.keys():
+            return error_response(
+                "MissingUserId", f"No User ID provided in the request", 400
             )
         if "job_description" not in request.form.keys():
             return error_response(

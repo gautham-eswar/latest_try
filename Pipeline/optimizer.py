@@ -50,6 +50,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
     stage_status = "healthy"
     stage_message = f"Extracted {kw_count} keywords"
     
+    
 
     # --- Semantic Matching ---
     stage_name = "Semantic Matcher"

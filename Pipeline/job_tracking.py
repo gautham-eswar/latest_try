@@ -12,7 +12,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
 def create_optimization_job(db: Client, resume_id, user_id, job_description):
 
     logger.info("Creating job tracking at the database")
@@ -36,6 +35,7 @@ def create_optimization_job(db: Client, resume_id, user_id, job_description):
     
     logger.info(f"Database job tracking created successfully. Job ID: {job_id} ")
     return job_id
+
 
 def update_optimization_job(db: Client, job_id, data:dict):
     if not job_id:

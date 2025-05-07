@@ -41,7 +41,7 @@ def extract_keywords(
 
 
     # Log the input being sent (first 100 chars)
-    logger.debug(f"Sending JD to OpenAI: {job_description_text[:100]}...")
+    logger.info(f"Sending JD to OpenAI: {job_description_text[:100]}...")
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
 
     # Check if the response looks like JSON before trying to parse
@@ -52,7 +52,7 @@ def extract_keywords(
         raise ValueError(f"OpenAI returned non-JSON response: {raw_result_stripped[:200]}...")
 
     # Attempt to extract JSON block if present (e.g., within markdown)
-    logger.debug(f"Raw keyword extraction result from OpenAI (Passed initial '{'{'} check'): {raw_result[:500]}...")
+    logger.info(f"Raw keyword extraction result from OpenAI (Passed initial '{'{'} check'): {raw_result[:500]}...")
     json_match = re.search(
         r"```(?:json)?\s*({.*?})\s*```", raw_result, re.DOTALL | re.IGNORECASE
     )
