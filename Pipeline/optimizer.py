@@ -141,7 +141,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
     upload_resume({
         "user_id": user_id,
         "data": enhanced_resume_data,
-        "file_name": f"Enhanced - {original_resume["file_name"]}",
+        "file_name": f"Enhanced - {original_resume['File_name']}",
         "enhancement_id": job_id
     })
 
