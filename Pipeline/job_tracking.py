@@ -5,14 +5,16 @@ import uuid
 
 from supabase import Client
 
+from Services.database import get_db
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+db = get_db()
 
-
-def create_optimization_job(db: Client, resume_id, user_id, job_description):
+def create_optimization_job(resume_id, user_id, job_description):
 
     logger.info("Creating job tracking at the database")
     job_id = uuid.uuid4().hex   
@@ -37,7 +39,7 @@ def create_optimization_job(db: Client, resume_id, user_id, job_description):
     return job_id
 
 
-def update_optimization_job(db: Client, job_id, data:dict):
+def update_optimization_job(job_id, data:dict):
     if not job_id:
         return
     

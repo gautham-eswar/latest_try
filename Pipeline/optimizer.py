@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 diagnostic_system = get_diagnostic_system()
 
 
-def enhance_resume(resume_id, user_id, job_description_text):
+def enhance_resume(job_id, resume_id, user_id, job_description_text):
 
     logger.info(f"Starting resume enhancement: User ID: {user_id} \
                 Resume ID: {resume_id} Job Description: {job_description_text[:40]}")
@@ -37,11 +37,9 @@ def enhance_resume(resume_id, user_id, job_description_text):
     # Initialize Supabase client
     db = get_db()
 
-    # Create optimization task in supabase (for tracking purposes)
-    job_id = create_optimization_job(db, resume_id, user_id, job_description_text)
     
     # Get the original parsed resume
-    original_resume_info = fetch_resume_data(db, resume_id, user_id)
+    original_resume_info = fetch_resume_data(resume_id, user_id)
     original_resume_parsed = original_resume_info["data"]
 
     # Extract Keywords from Job description
@@ -50,7 +48,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
     logger.info(
         f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
     )
-    update_optimization_job(db, job_id, {
+    update_optimization_job(job_id, {
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
     })
@@ -70,26 +68,26 @@ def enhance_resume(resume_id, user_id, job_description_text):
         f"Job {job_id}: Semantic matching complete. \
         Found matches for {bullets_matched} bullets."
     )
-    update_optimization_job(db, job_id, {
+    update_optimization_job(job_id, {
         "status": "Resume Enhancement",
         "matches": bullets_matched,
         "match_details": matches_by_bullet
     })
 
     # --- Resume Enhancement ---
-    enhanced_resume_data = None
+    enhanced_resume_parsed = None
     modifications = []
 
     logger.info(f"Job {job_id}: Initializing ResumeEnhancer...")
     enhancer = ResumeEnhancer()
     logger.info(f"Job {job_id}: Running resume enhancement process...")
-    enhanced_resume_data, modifications = enhancer.enhance_resume(
+    enhanced_resume_parsed, modifications = enhancer.enhance_resume(
         original_resume_parsed, matches_by_bullet
     )
     logger.info(
         f"Job {job_id}: Resume enhancement complete. {len(modifications)} modifications made."
     )
-    update_optimization_job(db, job_id, {
+    update_optimization_job(job_id, {
         "status": "Enhanced resume Upload",
         "modifications": modifications,
     })
@@ -98,17 +96,20 @@ def enhance_resume(resume_id, user_id, job_description_text):
     logger.info(
         f"Attempting to save enhanced resume in Supabase table   ..."
     )
-    upload_resume(db, {
+    enhanced_resume_data = upload_resume({
         "user_id": user_id,
-        "data": enhanced_resume_data,
+        "data": enhanced_resume_parsed,
         "file_name": f"Enhanced - {original_resume_info['file_name']}",
         "enhancement_id": job_id,
         "original_resume_id": original_resume_info["id"],
     })
-    update_optimization_job(db, job_id, {
+    enhanced_resume_id = enhanced_resume_data["id"]
+    update_optimization_job(job_id, {
         "status": "Completed",
         "modifications": modifications,
+        "enhanced_resume_id": enhanced_resume_id
     })
+    
 
 
     # --- Return Success Response ---
@@ -118,7 +119,7 @@ def enhance_resume(resume_id, user_id, job_description_text):
         "status": "success",
             "message": "Resume optimized successfully using advanced workflow",
         "resume_id": resume_id,
-            "data": enhanced_resume_data,  # The enhanced resume content
+            "data": enhanced_resume_parsed,  # The enhanced resume content
             # "analysis": analysis_data,  # The analysis/match details
         }
     )

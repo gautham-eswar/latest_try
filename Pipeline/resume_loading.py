@@ -32,9 +32,10 @@ def get_file_ext(file):
     )
     return file_ext
 
-def fetch_resume_data(db:Client, resume_id, user_id):
+def fetch_resume_data(resume_id, user_id):
 
     logger.info(f"Fetching resume. Resume ID: {resume_id}")
+    db = get_db()
 
     response = (
         db.table("resumes")

@@ -20,11 +20,13 @@ from Endpoints.diagnostics import diagnostics_page
 from Endpoints.health import health_page
 from Endpoints.status import status_page
 
+from Pipeline.job_tracking import create_optimization_job, update_optimization_job
 from Pipeline.resume_uploader import parse_and_upload_resume
 from Pipeline.optimizer import enhance_resume
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
 
 
+from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
 
@@ -49,7 +51,6 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # Track application startup
 diagnostic_system = get_diagnostic_system()
-
 
 def handle_missing_api_key():
     """Return a standardized error response for missing API key"""
@@ -227,17 +228,25 @@ def create_app():
             resume_id = request.form["resume_id"]
             user_id = request.form["user_id"]
             job_description = request.form["job_description"]
+            
+            # Create optimization task in supabase (for tracking purposes)
+            job_id = create_optimization_job(resume_id, user_id, job_description)
 
-            return enhance_resume(resume_id, user_id, job_description)
+            return enhance_resume(job_id, resume_id, user_id, job_description)
         
         except Exception as e:
+            error_msg = str(e)
             logger.error(
-                f"Error enhancing resume: {str(e)}",
+                f"Error enhancing resume: {error_msg}",
                 exc_info=True,
             )
+            update_optimization_job(job_id, {
+                "status": "Error",
+                "error_message": error_msg,
+            })
             return error_response(
                 "Optimization error", 
-                f"""Error optimizing resume: {str(e)}. Resume ID:{resume_id}""",
+                f"""Error optimizing resume: {error_msg}. Resume ID:{resume_id}""",
                 500)
 
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])

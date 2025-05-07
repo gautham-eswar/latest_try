@@ -22,11 +22,12 @@ logging.basicConfig(
     level=logging.INFO, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+db = get_db()
 
 def generate_resume_id():
     return f"resume_{ int(time.time()) }_{ uuid.uuid4().hex[:8] }"
 
-def upload_resume(db: Client, resume_row):
+def upload_resume(resume_row):
 
     if "id" not in resume_row.keys() or not resume_row["id"]:
         resume_row["id"] = generate_resume_id()
@@ -48,6 +49,8 @@ def upload_resume(db: Client, resume_row):
             f"Database error: Failed to confirm insert. Details: {error_text}"
         )
     logger.info(f"Upload successful for resume with ID: {resume_id}")
+
+    return response.data
 
 
 def parse_and_upload_resume(file, user_id):
@@ -71,8 +74,7 @@ def parse_and_upload_resume(file, user_id):
     parsed_resume = parse_resume(resume_text)
 
     # Upload resume to database
-    db = get_db()
-    upload_resume(db, {
+    upload_resume({
         "id": resume_id,
         "user_id": user_id,
         "data": parsed_resume,
