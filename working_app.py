@@ -20,7 +20,7 @@ from Endpoints.diagnostics import diagnostics_page
 from Endpoints.health import health_page
 from Endpoints.status import status_page
 
-from Pipeline.resume_uploading import parse_and_upload_resume
+from Pipeline.resume_uploader import parse_and_upload_resume
 from Pipeline.optimizer import enhance_resume
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
 

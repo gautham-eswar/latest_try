@@ -21,7 +21,7 @@ def create_optimization_job(db: Client, resume_id, user_id, job_description):
         "user_id": user_id,
         "resume_id": resume_id,
         "job_description": job_description, 
-        "status": "Starting"
+        "status": "Processing Keywords"
     }).execute()
 
     if not (hasattr(response, "data") and response.data):
