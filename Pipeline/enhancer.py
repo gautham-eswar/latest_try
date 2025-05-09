@@ -66,19 +66,22 @@ class ResumeEnhancer:
     def enhance_resume(self, 
                       resume_data: Dict[str, Any], 
                       matches_by_bullet: Dict[str, List[Dict[str, Any]]], 
+                      final_technical_skills: Optional[Dict[str, List[str]]] = None,
                       max_keyword_usage: int = 2) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         """
-        Enhance resume bullet points with matched keywords.
+        Enhance resume bullet points with matched keywords and update technical skills section.
         
         Args:
             resume_data: Resume JSON data
             matches_by_bullet: Keywords matched to bullets
-            max_keyword_usage: Maximum times a keyword can be used
+            final_technical_skills: Dictionary of categorized technical skills to update the resume with.
+                                      Example: {"Programming Languages": ["Python", "Java"], "Tools": ["Docker"]}
+            max_keyword_usage: Maximum times a keyword can be used in bullet enhancements
             
         Returns:
             tuple: (Enhanced resume data, List of modifications made)
         """
-        logger.info("Starting resume enhancement")
+        logger.info("Starting resume enhancement for bullets and skills section")
         
         # Create a deep copy of the resume to avoid modifying the original
         enhanced_resume = copy.deepcopy(resume_data)
@@ -138,7 +141,41 @@ class ResumeEnhancer:
                         
                         logger.info(f"Enhanced bullet: '{bullet[:30]}...' with {len(keywords_for_bullet)} keywords")
         
-        logger.info(f"Resume enhancement complete. Modified {len(modifications)} bullets.")
+        logger.info(f"Resume bullet point enhancement complete. Modified {len(modifications)} bullets.")
+
+        # --- Technical Skills Section Update ---
+        if final_technical_skills is not None:
+            logger.info("Updating technical skills section.")
+            original_skills_section_snapshot = copy.deepcopy(enhanced_resume.get("Skills", {}))
+            
+            if "Skills" not in enhanced_resume or not isinstance(enhanced_resume["Skills"], dict):
+                enhanced_resume["Skills"] = {} # Ensure Skills section is a dict
+            
+            # The final_technical_skills is already structured as Dict[category, List[skill_names]]
+            # We want to update/replace the "Technical Skills" part under "Skills"
+            # The parsed resume might have Skills: {"Technical Skills": {"Category1": [], ...}} or 
+            # Skills: {"Technical Skills": [] (flat list)}
+            # The final_technical_skills provides the new structure for "Technical Skills"
+            
+            enhanced_resume["Skills"]["Technical Skills"] = final_technical_skills
+            logger.debug(f"Updated 'Technical Skills' in resume to: {final_technical_skills}")
+
+            modifications.append({
+                "section": "Skills",
+                "type": "Technical Skills Update",
+                "original_skills_snapshot": original_skills_section_snapshot.get("Technical Skills", "Not present or not a dict"),
+                "updated_skills_structure": final_technical_skills,
+                "message": f"Technical skills section updated with {sum(len(sks) for sks in final_technical_skills.values())} skills across {len(final_technical_skills)} categories."
+            })
+            logger.info(f"Technical skills section updated successfully.")
+        else:
+            logger.info("No final technical skills data provided, skipping skills section update.")
+
+        total_modifications = len(modifications)
+        bullet_mods = sum(1 for mod in modifications if mod.get("type") != "Technical Skills Update")
+        skill_sec_mods = total_modifications - bullet_mods
+
+        logger.info(f"Resume enhancement process complete. Total modifications: {total_modifications} ({bullet_mods} bullet changes, {skill_sec_mods} skills section changes).")
         return enhanced_resume, modifications
     
     def _filter_matches_by_usage(self, 

@@ -1,4 +1,3 @@
-
 # Configure logging
 import json
 import logging
@@ -60,18 +59,31 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     matcher = SemanticMatcher()
     logger.info(f"Job {job_id}: Running semantic matching process...")
     match_results = matcher.process_keywords_and_resume(
-        keywords_data, original_resume_parsed
+        keywords_data, 
+        original_resume_parsed,
+        # TODO: Consider making similarity_threshold, relevance_threshold, overall_skill_limit configurable per job or globally
+        similarity_threshold=0.75, # For bullet matching
+        relevance_threshold=0.5,   # For JD hard skills to be considered for skills section
+        overall_skill_limit=20     # Target total technical skills in skills section
     )
     matches_by_bullet = match_results.get("matches_by_bullet", {})
-    bullets_matched = len(matches_by_bullet)
+    final_technical_skills = match_results.get("final_technical_skills", {})
+    skill_selection_log = match_results.get("skill_selection_process_log", {})
+
+    bullets_matched_count = len(matches_by_bullet)
+    final_skills_count = sum(len(sks) for sks in final_technical_skills.values())
+
     logger.info(
-        f"Job {job_id}: Semantic matching complete. \
-        Found matches for {bullets_matched} bullets."
+        f"Job {job_id}: Semantic matching complete. "
+        f"Found matches for {bullets_matched_count} bullets. "
+        f"Selected {final_skills_count} final technical skills."
     )
     update_optimization_job(job_id, {
         "status": "Resume Enhancement",
-        "matches": bullets_matched,
-        "match_details": matches_by_bullet
+        "bullets_matched_count": bullets_matched_count,
+        "match_details_by_bullet": matches_by_bullet, # Contains keywords for bullets
+        "selected_technical_skills": final_technical_skills, # The new skills section structure
+        "skill_selection_log": skill_selection_log
     })
 
     # --- Resume Enhancement ---
@@ -82,7 +94,9 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     enhancer = ResumeEnhancer()
     logger.info(f"Job {job_id}: Running resume enhancement process...")
     enhanced_resume_parsed, modifications = enhancer.enhance_resume(
-        original_resume_parsed, matches_by_bullet
+        original_resume_parsed, 
+        matches_by_bullet,
+        final_technical_skills=final_technical_skills # Pass the selected skills here
     )
     logger.info(
         f"Job {job_id}: Resume enhancement complete. {len(modifications)} modifications made."
@@ -120,6 +134,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
             "message": "Resume optimized successfully using advanced workflow",
         "resume_id": resume_id,
             "data": enhanced_resume_parsed,  # The enhanced resume content
-            # "analysis": analysis_data,  # The analysis/match details
+            "analysis": { # Consolidating analysis data here
+                "matches_by_bullet": matches_by_bullet,
+                "skill_selection_log": skill_selection_log,
+                "modifications_summary": modifications # Summary of changes made
+            },
         }
     )
