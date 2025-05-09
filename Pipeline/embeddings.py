@@ -571,8 +571,7 @@ class SemanticMatcher:
             
             prompt = (
                 f"Given the skill '{skill_name}' (context from job description: '{skill_context}') "
-                f"and the existing resume skill categories: {json.dumps(resume_categories)}.
-"
+                f"and the existing resume skill categories: {json.dumps(resume_categories)}.\n"
                 f"Which of these categories does the skill best fit into? "
                 f"If it doesn't fit well into any existing category, suggest 'New Category: [Appropriate New Category Name]' (e.g., 'New Category: Cloud Technologies'). "
                 f"If it fits an existing category, just return that category name. "
