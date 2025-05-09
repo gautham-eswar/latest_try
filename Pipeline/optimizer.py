@@ -80,10 +80,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     )
     update_optimization_job(job_id, {
         "status": "Resume Enhancement",
-        "bullets_matched_count": bullets_matched_count,
-        "match_details_by_bullet": matches_by_bullet, # Contains keywords for bullets
-        "selected_technical_skills": final_technical_skills, # The new skills section structure
-        "skill_selection_log": skill_selection_log
+        "match_count": bullets_matched_count,
+        "match_details": matches_by_bullet, # Contains keywords for bullets
+        "new_skills_section": final_technical_skills, # The new skills section structure
+        "skills_selection_log": skill_selection_log
     })
 
     # --- Resume Enhancement ---
