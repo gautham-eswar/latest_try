@@ -12,6 +12,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
 import httpx
+import copy
 
 # Import OpenAI
 try:
@@ -621,6 +622,7 @@ class SemanticMatcher:
         """
         Selects the final list of technical skills, combining resume and JD skills,
         respecting categories, deduplicating, and applying an overall limit.
+        Uses a round-robin approach to fill categories.
         Outputs a dictionary of category names to lists of skill strings.
         """
         log_details = {
@@ -630,7 +632,8 @@ class SemanticMatcher:
             "overall_skill_limit": overall_skill_limit,
             "deduplication_info": [],
             "category_skill_counts_before_limit": {},
-            "final_skill_counts_by_category": {}
+            "final_skill_counts_by_category": {},
+            "category_processing_order": []
         }
         
         # 1. Consolidate skills by category
@@ -703,49 +706,69 @@ class SemanticMatcher:
             consolidated_skills[category] = deduplicated_for_category
         
         logger.debug(f"Skills after deduplication: { {cat: len(sks) for cat, sks in consolidated_skills.items()} }")
-        log_details["deduplication_log"] = consolidated_skills # Log skill objects after dedupe
+        # Storing the objects post-deduplication for logging if needed, but log_details["deduplication_info"] captures changes.
+        # log_details["deduplication_log"] = copy.deepcopy(consolidated_skills) # Be careful with deepcopy if embeddings are large
 
-        # 3. Prepare for final selection: flatten, sort, then limit while trying to maintain category presence
-        all_skills_flat = []
-        for category, skills_list in consolidated_skills.items():
-            for skill_info in skills_list:
-                all_skills_flat.append({**skill_info, "category": category})
-        
-        # Sort primarily by relevance (descending), then prefer original skills
-        all_skills_flat.sort(key=lambda x: (x["relevance"], x["is_original"]), reverse=True)
-        
-        final_skills_by_category_dict = {} # This will be the Dict[str, List[str]]
-        selected_skill_names_globally = set() # To avoid adding the exact same skill string if it somehow appears in multiple categories' top
+        log_details["category_skill_counts_before_limit"] = {cat: len(sks) for cat, sks in consolidated_skills.items()}
+
+        # 2. Sort skills within each category (prioritize original, then relevance)
+        for category in consolidated_skills:
+            consolidated_skills[category].sort(key=lambda x: (x['is_original'], x['relevance']), reverse=True)
+
+        # 3. Round-robin selection to fill final skills
+        final_skills_by_category_dict = {} # Dict[str, List[str]]
+        selected_skill_names_globally = set()
         current_total_skills = 0
-
-        for skill_to_add in all_skills_flat:
-            if current_total_skills >= overall_skill_limit:
-                break
-            
-            category = skill_to_add["category"]
-            skill_name = skill_to_add["skill"]
-
-            if skill_name.lower() not in selected_skill_names_globally: # Check globally to prevent "Python" in CatA and "Python" in CatB
-                if category not in final_skills_by_category_dict:
-                    final_skills_by_category_dict[category] = []
-                
-                # Check if we already have too many from this category - simple heuristic for balance
-                # This attempts to prevent one category from dominating if overall_skill_limit is tight
-                # For instance, don't add 10th skill to 'Programming' if 'Databases' has 0 and limit is 12
-                # A more complex approach would involve proportional allocation.
-                # Max skills per category could be overall_skill_limit / number_of_categories (rough)
-                # or ensure each original category gets at least one if possible.
-                # For now, let's rely on the overall relevance sort and the global limit.
-                # If a category becomes too dominant, it's because its skills are highly relevant.
-
-                final_skills_by_category_dict[category].append(skill_name)
-                selected_skill_names_globally.add(skill_name.lower())
-                current_total_skills += 1
         
-        log_details["category_skill_counts_before_limit"] = {cat: len(sks) for cat, sks in consolidated_skills.items()} # This is post-dedupe
+        # Pointers for iterating through each category's sorted skill list
+        skill_pointers = {category: 0 for category in consolidated_skills}
+        
+        # Determine category processing order (original categories first, then new ones alphabetically)
+        original_category_keys = set(resume_skills_structured.keys()) # Use set for faster lookups
+        
+        # Sort all category keys: original ones first (sorted alphabetically among themselves), 
+        # then new ones (also sorted alphabetically among themselves)
+        all_category_keys_ordered = sorted(
+            consolidated_skills.keys(),
+            key=lambda c: (c not in original_category_keys, c) # False (original) comes before True (new), then alphabetically by c
+        )
+        log_details["category_processing_order"] = all_category_keys_ordered
+        
+        # Round-robin selection loop
+        while current_total_skills < overall_skill_limit:
+            skill_added_this_round = False
+            for category_name in all_category_keys_ordered:
+                if category_name not in consolidated_skills: # Should not happen if all_category_keys_ordered from consolidated_skills
+                    continue
+
+                skills_in_this_category = consolidated_skills[category_name]
+                current_pointer = skill_pointers.get(category_name, 0)
+
+                if current_pointer < len(skills_in_this_category):
+                    skill_to_add = skills_in_this_category[current_pointer]
+                    skill_name = skill_to_add["skill"]
+
+                    if skill_name.lower() not in selected_skill_names_globally:
+                        if category_name not in final_skills_by_category_dict:
+                            final_skills_by_category_dict[category_name] = []
+                        
+                        final_skills_by_category_dict[category_name].append(skill_name)
+                        selected_skill_names_globally.add(skill_name.lower())
+                        current_total_skills += 1
+                        skill_added_this_round = True
+                    
+                    skill_pointers[category_name] = current_pointer + 1 # Advance pointer regardless of global duplicate
+                    
+                    if current_total_skills >= overall_skill_limit:
+                        break # Break from inner category loop (finished filling overall limit)
+            
+            if not skill_added_this_round or current_total_skills >= overall_skill_limit:
+                # Break from outer while loop if no skills were added in a full round, or if limit is met
+                break
+        
         log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in final_skills_by_category_dict.items()}
         
-        # Clean up empty categories that might have resulted if all their skills were low relevance
+        # Clean up empty categories that might have resulted
         final_skills_by_category_dict = {k: v for k, v in final_skills_by_category_dict.items() if v}
 
         logger.info(f"Selected final {current_total_skills} technical skills across {len(final_skills_by_category_dict)} categories.")
