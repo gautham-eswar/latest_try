@@ -134,6 +134,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
             "message": "Resume optimized successfully using advanced workflow",
             "resume_id": resume_id,
             "data": {
+                "job_id": job_id,
                 "enhanced_resume_id": enhanced_resume_data["id"],
                 "enhanced_resume_parsed": enhanced_resume_data["data"],  # The enhanced resume content
                 "analysis": { # Consolidating analysis data here
