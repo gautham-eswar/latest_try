@@ -130,14 +130,18 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     logger.info(f"Job {job_id}: Optimization completed successfully.")
     return jsonify(
         {
-        "status": "success",
+            "status": "success",
             "message": "Resume optimized successfully using advanced workflow",
-        "resume_id": resume_id,
-            "data": enhanced_resume_parsed,  # The enhanced resume content
-            "analysis": { # Consolidating analysis data here
-                "matches_by_bullet": matches_by_bullet,
-                "skill_selection_log": skill_selection_log,
-                "modifications_summary": modifications # Summary of changes made
-            },
+            "resume_id": resume_id,
+            "data": {
+                "enhanced_resume_id": enhanced_resume_data["id"],
+                "enhanced_resume_parsed": enhanced_resume_data["parsed_resume"],  # The enhanced resume content
+                "analysis": { # Consolidating analysis data here
+                    "matches_by_bullet": matches_by_bullet,
+                        "skill_selection_log": skill_selection_log,
+                    "modifications_summary": modifications # Summary of changes made
+                },
+            }
+            
         }
     )

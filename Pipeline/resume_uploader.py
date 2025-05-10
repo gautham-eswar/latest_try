@@ -86,6 +86,7 @@ def parse_and_upload_resume(file, user_id):
         "message": "Resume uploaded and parsed successfully",
             "data": {
                 "resume_id": resume_id,
+                "file_name": file.filename,
                 "parsed_resume": parsed_resume
                 },
         }
