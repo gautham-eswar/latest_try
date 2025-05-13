@@ -506,6 +506,17 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         A string containing the complete LaTeX document.
     """
     
+    # Safety check - ensure data is a dictionary before trying to extract
+    if not isinstance(data, dict):
+        print(f"ERROR: 'data' parameter must be a dictionary, but got {type(data)}.")
+        # Return an error LaTeX document instead of crashing
+        return r"""\documentclass{article}
+\begin{document}
+\section*{Error Processing Resume}
+Unable to process resume data. The input was not in the expected format.
+\end{document}"""
+    
+    # Safe extraction of highlights - already has type checking internally
     tech_skills, metrics = extract_highlights_from_resume(data)
 
     # Determine page height for LaTeX geometry package
@@ -613,23 +624,64 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     # The schema uses 'awards', (see above).
     # The schema uses 'involvement' or 'leadership', Evelyn.json has 'Misc' -> 'Leadership'.
 
+    # DEFENSIVE PROGRAMMING: Safely extract data with type checking for each section
+
+    # Personal Info section
     personal_info_data = data.get("Personal Information") or data.get("contact")
+    if personal_info_data and not isinstance(personal_info_data, dict):
+        print(f"WARNING: Personal info data is not a dictionary. Type: {type(personal_info_data)}. Skipping.")
+        personal_info_data = None
+        
     name_from_data = data.get("name") # Top level name from schema.
     if name_from_data and personal_info_data and not personal_info_data.get('name'):
         personal_info_data['name'] = name_from_data # Inject if missing in contact dict
 
+    # Objective/Summary section (string)
     objective_data = data.get("Summary/Objective") or data.get("objective") or data.get("summary")
+    
+    # Education section (list of dictionaries)
     education_data = data.get("Education") or data.get("education")
+    if education_data and not isinstance(education_data, list):
+        print(f"WARNING: Education data is not a list. Type: {type(education_data)}. Skipping.")
+        education_data = None
+        
+    # Experience section (list of dictionaries)
     experience_data = data.get("Experience") or data.get("work_experience")
+    if experience_data and not isinstance(experience_data, list):
+        print(f"WARNING: Experience data is not a list. Type: {type(experience_data)}. Skipping.")
+        experience_data = None
+        
+    # Projects section (list of dictionaries)
     projects_data = data.get("Projects") or data.get("projects")
+    if projects_data and not isinstance(projects_data, list):
+        print(f"WARNING: Projects data is not a list. Type: {type(projects_data)}. Skipping.")
+        projects_data = None
+        
+    # Skills section (dictionary)
     skills_data = data.get("Skills") or data.get("skills")
+    if skills_data and not isinstance(skills_data, dict):
+        print(f"WARNING: Skills data is not a dictionary. Type: {type(skills_data)}. Skipping.")
+        skills_data = None
+        
+    # Languages section (list of dictionaries)
     languages_data = data.get("Languages") or data.get("languages")
+    if languages_data and not isinstance(languages_data, list):
+        print(f"WARNING: Languages data is not a list. Type: {type(languages_data)}. Skipping.")
+        languages_data = None
     
     # For certs/awards, Evelyn.json has "Certifications/Awards".
     # Schema has separate "certifications" and "awards".
     # We'll prefer direct keys first.
     certifications_data = data.get("certifications")
+    if certifications_data and not isinstance(certifications_data, list):
+        print(f"WARNING: Certifications data is not a list. Type: {type(certifications_data)}. Skipping.")
+        certifications_data = None
+        
     awards_data = data.get("awards")
+    if awards_data and not isinstance(awards_data, list):
+        print(f"WARNING: Awards data is not a list. Type: {type(awards_data)}. Skipping.")
+        awards_data = None
+        
     certs_and_awards_mixed = data.get("Certifications/Awards")
 
     # If specific keys are empty but mixed one exists, we might need to split them.
@@ -638,6 +690,11 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     # or the other, or a combined section. Given the prompt, let's assume separate lists are preferred.
 
     involvement_data = data.get("involvement") or data.get("leadership") # Schema direct keys
+    if involvement_data and not isinstance(involvement_data, list):
+        print(f"WARNING: Involvement data is not a list. Type: {type(involvement_data)}. Skipping.")
+        involvement_data = None
+        
+    # Corrected variable name to avoid conflict with outer scope if any
     misc_content_from_data = data.get("Misc") # For Evelyn.json specific "Misc" -> "Leadership"
 
     print("\n--- Section Generation Log ---")
@@ -716,6 +773,10 @@ def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[st
         A tuple containing two lists: (technical_skills, metrics).
         Returns ([], []) if highlighting is skipped or an error occurs.
     """
+    if not isinstance(resume_data, dict):
+        print(f"AI HINT: resume_data is not a dictionary. Type: {type(resume_data)}. Skipping highlighting.")
+        return [], []
+
     if not _initialize_openai_client() or not OPENAI_CLIENT:
         return [], []
 
@@ -723,7 +784,7 @@ def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[st
 
     # Extract from Experience section
     experience_data = resume_data.get("Experience") or resume_data.get("work_experience")
-    if isinstance(experience_data, list):
+    if experience_data and isinstance(experience_data, list):
         for exp_item in experience_data:
             if isinstance(exp_item, dict):
                 responsibilities = exp_item.get("responsibilities") or exp_item.get("responsibilities/achievements")
@@ -736,7 +797,7 @@ def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[st
 
     # Extract from Projects section
     projects_data = resume_data.get("Projects") or resume_data.get("projects")
-    if isinstance(projects_data, list):
+    if projects_data and isinstance(projects_data, list):
         for proj_item in projects_data:
             if isinstance(proj_item, dict):
                 description = proj_item.get("description")
