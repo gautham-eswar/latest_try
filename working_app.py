@@ -273,30 +273,24 @@ def create_app():
                     current_app.logger.error(f"Supabase client not available for PDF generation of {resume_id}.")
                     return error_response("DatabaseError", "Database client not available.", 500)
 
-                # 1. Fetch user_id associated with the resume
-                user_id_data = db_client.table("resumes").select("user_id").eq("id", resume_id).maybe_single().execute()
-                if not user_id_data.data or not user_id_data.data.get("user_id"):
-                    current_app.logger.error(f"User ID not found for resume_id {resume_id}.")
-                    return error_response("NotFound", f"User ID not found for resume ID {resume_id}", 404)
-                user_id = user_id_data.data["user_id"]
-                current_app.logger.info(f"Fetched user_id '{user_id}' for resume_id '{resume_id}'.")
+                # 1. Fetch resume data and user_id from the 'resumes' table
+                current_app.logger.info(f"Fetching resume data and user_id for resume_id: {resume_id} from 'resumes' table.")
+                response = db_client.table("resumes").select("data, user_id").eq("id", resume_id).maybe_single().execute()
 
-                # 2. Fetch resume data (try enhanced_resumes, then resumes)
-                resume_data = None
-                response = db_client.table("enhanced_resumes").select("*").eq("resume_id", resume_id).maybe_single().execute()
-                if response.data:
-                    resume_data = response.data
-                    current_app.logger.info(f"Fetched data for {resume_id} from enhanced_resumes.")
-                else:
-                    response = db_client.table("resumes").select("*").eq("id", resume_id).maybe_single().execute()
-                    if response.data:
-                        resume_data = response.data
-                        current_app.logger.info(f"Fetched data for {resume_id} from resumes table.")
+                if not response.data:
+                    current_app.logger.error(f"Resume not found for ID {resume_id} in 'resumes' table.")
+                    return jsonify({"success": False, "error": "Resume not found"}), 404
                 
-                if not resume_data:
-                    current_app.logger.error(f"No resume data found for {resume_id} in enhanced_resumes or resumes table.")
-                    return error_response("NotFound", f"Resume data not found for ID {resume_id}", 404)
-                current_app.logger.info(f"Fetched resume data for {resume_id}: {list(resume_data.keys())}")
+                resume_record = response.data
+                resume_data = resume_record.get("data") # Get the nested JSON data
+                user_id = resume_record.get("user_id")
+
+                if not resume_data or not user_id:
+                    current_app.logger.error(f"Missing 'data' or 'user_id' in fetched record for resume_id {resume_id}. Record: {resume_record}")
+                    return error_response("DataError", f"Incomplete data fetched for resume ID {resume_id}", 500)
+
+                current_app.logger.info(f"Fetched user_id '{user_id}' for resume_id '{resume_id}'.")
+                current_app.logger.info(f"Fetched resume data for {resume_id}: {list(resume_data.keys()) if isinstance(resume_data, dict) else 'Non-dict data'}")
 
                 # 3. Flatten skills if necessary
                 if "Skills" in resume_data and isinstance(resume_data["Skills"], dict):
