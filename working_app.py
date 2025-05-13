@@ -330,12 +330,18 @@ def create_app():
                 os.makedirs(OUTPUT_FOLDER, exist_ok=True) # Ensure output folder exists
 
                 current_app.logger.info(f"Calling PDF generator for resume {resume_id} to output at {output_path}")
-                generation_success = pdf_generator.generate_pdf(resume_data, output_path)
-
-                if not generation_success or not os.path.exists(output_path):
-                    current_app.logger.error(f"PDF generation failed for {resume_id}. Output file not found at {output_path}.")
-                    return error_response("PDFGenerationError", "Failed to generate PDF document.", 500)
-                current_app.logger.info(f"PDF generated at path: {output_path}")
+                try:
+                    generation_success = pdf_generator.generate_pdf(resume_data, output_path)
+                    
+                    if not generation_success or not os.path.exists(output_path):
+                        current_app.logger.error(f"PDF generation failed for {resume_id}. Output file not found at {output_path}.")
+                        return error_response("PDFGenerationError", "Failed to generate PDF document.", 500)
+                    current_app.logger.info(f"PDF generated at path: {output_path}")
+                except Exception as pdf_gen_error:
+                    error_details = str(pdf_gen_error)
+                    current_app.logger.error(f"PDF generation exception for {resume_id}: {error_details}", exc_info=True)
+                    # Include the actual error details in the response
+                    return error_response("PDFGenerationDetailedError", f"Failed to generate PDF document. Details: {error_details}", 500)
 
                 # 5. Upload to Supabase
                 upload_path = f"{user_id}/{resume_id}/{output_filename}"

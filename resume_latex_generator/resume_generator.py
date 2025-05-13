@@ -72,6 +72,8 @@ def compile_latex(tex_filepath: str) -> bool:
     print(f"Compiling LaTeX file: {tex_filepath}")
     sys.stdout.flush() # Force flush
     
+    detailed_error = None
+    
     try:
         # Run pdflatex twice to handle references, TOC, etc. (may not be needed for resumes)
         for attempt in range(2):
@@ -84,10 +86,14 @@ def compile_latex(tex_filepath: str) -> bool:
             
             # Check if compilation was successful
             if result.returncode != 0:
+                error_output = result.stderr or result.stdout
                 print(f"Error during LaTeX compilation (attempt {attempt+1}):")
                 sys.stdout.flush() # Force flush
-                print(result.stderr or result.stdout)
+                print(error_output)
                 sys.stdout.flush() # Force flush
+                
+                # Save the detailed error for later failure reporting
+                detailed_error = f"LaTeX Error (attempt {attempt+1}): {error_output[:500]}..."
                 
                 # Try once more with the second attempt
                 if attempt == 0:
@@ -97,12 +103,31 @@ def compile_latex(tex_filepath: str) -> bool:
                 
                 print("LaTeX compilation failed. Please check the .tex file and LaTeX installation.")
                 sys.stdout.flush() # Force flush
+                
                 # Show path to .log file for debugging
                 log_file = os.path.join(output_dir, f"{filename}.log")
                 if os.path.exists(log_file):
                     print(f"LaTeX log file available at: {log_file}")
                     sys.stdout.flush() # Force flush
-                return False
+                    
+                    # Try to extract key error info from the log
+                    try:
+                        with open(log_file, 'r', errors='ignore') as f:
+                            log_content = f.read()
+                            # Look for common error markers in LaTeX logs
+                            error_markers = ["! LaTeX Error:", "! Undefined control sequence", "! Missing", "! Too many"]
+                            for marker in error_markers:
+                                if marker in log_content:
+                                    idx = log_content.find(marker)
+                                    error_context = log_content[idx:idx+500].replace('\n', ' ')
+                                    detailed_error = f"From log file: {error_context}..."
+                                    break
+                    except Exception as e:
+                        print(f"Error reading log file: {e}")
+                        sys.stdout.flush()
+                
+                # Raise a more detailed exception instead of just returning False
+                raise Exception(detailed_error or "LaTeX compilation failed. No detailed error available.")
             
             # Success on this attempt - if it's the first, continue to the second run
             if attempt == 0:
@@ -116,27 +141,27 @@ def compile_latex(tex_filepath: str) -> bool:
             sys.stdout.flush() # Force flush
             return True
         else:
-            print(f"Expected PDF file not found at {pdf_path} despite successful compilation.")
+            error_msg = f"Expected PDF file not found at {pdf_path} despite successful compilation."
+            print(error_msg)
             sys.stdout.flush() # Force flush
-            return False
+            raise Exception(error_msg)
     
     except FileNotFoundError:
-        print("Error: LaTeX compiler (pdflatex) not found. Please ensure LaTeX is installed and in your PATH.")
+        error_msg = "ERROR: LaTeX compiler (pdflatex) not found in PATH. Is it installed?"
+        print(error_msg)
         sys.stdout.flush() # Force flush
-        print("On most systems, you can install LaTeX through:")
-        sys.stdout.flush()
-        print("  - macOS: 'brew install --cask mactex' or install MacTeX from https://tug.org/mactex/")
-        sys.stdout.flush()
-        print("  - Linux: 'sudo apt-get install texlive-full' (Ubuntu/Debian) or 'sudo dnf install texlive-scheme-full' (Fedora)")
-        sys.stdout.flush()
-        print("  - Windows: Install MiKTeX from https://miktex.org/download")
-        sys.stdout.flush()
-        return False
+        raise Exception(error_msg)
     
     except Exception as e:
-        print(f"Unexpected error during LaTeX compilation: {e}")
+        # If it's our own exception with details, re-raise it
+        if isinstance(e, Exception) and detailed_error:
+            raise
+        
+        # Otherwise wrap in a new exception
+        error_msg = f"Unexpected error during LaTeX compilation: {e}"
+        print(error_msg)
         sys.stdout.flush() # Force flush
-        return False
+        raise Exception(error_msg)
 
 def get_pdf_page_count(pdf_path):
     """
@@ -526,7 +551,10 @@ def create_pdf_generator():
                 template_name = template_name or self.template_name
                 
                 # Get the template module
-                template_module = load_template(template_name)
+                try:
+                    template_module = load_template(template_name)
+                except ImportError as e:
+                    raise Exception(f"Template error: {str(e)}")
                 
                 # Set up paths
                 output_dir = os.path.dirname(output_path)
@@ -539,21 +567,34 @@ def create_pdf_generator():
                 tex_filepath = os.path.join(output_dir, f"{base_name}.tex")
                 
                 # Generate LaTeX content
-                page_height = DEFAULT_INITIAL_PAGE_HEIGHT_INCHES
-                latex_content = template_module.generate_latex_content(resume_data, page_height)
+                try:
+                    page_height = DEFAULT_INITIAL_PAGE_HEIGHT_INCHES
+                    latex_content = template_module.generate_latex_content(resume_data, page_height)
+                except Exception as e:
+                    raise Exception(f"LaTeX content generation error: {str(e)}")
                 
                 # Write LaTeX content to file
-                with open(tex_filepath, 'w') as f:
-                    f.write(latex_content)
+                try:
+                    with open(tex_filepath, 'w') as f:
+                        f.write(latex_content)
+                except Exception as e:
+                    raise Exception(f"Error writing LaTeX file to {tex_filepath}: {str(e)}")
                 
                 # Compile LaTeX to PDF
-                success = compile_latex(tex_filepath)
+                compile_result = compile_latex(tex_filepath)
+                if not compile_result:
+                    raise Exception(f"LaTeX compilation failed for {tex_filepath}. Check if pdflatex is installed and accessible.")
                 
                 # If successful, the PDF should be at output_path
-                return success
+                if not os.path.exists(output_path):
+                    raise Exception(f"PDF file was not created at expected path: {output_path}")
+                
+                return True
             
             except Exception as e:
                 print(f"Error generating PDF: {e}")
-                return False
+                sys.stdout.flush()
+                # Re-raise the exception for the caller to handle
+                raise
     
     return PDFGenerator() 
