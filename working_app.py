@@ -44,7 +44,8 @@ logger = logging.getLogger(__name__)
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
 
-
+# Ensure 'os' is imported before it's used for makedirs
+import os
 
 # Create directories if they don't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
