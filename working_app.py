@@ -264,6 +264,9 @@ def create_app():
 
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])
     def download_resume_endpoint(resume_id, format_type):
+        current_app.logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        current_app.logger.info(f"!!!!!! ENTERING DOWNLOAD ENDPOINT: resume_id={resume_id}, format_type={format_type} !!!!!!")
+        current_app.logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         """Download a resume in different formats, loading data from Supabase."""
         if format_type.lower() == 'pdf':
             output_path = None # Initialize for cleanup in finally block
