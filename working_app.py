@@ -292,6 +292,13 @@ def create_app():
                 current_app.logger.info(f"Fetched user_id '{user_id}' for resume_id '{resume_id}'.")
                 current_app.logger.info(f"Fetched resume data for {resume_id}: {list(resume_data.keys()) if isinstance(resume_data, dict) else 'Non-dict data'}")
 
+                # Log types of main resume sections for debugging
+                if isinstance(resume_data, dict):
+                    for section_key, section_value in resume_data.items():
+                        current_app.logger.info(f"Resume section '{section_key}' has type: {type(section_value)}")
+                        if isinstance(section_value, list) and section_value:
+                            current_app.logger.info(f"  First item in '{section_key}' list has type: {type(section_value[0])}")
+                
                 # 3. Flatten skills if necessary
                 if "Skills" in resume_data and isinstance(resume_data["Skills"], dict):
                     flattened_skills = []
