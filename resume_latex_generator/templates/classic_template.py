@@ -176,7 +176,11 @@ def _generate_skills_section(skills_dict_input: Optional[Dict[str, Any]]) -> str
 
 def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> str:
     if not languages_list: return ""
-    lang_items = [f"{fix_latex_special_chars(lang.get('name'))}{f' ({fix_latex_special_chars(lang.get("proficiency"))})' if lang.get("proficiency") else ''}" for lang in languages_list if lang.get("name")]
+    lang_items = [
+        fix_latex_special_chars(lang.get('name')) + 
+        (f" ({fix_latex_special_chars(lang.get('proficiency'))})" if lang.get("proficiency") else "") 
+        for lang in languages_list if lang.get("name")
+    ]
     if not lang_items: return ""
     return "\n".join(["\\section{Languages}", r" \begin{itemize}[leftmargin=0.15in, label={}]", f"    \\small{{\\item{{{', '.join(lang_items)}}}}}", r" \end{itemize}", ""])
 
