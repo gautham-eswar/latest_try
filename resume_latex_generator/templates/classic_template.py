@@ -342,6 +342,18 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     if not skills_dict:
         return None
 
+    # Integration Fix: Handle if skills_dict is a list (e.g., from direct schema 'skills')
+    # Convert it to the structure expected by the rest of this function.
+    if isinstance(skills_dict, list):
+        # Assume the list contains general technical skills
+        # Create the expected nested dictionary structure
+        skills_dict = {
+            "Technical Skills": {
+                "General": skills_dict
+            }
+        }
+        print("AI HINT: Converted skills list to dictionary for _generate_skills_section.")
+
     lines = ["\\section{Technical Skills}"] # Default section title from sample
     
     # Check for "Technical Skills" sub-dictionary as in Evelyn.json
