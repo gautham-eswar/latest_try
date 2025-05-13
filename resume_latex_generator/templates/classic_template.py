@@ -650,9 +650,9 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
 
     # Document body start
     # Ensure doc_start is a clean f-string
-    doc_start = f\"\"\"\\begin{{document}}
+    doc_start = f"""\begin{{document}}
 {page_height_setting_for_doc_start}
-\"\"\"
+"""
 
     # Extract data based on schema (and handle Evelyn.json variations where noted)
     # The schema uses 'contact', Evelyn.json uses 'Personal Information'.
