@@ -144,6 +144,9 @@ def create_app():
     # Basic routes
     @app.route("/")
     def index():
+        current_app.logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        current_app.logger.info("!!!!!! ROOT ENDPOINT '/' WAS HIT !!!!!!")
+        current_app.logger.info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         """Root endpoint with API documentation."""
         return jsonify(
             {
