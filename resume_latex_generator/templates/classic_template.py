@@ -562,27 +562,25 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         A string containing the complete LaTeX document.
     """
     
-    page_height_setting_for_doc_start = "" # For \pdfpageheight
-    
     # Determine the physical page height for this compilation run
     current_physical_page_height = page_height if page_height is not None else DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES
 
     if page_height is not None:
         # This sets the physical media height at the start of the document
         page_height_setting_for_doc_start = f"\\setlength{{\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}"
+    else:
+        page_height_setting_for_doc_start = "" # No specific pdfpageheight setting if None
 
     # Calculate target text height based on the current physical page height
-    # Assuming 0.5in for top margin (due to \addtolength{\topmargin}{-.5in}) and 0.5in for bottom margin
     effective_top_margin = 0.5
     desired_bottom_margin = 0.5
     target_text_height = current_physical_page_height - effective_top_margin - desired_bottom_margin
     text_height_declaration = f"\\setlength{{\\textheight}}{{{target_text_height:.2f}in}}"
 
-    # LaTeX Preamble
-    # The text_height_declaration is now part of this main preamble string
+    # LaTeX Preamble: Ensure each string is a raw string r"..." for literal backslashes
+    # and no empty strings that would create unwanted blank lines.
     preamble_lines = [
         r"\\documentclass[letterpaper,11pt]{article}",
-        r"",
         r"\\usepackage{latexsym}",
         r"\\usepackage[empty]{fullpage}",
         r"\\usepackage{titlesec}",
@@ -594,79 +592,67 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         r"\\usepackage{fancyhdr}",
         r"\\usepackage[english]{babel}",
         r"\\usepackage{tabularx}",
-        r"\\usepackage{amsfonts}", 
-        r"",
+        r"\\usepackage{amsfonts}",
         r"% Adjust margins and SET text height precisely",
         r"\\addtolength{\\oddsidemargin}{-0.5in}",
         r"\\addtolength{\\evensidemargin}{-0.5in}",
         r"\\addtolength{\\textwidth}{1in}",
         r"\\addtolength{\\topmargin}{-0.5in}",
-        text_height_declaration,
-        r"",
+        text_height_declaration, # This variable holds a correctly formatted LaTeX string
         r"% Page breaking penalties",
         r"\\clubpenalty=8000",
         r"\\widowpenalty=8000",
         r"\\tolerance=1000",
         r"\\setlength{\\emergencystretch}{1.5em}",
-        r"",
         r"\\urlstyle{same}",
         r"\\raggedbottom",
         r"\\raggedright",
         r"\\setlength{\\tabcolsep}{0in}",
-        r"",
         r"% Sections formatting",
         r"\\titleformat{\\section}{%",
         r"  \\vspace{-4pt}\\scshape\\raggedright\\large",
         r"}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]",
-        r"",
         r"% Ensure that generated pdf is machine readable/ATS parsable",
         r"\\pdfgentounicode=1",
-        r"",
         r"% Custom commands",
         r"\\newcommand{\\resumeItem}[1]{%",
         r"  \\item\\small{{%",
         r"    {#1 \\vspace{-2pt}}%",
         r"  }%",
         r"}",
-        r"",
         r"\\newcommand{\\resumeSubheading}[4]{%",
         r"  \\vspace{-2pt}\\item%",
         r"    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\textbf{#1} & #2 \\\\%",
-        r"      \\textit{\\small#3} & \\textit{\\small #4} \\\\%",
+        r"      \\textbf{#1} & #2 \\\\%",  # Double backslash for LaTeX newline
+        r"      \\textit{\\small#3} & \\textit{\\small #4} \\\\%", # Double backslash for LaTeX newline
         r"    \\end{tabular*}\\vspace{-7pt}%",
         r"}",
-        r"",
         r"\\newcommand{\\resumeSubSubheading}[2]{%",
         r"    \\item%",
         r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\textit{\\small#1} & \\textit{\\small #2} \\\\%",
+        r"      \\textit{\\small#1} & \\textit{\\small #2} \\\\%", # Double backslash for LaTeX newline
         r"    \\end{tabular*}\\vspace{-7pt}%",
         r"}",
-        r"",
         r"\\newcommand{\\resumeProjectHeading}[2]{%",
         r"    \\item%",
         r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\small#1 & #2 \\\\%",
+        r"      \\small#1 & #2 \\\\%", # Double backslash for LaTeX newline
         r"    \\end{tabular*}\\vspace{-7pt}%",
         r"}",
-        r"",
         r"\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}",
-        r"",
         r"\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}",
-        r"",
         r"\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}",
         r"\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}",
         r"\\newcommand{\\resumeItemListStart}{\\begin{itemize}}",
         r"\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}",
-        r""
     ]
     preamble = "\\n".join(preamble_lines)
 
     # Document body start
-    doc_start = f"""\\begin{{document}}
+    # Ensure doc_start is a clean f-string
+    doc_start = f\"\"\"\\begin{{document}}
 {page_height_setting_for_doc_start}
-"""
+\"\"\"
 
     # Extract data based on schema (and handle Evelyn.json variations where noted)
     # The schema uses 'contact', Evelyn.json uses 'Personal Information'.
@@ -866,3 +852,4 @@ if __name__ == '__main__':
     with open("classic_template_test_minimal.tex", "w", encoding='utf-8') as f:
         f.write(latex_minimal)
     print("Saved to classic_template_test_minimal.tex")
+    
