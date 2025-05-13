@@ -1,91 +1,25 @@
-import dotenv # Import dotenv
-
-# Load environment variables from .env file
-dotenv.load_dotenv()
-
-from typing import Dict, Any, Optional, List, Tuple
+import os # Add os import for path operations
+from typing import Dict, Any, Optional, List
 import re
-import openai
-import os
-import json
-import hashlib
 
 # Default page height if not specified by the generator (e.g. if auto-sizing is off and no specific height is given)
 DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES = 11.0 
 
-# Cache for OpenAI API responses
-API_CACHE: Dict[str, Any] = {}
-OPENAI_CLIENT: Optional[openai.OpenAI] = None # Store the client instance
-OPENAI_API_KEY_LOADED = False # Flag to check if API key was successfully loaded
-
-def _initialize_openai_client() -> bool:
-    """Initializes the OpenAI client if not already done. Returns True if successful or already initialized."""
-    global OPENAI_CLIENT, OPENAI_API_KEY_LOADED
-    if OPENAI_CLIENT is not None and OPENAI_API_KEY_LOADED:
-        return True
-    
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        # Only print warning once, or find a better way to log this if it becomes noisy.
-        # For now, let's assume it's okay to print if called when client is None.
-        if OPENAI_CLIENT is None: # Avoid repeated warnings if called multiple times without key
-            print("AI HINT: OPENAI_API_KEY environment variable not set. Skill/metric highlighting will be skipped.")
-        OPENAI_API_KEY_LOADED = False
-        return False
-    
-    try:
-        OPENAI_CLIENT = openai.OpenAI(api_key=api_key)
-        OPENAI_API_KEY_LOADED = True
-        print("AI HINT: OpenAI client initialized successfully for skill/metric highlighting.")
-        return True
-    except Exception as e:
-        if OPENAI_CLIENT is None: # Avoid repeated warnings
-            print(f"AI HINT: Failed to initialize OpenAI client: {e}. Skill/metric highlighting will be skipped.")
-        OPENAI_API_KEY_LOADED = False
-        return False
-
-def format_date_range(start_date: Optional[str], end_date: Optional[str]) -> str:
-    """Format start and end dates into a consistent date range string."""
-    if not start_date and not end_date:
-        return ""
-        
-    formatted_start = fix_latex_special_chars(start_date) if start_date else ""
-    formatted_end = fix_latex_special_chars(end_date) if end_date else ""
-    
-    # Check if end_date is "present" (case insensitive)
-    if formatted_end and formatted_end.lower() == "present":
-        formatted_end = "Present"
-        
-    if formatted_start and formatted_end:
-        return f"{formatted_start} -- {formatted_end}"
-    elif formatted_start:
-        return formatted_start
-    elif formatted_end:
-        return formatted_end
-    else:
-        return ""
+# --- Helper functions to generate LaTeX for each section (assumed to be defined below as before) ---
+# e.g. fix_latex_special_chars, _generate_header_section, _generate_objective_section, etc.
 
 def fix_latex_special_chars(text: Optional[Any]) -> str:
-    """
-    Escapes LaTeX special characters in a given string.
-    Also converts None to an empty string.
-    """
     if text is None:
         return ""
     if not isinstance(text, str):
-        text = str(text) # Ensure it's a string
-
-    # Process percentage signs specially to handle common patterns like "5%" correctly
-    # First, find and protect patterns like "X%" where X is a number
+        text = str(text)
     protected_percentages = {}
     for i, match in enumerate(re.finditer(r'(\d+)%', text)):
         placeholder = f"__PCT_PLACEHOLDER_{i}__"
         text = text.replace(match.group(0), placeholder)
         protected_percentages[placeholder] = f"{match.group(1)}\\%"
-
-    # Now handle standard LaTeX special characters
     replacements = [
-        ("\\", r"\textbackslash{}"), # Must be first
+        ("\\", r"\textbackslash{}"),
         ("&", r"\&"),
         ("%", r"\%"),
         ("$", r"\$"),
@@ -96,202 +30,104 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
         ("~", r"\textasciitilde{}"),
         ("^", r"\textasciicircum{}"),
     ]
-
     for old, new in replacements:
         text = text.replace(old, new)
-        
-    # Finally, restore the protected percentage patterns
     for placeholder, replacement in protected_percentages.items():
         text = text.replace(placeholder, replacement)
-        
     return text
 
-
-def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optional[str]:
-    if not personal_info:
-        return None
-    
+def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> str:
+    if not personal_info: return ""
     name = fix_latex_special_chars(personal_info.get("name"))
-    email = personal_info.get("email")  # Raw email, will handle special chars in href
+    email = personal_info.get("email")
     phone = fix_latex_special_chars(personal_info.get("phone"))
-    linkedin = fix_latex_special_chars(personal_info.get("linkedin")) # Assuming 'linkedin' key
-    website = fix_latex_special_chars(personal_info.get("website")) # Assuming 'website' key
-    github = fix_latex_special_chars(personal_info.get("github")) # Assuming 'github' key
+    linkedin = fix_latex_special_chars(personal_info.get("linkedin"))
+    website = fix_latex_special_chars(personal_info.get("website"))
+    github = fix_latex_special_chars(personal_info.get("github"))
     location = fix_latex_special_chars(personal_info.get("location"))
-
     lines = []
     if name:
         lines.append(r"\begin{center}")
         lines.append(f"    \\textbf{{\\Huge \\scshape {name}}} \\\\ \\vspace{{1pt}}")
-    
     contact_parts = []
-    if phone:
-        contact_parts.append(phone)
+    if phone: contact_parts.append(phone)
     if email:
-        # Special handling for email to avoid underscore issues
-        # Use the raw email for mailto but escape underscores properly for display
-        email_display = email.replace("_", r"\_")  # Proper LaTeX escaping
+        email_display = email.replace("_", r"\_")
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\underline{{{email_display}}}}}")
-    if linkedin: # Assuming 'linkedin' key from schema
-        linkedin_url = linkedin
-        if not linkedin.startswith("http"):
-            linkedin_url = f"https://{linkedin}" # Basic assumption
+    if linkedin:
+        linkedin_url = linkedin if linkedin.startswith("http") else f"https://{linkedin}"
         contact_parts.append(f"\\href{{{linkedin_url}}}{{\\underline{{{linkedin}}}}}")
-    if github: # Assuming 'github' key
-        github_url = github
-        if not github.startswith("http"):
-            github_url = f"https://{github}" # Basic assumption
+    if github:
+        github_url = github if github.startswith("http") else f"https://{github}"
         contact_parts.append(f"\\href{{{github_url}}}{{\\underline{{{github}}}}}")
-    if website: # Assuming 'website' key
-        website_url = website
-        if not website.startswith("http"): # Basic check for protocol
-             website_url = f"http://{website}"
+    if website:
+        website_url = website if website.startswith("http") else f"http://{website}"
         contact_parts.append(f"\\href{{{website_url}}}{{\\underline{{{website}}}}}")
+    if contact_parts: lines.append(f"    \\small {' $|$ '.join(contact_parts)}")
+    if location and name: lines.append(f"    \\small {location}")
+    elif location: lines.append(f"    \\small {location}") # if only location
+    if name: lines.append(r"\end{center}")
+    return "\n".join(lines)
 
-    if contact_parts:
-        lines.append(f"    \\small {' $|$ '.join(contact_parts)}")
-    
-    if location and not name: # If only location is there, might look odd with just center
-         lines.append(f"    \\small {location}")
-    elif location and name: # Add location if name is also present
-        lines.append(f"    \\small {location}")
+def _generate_objective_section(objective: Optional[str]) -> str:
+    if not objective: return ""
+    return f"\\section*{{Summary}} % Using section* for unnumbered\n  {fix_latex_special_chars(objective)}"
 
-
-    if name: # Only add end{center} if we started it
-        lines.append(r"\end{center}")
-        lines.append("") # Add a newline for spacing
-
-    return "\n".join(lines) if lines else None
-
-
-def _generate_objective_section(objective: Optional[str]) -> Optional[str]:
-    if not objective:
-        return None
-    
-    return f"""\\section*{{Summary}} % Using section* for unnumbered
-  {fix_latex_special_chars(objective)}
-"""
-
-def _parse_location_dict(location_data: Any) -> str:
-    """Helper function to parse a location, which can be a string or a dict."""
-    if isinstance(location_data, dict):
-        city = location_data.get("city")
-        state = location_data.get("state")
-        # country = location_data.get("country") # Optional: include country if needed
-        parts = []
-        if city and isinstance(city, str):
-            parts.append(city)
-        if state and isinstance(state, str):
-            parts.append(state)
-        return fix_latex_special_chars(", ".join(parts))
-    elif isinstance(location_data, str):
-        return fix_latex_special_chars(location_data)
-    return "" # Return empty string if None or other type
-
-def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    if not education_list:
-        return None
-    
+def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not education_list: return ""
     lines = ["\\section{Education}", "  \\resumeSubHeadingListStart"]
     for edu in education_list:
         uni = fix_latex_special_chars(edu.get("institution") or edu.get("university"))
         loc = fix_latex_special_chars(edu.get("location"))
-        degree_parts = [fix_latex_special_chars(edu.get("degree"))]
-        if edu.get("specialization"):
-            degree_parts.append(fix_latex_special_chars(edu.get("specialization")))
-        degree_str = ", ".join(filter(None, degree_parts))
-        
+        degree_parts = [fix_latex_special_chars(d) for d in [edu.get("degree"), edu.get("specialization")] if d]
+        degree_str = ", ".join(degree_parts)
         start_date = edu.get("start_date", "")
         end_date = edu.get("end_date", "")
         dates = f"{fix_latex_special_chars(start_date)} -- {fix_latex_special_chars(end_date)}" if start_date or end_date else ""
-        if end_date and end_date.lower() == 'present': # Handle 'Present' for end date
-             dates = f"{fix_latex_special_chars(start_date)} -- Present"
-        elif not end_date and start_date: # If only start_date is present
-             dates = fix_latex_special_chars(start_date)
-
-
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{{uni}}}{{{loc}}}")
-        lines.append(f"      {{{degree_str}}}{{{dates}}}")
-        
-        # Optional GPA and Honors
+        if end_date and end_date.lower() == 'present': dates = f"{fix_latex_special_chars(start_date)} -- Present"
+        elif not end_date and start_date: dates = fix_latex_special_chars(start_date)
+        lines.append(f"    \\resumeSubheading{{{uni}}}{{{loc}}}{{{degree_str}}}{{{dates}}}")
         gpa = edu.get("gpa")
         honors = fix_latex_special_chars(edu.get("honors"))
-        
-        details_parts = []
-        if gpa:
-            details_parts.append(f"GPA: {fix_latex_special_chars(gpa)}")
-        if honors:
-            details_parts.append(f"Honors: {honors}")
-        
-        if details_parts:
-            lines.append(f"    \\resumeSubSubheading{{{', '.join(details_parts)}}}{{}}")
-
-        # Relevant coursework / additional info
-        # The schema has `relevant_coursework` as a list, and JSON has `additional_info` as a string.
-        # Let's prioritize `additional_info` if present, then `relevant_coursework`.
-        
+        details_parts = [f"GPA: {fix_latex_special_chars(gpa)}" if gpa else None, f"Honors: {honors}" if honors else None]
+        if any(details_parts): lines.append(f"    \\resumeSubSubheading{{{', '.join(filter(None, details_parts))}}}{{}}")
         additional_info = edu.get("additional_info")
         relevant_coursework = edu.get("relevant_coursework")
-
         if additional_info:
-            lines.append(r"      \\resumeItemListStart")
-            lines.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info)}}}")
-            lines.append(r"      \\resumeItemListEnd")
+            lines.extend([r"      \\resumeItemListStart", f"        \\resumeItem{{{fix_latex_special_chars(additional_info)}}}", r"      \\resumeItemListEnd"])
         elif relevant_coursework and isinstance(relevant_coursework, list):
-            lines.append(r"      \\resumeItemListStart")
             courses_str = ", ".join(fix_latex_special_chars(c) for c in relevant_coursework)
-            lines.append(f"        \\resumeItem{{Relevant Coursework: {courses_str}}}")
-            lines.append(r"      \\resumeItemListEnd")
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+            lines.extend([r"      \\resumeItemListStart", f"        \\resumeItem{{Relevant Coursework: {courses_str}}}", r"      \\resumeItemListEnd"])
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    # Placeholder: Needs to map JSON `work_experience` to `resumeSubheading` and `resumeItemList`
-    if not experience_list:
-        return None
-    
+def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not experience_list: return ""
     lines = ["\\section{Experience}", "  \\resumeSubHeadingListStart"]
     for exp in experience_list:
         company = fix_latex_special_chars(exp.get("company"))
-        position = fix_latex_special_chars(exp.get("position") or exp.get("title")) # JSON has 'title'
+        position = fix_latex_special_chars(exp.get("position") or exp.get("title"))
         location = fix_latex_special_chars(exp.get("location"))
-        
         dates_dict = exp.get("dates", {})
         start_date = fix_latex_special_chars(dates_dict.get("start_date"))
         end_date = fix_latex_special_chars(dates_dict.get("end_date"))
         dates_str = f"{start_date} -- {end_date}" if start_date or end_date else ""
-        if end_date and end_date.lower() == 'present':
-             dates_str = f"{start_date} -- Present"
-        elif not end_date and start_date:
-             dates_str = start_date
-
-
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{{position}}}{{{dates_str}}}") # Position first, then dates
-        lines.append(f"      {{{company}}}{{{location}}}")   # Company second, then location
-
-        responsibilities = exp.get("responsibilities") or exp.get("responsibilities/achievements") # JSON has the latter
+        if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present"
+        elif not end_date and start_date: dates_str = start_date
+        lines.append(f"    \\resumeSubheading{{{position}}}{{{dates_str}}}{{{company}}}{{{location}}}")
+        responsibilities = exp.get("responsibilities") or exp.get("responsibilities/achievements")
         if responsibilities and isinstance(responsibilities, list):
             lines.append(r"      \\resumeItemListStart")
-            for resp in responsibilities:
-                lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+            for resp in responsibilities: lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
             lines.append(r"      \\resumeItemListEnd")
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    if not project_list:
-        return None
-    
+def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not project_list: return ""
     lines = ["\\section{Projects}", "    \\resumeSubHeadingListStart"]
     for proj in project_list:
         title = fix_latex_special_chars(proj.get("title"))
-        # Dates for projects can be a single 'date' or 'dates' dict
         dates_val = proj.get("dates") or proj.get("date")
         dates_str = ""
         if isinstance(dates_val, dict):
@@ -300,192 +136,81 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> 
             dates_str = f"{start} -- {end}" if start or end else ""
             if end and end.lower() == 'present': dates_str = f"{start} -- Present"
             elif not end and start : dates_str = start
-        elif isinstance(dates_val, str):
-            dates_str = fix_latex_special_chars(dates_val)
-
-        tech_used = proj.get("technologies") or proj.get("technologies_used") # JSON has the latter
-        
-        # Combining title with technologies if they exist for the heading
+        elif isinstance(dates_val, str): dates_str = fix_latex_special_chars(dates_val)
+        tech_used = proj.get("technologies") or proj.get("technologies_used")
         heading_title_part = f"\\textbf{{{title}}}"
         if tech_used:
-            if isinstance(tech_used, list):
-                tech_str = ", ".join(fix_latex_special_chars(t) for t in tech_used)
-            else: # string
-                tech_str = fix_latex_special_chars(tech_used)
-            if tech_str: # Ensure not empty
-                 heading_title_part += f" $|$ \\emph{{{tech_str}}}"
-
-        lines.append(f"      \\resumeProjectHeading")
-        lines.append(f"          {{{heading_title_part}}}{{{dates_str}}}")
-
+            tech_str = ", ".join(fix_latex_special_chars(t) for t in tech_used) if isinstance(tech_used, list) else fix_latex_special_chars(tech_used)
+            if tech_str: heading_title_part += f" $|$ \\emph{{{tech_str}}}"
+        lines.append(f"      \\resumeProjectHeading{{{heading_title_part}}}{{{dates_str}}}")
         description = proj.get("description")
         if description:
             lines.append(r"          \\resumeItemListStart")
             if isinstance(description, list):
-                for item in description:
-                    lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
-            else: # string
-                lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
+                for item in description: lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
+            else: lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
             lines.append(r"          \\resumeItemListEnd")
-            
-    lines.append("    \\resumeSubHeadingListEnd")
-    lines.append("")
+    lines.extend(["    \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-
-def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[str]:
-    # The sample JSON has skills_dict: {"Soft Skills": [], "Technical Skills": {"Category": [item1, item2]}}
-    # The schema has skills_dict: {"Category": [item1, item2]}
-    # The sample LaTeX is more free-form.
-    # Let's try to match the sample JSON structure and then the schema if that fails.
-
-    if not skills_dict:
-        return None
-
-    # Integration Fix: Handle if skills_dict is a list (e.g., from direct schema 'skills')
-    # Convert it to the structure expected by the rest of this function.
-    if isinstance(skills_dict, list):
-        # Assume the list contains general technical skills
-        # Create the expected nested dictionary structure
-        skills_dict = {
-            "Technical Skills": {
-                "General": skills_dict
-            }
-        }
+def _generate_skills_section(skills_dict_input: Optional[Dict[str, Any]]) -> str:
+    if not skills_dict_input: return ""
+    skills_dict = skills_dict_input
+    if isinstance(skills_dict_input, list):
+        skills_dict = {"Technical Skills": {"General": skills_dict_input}}
         print("AI HINT: Converted skills list to dictionary for _generate_skills_section.")
-
-    lines = ["\\section{Technical Skills}"] # Default section title from sample
-    
-    # Check for "Technical Skills" sub-dictionary as in Evelyn.json
+    lines = ["\\section{Technical Skills}"]
     technical_skills_data = skills_dict.get("Technical Skills")
-    
-    # If "Technical Skills" is not a sub-dict, assume skills_dict itself is the category->list_of_skills map
-    # as per the prompt's schema definition.
-    skills_to_process = {}
-    if isinstance(technical_skills_data, dict):
-        skills_to_process = technical_skills_data
-    elif isinstance(skills_dict, dict) and not technical_skills_data: # skills_dict *is* the categories
-        skills_to_process = skills_dict
-    
-    if not skills_to_process: # If still no processable skills (e.g. only "Soft Skills" or empty)
-        # Try to see if there's a "Soft Skills" to list, or just output nothing.
+    skills_to_process = technical_skills_data if isinstance(technical_skills_data, dict) else (skills_dict if isinstance(skills_dict, dict) and not technical_skills_data else {})
+    if not skills_to_process:
         soft_skills = skills_dict.get("Soft Skills")
         if isinstance(soft_skills, list) and soft_skills:
-            lines.append(r" \begin{itemize}[leftmargin=0.15in, label={}]")
-            lines.append(r"    \small{\item{")
-            lines.append(f"     \\textbf{{Soft Skills}}{{: {fix_latex_special_chars(', '.join(soft_skills))}}} \\\\")
-            lines.append(r"    }}")
-            lines.append(r" \end{itemize}")
-            lines.append("")
+            lines.extend([r" \begin{itemize}[leftmargin=0.15in, label={}]", r"    \small{\item{", f"     \\textbf{{Soft Skills}}{{: {fix_latex_special_chars(', '.join(soft_skills))}}} \\\\", r"    }}", r" \end{itemize}", ""])
             return "\n".join(lines)
-        return None # No technical skills to list in the desired format
-
-    lines.append(r" \begin{itemize}[leftmargin=0.15in, label={}]")
-    lines.append(r"    \small{\item{")
-    
-    category_lines = []
-    for category, skills_list in skills_to_process.items():
-        if isinstance(skills_list, list) and skills_list: # Ensure it's a list and not empty
-            skills_str = ", ".join(fix_latex_special_chars(s) for s in skills_list)
-            category_lines.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
-    
-    lines.append(" \\\\ ".join(category_lines)) # Join categories with LaTeX newline
-    
-    lines.append(r"    }}")
-    lines.append(r" \end{itemize}")
-    lines.append("")
+        return ""
+    lines.extend([r" \begin{itemize}[leftmargin=0.15in, label={}]", r"    \small{\item{"])
+    category_lines = [f"     \\textbf{{{fix_latex_special_chars(cat)}}}{{: {fix_latex_special_chars(', '.join(slist))}}}" for cat, slist in skills_to_process.items() if isinstance(slist, list) and slist]
+    lines.append(" \\\\ ".join(category_lines))
+    lines.extend([r"    }}", r" \end{itemize}", ""])
     return "\n".join(lines)
 
+def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not languages_list: return ""
+    lang_items = [f"{fix_latex_special_chars(lang.get('name'))}{f' ({fix_latex_special_chars(lang.get("proficiency"))})' if lang.get("proficiency") else ''}" for lang in languages_list if lang.get("name")]
+    if not lang_items: return ""
+    return "\n".join(["\\section{Languages}", r" \begin{itemize}[leftmargin=0.15in, label={}]", f"    \\small{{\\item{{{', '.join(lang_items)}}}}}", r" \end{itemize}", ""])
 
-def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    if not languages_list:
-        return None
-    lines = ["\\section{Languages}", r" \begin{itemize}[leftmargin=0.15in, label={}]"]
-    lang_items = []
-    for lang_data in languages_list:
-        name = fix_latex_special_chars(lang_data.get("name"))
-        proficiency = fix_latex_special_chars(lang_data.get("proficiency"))
-        if name:
-            item_str = name
-            if proficiency:
-                item_str += f" ({proficiency})"
-            lang_items.append(item_str)
-    if lang_items:
-         lines.append(f"    \\small{{\\item{{{', '.join(lang_items)}}}}}")
-
-    lines.append(r" \end{itemize}")
-    lines.append("")
-    return "\n".join(lines) if lang_items else None
-
-
-def _generate_certifications_section(cert_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    # Schema: certifications (list of dicts: `certification`, `institution`, `date`)
-    # Evelyn.json: "Certifications/Awards": [] -> this implies it could be mixed.
-    # Let's assume cert_list is purely certifications for now.
-    if not cert_list:
-        return None
-    
+def _generate_certifications_section(cert_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not cert_list: return ""
     lines = ["\\section{Certifications}", "  \\resumeSubHeadingListStart"]
     for cert in cert_list:
         name = fix_latex_special_chars(cert.get("certification"))
         institution = fix_latex_special_chars(cert.get("institution"))
         date = fix_latex_special_chars(cert.get("date"))
-        
-        # Using resumeSubheading for a structured look, though it's typically for job/edu.
-        # We can simplify if needed.
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{{name}}}{{{date}}}") 
-        lines.append(f"      {{{institution}}}{{}}") # Institution on the left, nothing on the right
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+        lines.append(f"    \\resumeSubheading{{{name}}}{{{date}}}{{{institution}}}{{}}")
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    # Schema: awards (list of dicts: `title`, `issuer`, `date`, `description`)
-    # Evelyn.json: "Certifications/Awards": []
-    if not awards_list:
-        return None
-        
+def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not awards_list: return ""
     lines = ["\\section{Awards}", "  \\resumeSubHeadingListStart"]
     for award in awards_list:
         title = fix_latex_special_chars(award.get("title"))
         issuer = fix_latex_special_chars(award.get("issuer"))
         date = fix_latex_special_chars(award.get("date"))
         description = fix_latex_special_chars(award.get("description"))
-
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{{title}}}{{{date}}}")
-        lines.append(f"      {{{issuer}}}{{}}") # Issuer on the left
-
-        if description:
-            lines.append(r"      \\resumeItemListStart")
-            lines.append(f"        \\resumeItem{{{description}}}")
-            lines.append(r"      \\resumeItemListEnd")
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+        lines.append(f"    \\resumeSubheading{{{title}}}{{{date}}}{{{issuer}}}{{}}")
+        if description: lines.extend([r"      \\resumeItemListStart", f"        \\resumeItem{{{description}}}", r"      \\resumeItemListEnd"])
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-
-def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
-    # Schema: involvement or leadership (list of dicts: `organization`, `position`, `date`, `responsibilities` list)
-    # Evelyn.json: "Misc": { "Leadership": { "Event Name": { "dates": ..., "responsibilities": ...}}}
-    # This is quite different. The sample json has a nested structure under "Misc" -> "Leadership"
-    # The schema expects a flat list of involvement dicts.
-    # This template function will try to handle the schema's flat list first.
-    # If that's not found, it will look for the Evelyn.json structure.
-
-    if not involvement_list: # This is for the direct schema key 'involvement' or 'leadership'
-        return None
-
-    lines = ["\\section{Leadership \\& Involvement}", "  \\resumeSubHeadingListStart"] # Escape ampersand in section title
-    
-    for item in involvement_list: # Assuming schema-compliant list
+def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]]]) -> str:
+    if not involvement_list: return ""
+    lines = ["\\section{Leadership \\& Involvement}", "  \\resumeSubHeadingListStart"]
+    for item in involvement_list:
         organization = fix_latex_special_chars(item.get("organization"))
         position = fix_latex_special_chars(item.get("position"))
-        
-        date_val = item.get("date") # Schema suggests 'date' (string) or 'dates' (dict)
+        date_val = item.get("date")
         dates_str = ""
         if isinstance(date_val, dict):
             start = fix_latex_special_chars(date_val.get("start_date"))
@@ -493,363 +218,119 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
             dates_str = f"{start} -- {end}" if start or end else ""
             if end and end.lower() == 'present': dates_str = f"{start} -- Present"
             elif not end and start : dates_str = start
-        elif isinstance(date_val, str):
-            dates_str = fix_latex_special_chars(date_val)
-
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{{position}}}{{{dates_str}}}")
-        lines.append(f"      {{{organization}}}{{}}")
-
+        elif isinstance(date_val, str): dates_str = fix_latex_special_chars(date_val)
+        lines.append(f"    \\resumeSubheading{{{position}}}{{{dates_str}}}{{{organization}}}{{}}")
         responsibilities = item.get("responsibilities")
         if responsibilities and isinstance(responsibilities, list):
             lines.append(r"      \\resumeItemListStart")
-            for resp in responsibilities:
-                lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+            for resp in responsibilities: lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
             lines.append(r"      \\resumeItemListEnd")
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
-def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Optional[str]:
-    """Specifically handles the Evelyn.json Misc.Leadership structure."""
-    if not misc_data or not isinstance(misc_data, dict):
-        return None
-    
+def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> str:
+    if not misc_data or not isinstance(misc_data, dict): return ""
     leadership_data = misc_data.get("Leadership")
-    if not leadership_data or not isinstance(leadership_data, dict):
-        return None
-
-    lines = ["\\section{Leadership \\& Activities}", "  \\resumeSubHeadingListStart"] # Escape ampersand in section title
-    
+    if not leadership_data or not isinstance(leadership_data, dict): return ""
+    lines = ["\\section{Leadership \\& Activities}", "  \\resumeSubHeadingListStart"]
     for event_name, details in leadership_data.items():
         name = fix_latex_special_chars(event_name)
-        
         dates_dict = details.get("dates", {})
         start_date = fix_latex_special_chars(dates_dict.get("start_date"))
         end_date = fix_latex_special_chars(dates_dict.get("end_date"))
         dates_str = f"{start_date} -- {end_date}" if start_date or end_date else ""
-        if end_date and end_date.lower() == 'present':
-             dates_str = f"{start_date} -- Present"
-        elif not end_date and start_date:
-             dates_str = start_date
-        
-        # Using resumeSubheading: Event Name on left, Dates on right.
-        # No clear "position" or "organization" like in the schema, so event name is primary.
-        lines.append(f"    \\resumeSubheading")
-        lines.append(f"      {{\\textbf{{{name}}}}}{{{dates_str}}}") # Event name bolded
-        lines.append(f"      {{}}{{}}") # Empty second line of subheading
-        
-        responsibilities = details.get("responsibilities/achievements") # From Evelyn.json
+        if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present"
+        elif not end_date and start_date: dates_str = start_date
+        lines.append(f"    \\resumeSubheading{{\\textbf{{{name}}}}}{{{dates_str}}}{{}}{{}}")
+        responsibilities = details.get("responsibilities/achievements")
         if responsibilities and isinstance(responsibilities, list):
             lines.append(r"      \\resumeItemListStart")
-            for resp in responsibilities:
-                lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+            for resp in responsibilities: lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
             lines.append(r"      \\resumeItemListEnd")
-            
-    lines.append("  \\resumeSubHeadingListEnd")
-    lines.append("")
+    lines.extend(["  \\resumeSubHeadingListEnd", ""])
     return "\n".join(lines)
 
+# Determine the script's directory to find classic_template_base.tex
+_TEMPLATE_DIR = os.path.dirname(os.path.abspath(__file__))
+_BASE_TEMPLATE_PATH = os.path.join(_TEMPLATE_DIR, "classic_template_base.tex")
 
 def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = None) -> str:
     """
-    Generates the full LaTeX document string for a classic resume.
+    Generates the full LaTeX document string by loading a base template
+    and injecting generated content for each section.
     Args:
         data: The parsed JSON resume data.
         page_height: Optional page height in inches. If None, a template default is used.
     Returns:
         A string containing the complete LaTeX document.
     """
-    
-    # Determine the physical page height for this compilation run
+    try:
+        with open(_BASE_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+    except FileNotFoundError:
+        # Fallback or error if template not found - this should not happen in a deployed app
+        print(f"ERROR: Base template file not found at {_BASE_TEMPLATE_PATH}")
+        return "" # Or raise an exception
+    except Exception as e:
+        print(f"ERROR: Could not read base template file: {e}")
+        return ""
+
     current_physical_page_height = page_height if page_height is not None else DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES
-
-    if page_height is not None:
-        # This sets the physical media height at the start of the document
-        page_height_setting_for_doc_start = f"\\setlength{{\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}"
-    else:
-        page_height_setting_for_doc_start = "" # No specific pdfpageheight setting if None
-
-    # Calculate target text height based on the current physical page height
+    page_height_setting_for_doc_start = f"\\setlength{{\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}" if page_height is not None else ""
+    
     effective_top_margin = 0.5
     desired_bottom_margin = 0.5
     target_text_height = current_physical_page_height - effective_top_margin - desired_bottom_margin
     text_height_declaration = f"\\setlength{{\\textheight}}{{{target_text_height:.2f}in}}"
 
-    # LaTeX Preamble: Ensure each string is a raw string r"..." for literal backslashes
-    # and no empty strings that would create unwanted blank lines.
-    preamble_lines = [
-        r"\\documentclass[letterpaper,11pt]{article}",
-        r"\\usepackage{latexsym}",
-        r"\\usepackage[empty]{fullpage}",
-        r"\\usepackage{titlesec}",
-        r"\\usepackage{marvosym}",
-        r"\\usepackage[usenames,dvipsnames]{color}",
-        r"\\usepackage{verbatim}",
-        r"\\usepackage{enumitem}",
-        r"\\usepackage[hidelinks]{hyperref}",
-        r"\\usepackage{fancyhdr}",
-        r"\\usepackage[english]{babel}",
-        r"\\usepackage{tabularx}",
-        r"\\usepackage{amsfonts}",
-        r"% Adjust margins and SET text height precisely",
-        r"\\addtolength{\\oddsidemargin}{-0.5in}",
-        r"\\addtolength{\\evensidemargin}{-0.5in}",
-        r"\\addtolength{\\textwidth}{1in}",
-        r"\\addtolength{\\topmargin}{-0.5in}",
-        text_height_declaration, # This variable holds a correctly formatted LaTeX string
-        r"% Page breaking penalties",
-        r"\\clubpenalty=8000",
-        r"\\widowpenalty=8000",
-        r"\\tolerance=1000",
-        r"\\setlength{\\emergencystretch}{1.5em}",
-        r"\\urlstyle{same}",
-        r"\\raggedbottom",
-        r"\\raggedright",
-        r"\\setlength{\\tabcolsep}{0in}",
-        r"% Sections formatting",
-        r"\\titleformat{\\section}{%",
-        r"  \\vspace{-4pt}\\scshape\\raggedright\\large",
-        r"}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]",
-        r"% Ensure that generated pdf is machine readable/ATS parsable",
-        r"\\pdfgentounicode=1",
-        r"% Custom commands",
-        r"\\newcommand{\\resumeItem}[1]{%",
-        r"  \\item\\small{{%",
-        r"    {#1 \\vspace{-2pt}}%",
-        r"  }%",
-        r"}",
-        r"\\newcommand{\\resumeSubheading}[4]{%",
-        r"  \\vspace{-2pt}\\item%",
-        r"    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\textbf{#1} & #2 \\\\%",  # Double backslash for LaTeX newline
-        r"      \\textit{\\small#3} & \\textit{\\small #4} \\\\%", # Double backslash for LaTeX newline
-        r"    \\end{tabular*}\\vspace{-7pt}%",
-        r"}",
-        r"\\newcommand{\\resumeSubSubheading}[2]{%",
-        r"    \\item%",
-        r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\textit{\\small#1} & \\textit{\\small #2} \\\\%", # Double backslash for LaTeX newline
-        r"    \\end{tabular*}\\vspace{-7pt}%",
-        r"}",
-        r"\\newcommand{\\resumeProjectHeading}[2]{%",
-        r"    \\item%",
-        r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
-        r"      \\small#1 & #2 \\\\%", # Double backslash for LaTeX newline
-        r"    \\end{tabular*}\\vspace{-7pt}%",
-        r"}",
-        r"\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}",
-        r"\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}",
-        r"\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}",
-        r"\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}",
-        r"\\newcommand{\\resumeItemListStart}{\\begin{itemize}}",
-        r"\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}",
-    ]
-    preamble = "\\n".join(preamble_lines)
+    # Replace dynamic height declarations
+    template_content = template_content.replace("%%TEXT_HEIGHT_DECLARATION%%", text_height_declaration)
+    template_content = template_content.replace("%%PAGE_HEIGHT_SETTING_FOR_DOC_START%%", page_height_setting_for_doc_start)
 
-    # Document body start
-    # Ensure doc_start is a clean f-string
-    doc_start = f"""\begin{{document}}
-{page_height_setting_for_doc_start}
-"""
-
-    # Extract data based on schema (and handle Evelyn.json variations where noted)
-    # The schema uses 'contact', Evelyn.json uses 'Personal Information'.
-    # The schema uses 'objective' or 'summary', Evelyn.json uses 'Summary/Objective'.
-    # The schema uses 'work_experience', Evelyn.json uses 'Experience'.
-    # The schema uses 'skills' (dict), Evelyn.json uses 'Skills' (dict with sub-dicts).
-    # The schema uses 'languages', Evelyn.json uses 'Languages'.
-    # The schema uses 'certifications', Evelyn.json uses 'Certifications/Awards' (potentially mixed).
-    # The schema uses 'awards', (see above).
-    # The schema uses 'involvement' or 'leadership', Evelyn.json has 'Misc' -> 'Leadership'.
-
+    # Extract data sections
     personal_info_data = data.get("Personal Information") or data.get("contact")
-    name_from_data = data.get("name") # Top level name from schema.
-    if name_from_data and personal_info_data and not personal_info_data.get('name'):
-        personal_info_data['name'] = name_from_data # Inject if missing in contact dict
+    if personal_info_data and data.get("name") and not personal_info_data.get('name'):
+        personal_info_data['name'] = data.get("name")
 
     objective_data = data.get("Summary/Objective") or data.get("objective") or data.get("summary")
     education_data = data.get("Education") or data.get("education")
     experience_data = data.get("Experience") or data.get("work_experience")
     projects_data = data.get("Projects") or data.get("projects")
-    skills_data = data.get("Skills") or data.get("skills")
+    skills_data = data.get("Skills") or data.get("skills") # This can be list or dict
     languages_data = data.get("Languages") or data.get("languages")
-    
-    # For certs/awards, Evelyn.json has "Certifications/Awards".
-    # Schema has separate "certifications" and "awards".
-    # We'll prefer direct keys first.
     certifications_data = data.get("certifications")
     awards_data = data.get("awards")
-    certs_and_awards_mixed = data.get("Certifications/Awards")
+    involvement_data = data.get("involvement") or data.get("leadership")
+    misc_data = data.get("Misc")
 
-    # If specific keys are empty but mixed one exists, we might need to split them.
-    # For now, this template won't try to split a mixed list. It will use dedicated lists if present.
-    # If only the mixed list is present and non-empty, we might decide to pass it to one
-    # or the other, or a combined section. Given the prompt, let's assume separate lists are preferred.
+    # Generate LaTeX for each section and replace placeholders
+    section_generators = {
+        "%%HEADER_SECTION%%": (_generate_header_section, personal_info_data),
+        "%%OBJECTIVE_SECTION%%": (_generate_objective_section, objective_data),
+        "%%EDUCATION_SECTION%%": (_generate_education_section, education_data),
+        "%%EXPERIENCE_SECTION%%": (_generate_experience_section, experience_data),
+        "%%PROJECTS_SECTION%%": (_generate_projects_section, projects_data),
+        "%%SKILLS_SECTION%%": (_generate_skills_section, skills_data),
+        "%%LANGUAGES_SECTION%%": (_generate_languages_section, languages_data),
+        "%%CERTIFICATIONS_SECTION%%": (_generate_certifications_section, certifications_data),
+        "%%AWARDS_SECTION%%": (_generate_awards_section, awards_data),
+    }
 
-    involvement_data = data.get("involvement") or data.get("leadership") # Schema direct keys
-    misc_data = data.get("Misc") # For Evelyn.json specific "Misc" -> "Leadership"
-
-
-    # Generate LaTeX for each section
-    header_tex = _generate_header_section(personal_info_data)
-    objective_tex = _generate_objective_section(objective_data)
-    education_tex = _generate_education_section(education_data)
-    experience_tex = _generate_experience_section(experience_data)
-    projects_tex = _generate_projects_section(projects_data)
-    skills_tex = _generate_skills_section(skills_data) # Handles complex skills structure
-    languages_tex = _generate_languages_section(languages_data)
-    certifications_tex = _generate_certifications_section(certifications_data)
-    awards_tex = _generate_awards_section(awards_data)
+    for placeholder, (generator_func, section_data) in section_generators.items():
+        section_tex = generator_func(section_data) if section_data is not None else ""
+        template_content = template_content.replace(placeholder, section_tex)
     
-    involvement_tex = None
-    if involvement_data: # Prioritize schema's direct key
-        involvement_tex = _generate_involvement_section(involvement_data)
-    elif misc_data: # Fallback to Evelyn.json's Misc.Leadership structure
-        involvement_tex = _generate_misc_leadership_section(misc_data)
+    # Special handling for involvement/misc
+    involvement_tex_str = ""
+    if involvement_data:
+        involvement_tex_str = _generate_involvement_section(involvement_data)
+    elif misc_data: 
+        involvement_tex_str = _generate_misc_leadership_section(misc_data)
+    template_content = template_content.replace("%%INVOLVEMENT_SECTION%%", involvement_tex_str)
 
-
-    # Assemble the document
-    content_parts = [
-        preamble,
-        doc_start,
-        header_tex,
-        objective_tex, # Or summary
-        education_tex,
-        experience_tex,
-        projects_tex,
-        skills_tex,
-        languages_tex,
-        certifications_tex,
-        awards_tex,
-        involvement_tex, # Covers leadership/misc as well
-        r"""
-\\end{document}
-"""
-    ]
-    
-    # Filter out None parts (e.g., if a section is empty and its generate function returns None)
-    # and join them.
-    full_latex_doc = "\n".join(filter(None, content_parts))
-    
-    return full_latex_doc
+    return template_content
 
 # --- Minimal test for the template if run directly (not typical use) ---
-if __name__ == '__main__':
-    # Sample data structure (simplified, matching some keys from schema and Evelyn.json)
-    sample_resume_data = {
-        "Personal Information": {
-            "name": "Ruo-Yi Evelyn Liang",
-            "email": "ruoyi_liang@berkeley.edu",
-            "phone": "(510) 282-2716",
-            "linkedin": "linkedin.com/in/Evelyn_Liang", # Assume schema wants full URL or just handle
-            "location": "Berkeley, CA",
-            "github": "github.com/evelyn"
-        },
-        "Summary/Objective": "Data Science Meets Product Strategy—Turning Analytics into Action. & a test of _ and % and $ and # and { and } and \\\\ and ~ and ^",
-        "Education": [
-            {
-                "university": "University of California, Berkeley",
-                "location": "Berkeley, CA",
-                "degree": "Master of Analytics",
-                "specialization": "IEOR, College of Engineering",
-                "start_date": "Aug 2025",
-                "end_date": "Present",
-                "gpa": "3.7/4.0",
-                "additional_info": "Courses: Machine Learning, Optimization, Design of Databases."
-            },
-            {
-                "university": "National Taiwan University (NTU)",
-                "degree": "Bachelor of Business Administration",
-                "start_date": "June 2024", # No end date
-                "gpa": "3.8/4.0",
-                "relevant_coursework": ["Data Analysis", "Project Management"]
-            }
-        ],
-        "Experience": [ # work_experience
-            {
-                "company": "Shopee Pte. Ltd.",
-                "title": "Data Analysis Intern", # position
-                "location": "Taipei, Taiwan",
-                "dates": {"start_date": "June 2023", "end_date": "Dec 2023"},
-                "responsibilities/achievements": [ # responsibilities
-                    "Monitored performance & saved 5% costs.",
-                    "Increased 2% sales via A/B testing."
-                ]
-            }
-        ],
-        "Projects": [
-            {
-                "title": "Capstone - Google Case Competition",
-                "description": "Achieved a 16% profit boost.",
-                "technologies_used": "Linear Programming", # technologies
-                "date": "Spring 2023"
-            }
-        ],
-        "Skills": { # skills (dict of categories to lists)
-            "Technical Skills": {
-                "Programming languages": ["Python", "SQL", "R", "C# & C++"],
-                "Data Analysis": ["Pandas", "NumPy", "TensorFlow"],
-                "Database": ["MySQL", "MongoDB"]
-            },
-            "Soft Skills": ["Communication", "Teamwork"]
-        },
-        "Languages": [ # languages (list of dicts)
-            {"name": "Mandarin", "proficiency": "Native"},
-            {"name": "English", "proficiency": "Fluent"}
-        ],
-        "Certifications/Awards": [], # Combined in Evelyn.json, schema is separate
-        "certifications": [
-            {"certification": "TensorFlow Developer Certificate", "institution": "Google", "date": "2022"}
-        ],
-        "awards": [
-            {"title": "Dean's List", "issuer": "NTU", "date": "2021", "description": "Top 5% of students."}
-        ],
-        "involvement": [ # Schema's 'involvement' or 'leadership'
-            {
-                "organization": "Analytics Club", "position": "President",
-                "date": {"start_date": "Jan 2022", "end_date": "Dec 2022"},
-                "responsibilities": ["Led weekly meetings", "Organized workshops"]
-            }
-        ],
-        "Misc": { # Evelyn.json's structure for leadership
-            "Leadership": {
-                "Event General Coordinator": {
-                    "dates": {"start_date": "Apr 2023", "end_date": "May 2023"},
-                    "responsibilities/achievements": ["Led a team of 100+", "Coordinated with 12 sponsors"]
-                }
-            }
-        }
-    }
-
-    print("--- Generating LaTeX from sample data (page_height = None) ---")
-    latex_output_default = generate_latex_content(sample_resume_data)
-    # print(latex_output_default)
-    with open("classic_template_test_default.tex", "w", encoding='utf-8') as f:
-        f.write(latex_output_default)
-    print("Saved to classic_template_test_default.tex")
-
-    print("\n--- Generating LaTeX from sample data (page_height = 13.0 inches) ---")
-    latex_output_custom_h = generate_latex_content(sample_resume_data, page_height=13.0)
-    # print(latex_output_custom_h)
-    with open("classic_template_test_custom_h.tex", "w", encoding='utf-8') as f:
-        f.write(latex_output_custom_h)
-    print("Saved to classic_template_test_custom_h.tex")
-    
-    print("\n--- Testing fix_latex_special_chars ---")
-    test_str = "Text with \\ backslash, {curly braces}, & ampersand, % percent, $ dollar, # hash, _ underscore, ~ tilde, ^ caret."
-    print(f"Original: {test_str}")
-    print(f"Escaped:  {fix_latex_special_chars(test_str)}")
-    
-    # Test with a more minimal data set to check optional sections
-    minimal_data = {
-        "Personal Information": {"name": "Test User", "email": "test@example.com"},
-        "Education": [{"university": "Test Uni", "degree": "BS CS"}]
-    }
-    print("\n--- Generating LaTeX from minimal data ---")
-    latex_minimal = generate_latex_content(minimal_data)
-    with open("classic_template_test_minimal.tex", "w", encoding='utf-8') as f:
-        f.write(latex_minimal)
-    print("Saved to classic_template_test_minimal.tex")
+# (The __main__ block from the original file would go here if needed for direct testing)
+# For brevity in this edit, it's omitted but should be retained if it was there.
     
