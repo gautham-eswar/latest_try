@@ -5,8 +5,11 @@
 set -o errexit
 
 # Install LaTeX (minimal texlive distribution with necessary packages)
+echo "Cleaning apt cache and updating package lists..."
+apt-get clean
+apt-get update -o Acquire::BrokenProxy="true" -o Acquire::http::Fix-Broken-Cookies="true"
+
 echo "Installing LaTeX packages..."
-apt-get update
 apt-get install -y --no-install-recommends \
     texlive-base \
     texlive-latex-base \
