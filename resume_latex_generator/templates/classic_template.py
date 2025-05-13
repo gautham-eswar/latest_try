@@ -580,87 +580,88 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
 
     # LaTeX Preamble
     # The text_height_declaration is now part of this main preamble string
-    preamble = rf"""
-\\documentclass[letterpaper,11pt]{{article}}
-
-\\usepackage{{latexsym}}
-\\usepackage[empty]{{fullpage}} % This sets margins to be minimal.
-\\usepackage{{titlesec}}
-\\usepackage{{marvosym}}
-\\usepackage[usenames,dvipsnames]{{color}}
-\\usepackage{{verbatim}}
-\\usepackage{{enumitem}}
-\\usepackage[hidelinks]{{hyperref}}
-\\usepackage{{fancyhdr}}
-\\usepackage[english]{{babel}}
-\\usepackage{{tabularx}}
-\\usepackage{{amsfonts}} % For \Huge, \scshape etc. sometimes needs amsfonts or similar
-
-% Adjust margins and SET text height precisely
-\\addtolength{{\oddsidemargin}}{{-0.5in}}
-\\addtolength{{\evensidemargin}}{{-0.5in}}
-\\addtolength{{\textwidth}}{{1in}}
-\\addtolength{{\topmargin}}{{-0.5in}} % Moves the top of the text area up
-{text_height_declaration}         % SET the text height based on physical page height and margins
-
-% Page breaking penalties (from previous successful attempt to fill page)
-\\clubpenalty=8000
-\\widowpenalty=8000
-\\tolerance=1000
-\\setlength{{\emergencystretch}}{{1.5em}}
-
-\\urlstyle{{same}}
-\\raggedbottom 
-\\raggedright
-\\setlength{{\tabcolsep}}{{0in}}
-
-% Sections formatting (from sample)
-\\titleformat{{\section}}{{
-  \\vspace{{-4pt}}\\scshape\\raggedright\\large
-}}{{}}{{0em}}{{}}[\\color{{black}}\\titlerule \\vspace{{-5pt}}]
-
-% Ensure that generated pdf is machine readable/ATS parsable
-\\pdfgentounicode=1
-
-%-------------------------
-% Custom commands (from sample)
-\\newcommand{{\resumeItem}}[1]{{
-  \item\\small{{
-    {{#1 \\vspace{{-2pt}}}}
-  }}
-}}
-
-\\newcommand{{\resumeSubheading}}[4]{{
-  \\vspace{{-2pt}}\item
-    \\begin{{tabular*}}{{0.97\textwidth}}[t]{{l@{{\extracolsep{{\fill}}}}r}}
-      \\textbf{{#1}} & #2 \\
-      \\textit{{\small#3}} & \\textit{{\small #4}} \\
-    \\end{{tabular*}}\\vspace{{-7pt}}
-}}
-
-\\newcommand{{\resumeSubSubheading}}[2]{{
-    \item
-    \\begin{{tabular*}}{{0.97\textwidth}}{{l@{{\extracolsep{{\fill}}}}r}}
-      \\textit{{\small#1}} & \\textit{{\small #2}} \\
-    \\end{{tabular*}}\\vspace{{-7pt}}
-}}
-
-\\newcommand{{\resumeProjectHeading}}[2]{{
-    \item
-    \\begin{{tabular*}}{{0.97\textwidth}}{{l@{{\extracolsep{{\fill}}}}r}}
-      \\small#1 & #2 \\
-    \\end{{tabular*}}\\vspace{{-7pt}}
-}}
-
-\\newcommand{{\resumeSubItem}}[1]{{\\resumeItem{{#1}}\\vspace{{-4pt}}}}
-
-\\renewcommand\\labelitemii{{$\vcenter{{\hbox{{\tiny$\bullet$}}}}$}}
-
-\\newcommand{{\resumeSubHeadingListStart}}{{\\begin{{itemize}}[leftmargin=0.15in, label={{}}]}}
-\\newcommand{{\resumeSubHeadingListEnd}}{{\\end{{itemize}}}}
-\\newcommand{{\resumeItemListStart}}{{\\begin{{itemize}}}}
-\\newcommand{{\resumeItemListEnd}}{{\\end{{itemize}}\\vspace{{-5pt}}}}
-""" 
+    preamble_lines = [
+        r"\\documentclass[letterpaper,11pt]{article}",
+        r"",
+        r"\\usepackage{latexsym}",
+        r"\\usepackage[empty]{fullpage}",
+        r"\\usepackage{titlesec}",
+        r"\\usepackage{marvosym}",
+        r"\\usepackage[usenames,dvipsnames]{color}",
+        r"\\usepackage{verbatim}",
+        r"\\usepackage{enumitem}",
+        r"\\usepackage[hidelinks]{hyperref}",
+        r"\\usepackage{fancyhdr}",
+        r"\\usepackage[english]{babel}",
+        r"\\usepackage{tabularx}",
+        r"\\usepackage{amsfonts}", 
+        r"",
+        r"% Adjust margins and SET text height precisely",
+        r"\\addtolength{\\oddsidemargin}{-0.5in}",
+        r"\\addtolength{\\evensidemargin}{-0.5in}",
+        r"\\addtolength{\\textwidth}{1in}",
+        r"\\addtolength{\\topmargin}{-0.5in}",
+        text_height_declaration,
+        r"",
+        r"% Page breaking penalties",
+        r"\\clubpenalty=8000",
+        r"\\widowpenalty=8000",
+        r"\\tolerance=1000",
+        r"\\setlength{\\emergencystretch}{1.5em}",
+        r"",
+        r"\\urlstyle{same}",
+        r"\\raggedbottom",
+        r"\\raggedright",
+        r"\\setlength{\\tabcolsep}{0in}",
+        r"",
+        r"% Sections formatting",
+        r"\\titleformat{\\section}{%",
+        r"  \\vspace{-4pt}\\scshape\\raggedright\\large",
+        r"}{}{0em}{}[\\color{black}\\titlerule \\vspace{-5pt}]",
+        r"",
+        r"% Ensure that generated pdf is machine readable/ATS parsable",
+        r"\\pdfgentounicode=1",
+        r"",
+        r"% Custom commands",
+        r"\\newcommand{\\resumeItem}[1]{%",
+        r"  \\item\\small{{%",
+        r"    {#1 \\vspace{-2pt}}%",
+        r"  }%",
+        r"}",
+        r"",
+        r"\\newcommand{\\resumeSubheading}[4]{%",
+        r"  \\vspace{-2pt}\\item%",
+        r"    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}%",
+        r"      \\textbf{#1} & #2 \\\\%",
+        r"      \\textit{\\small#3} & \\textit{\\small #4} \\\\%",
+        r"    \\end{tabular*}\\vspace{-7pt}%",
+        r"}",
+        r"",
+        r"\\newcommand{\\resumeSubSubheading}[2]{%",
+        r"    \\item%",
+        r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
+        r"      \\textit{\\small#1} & \\textit{\\small #2} \\\\%",
+        r"    \\end{tabular*}\\vspace{-7pt}%",
+        r"}",
+        r"",
+        r"\\newcommand{\\resumeProjectHeading}[2]{%",
+        r"    \\item%",
+        r"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}%",
+        r"      \\small#1 & #2 \\\\%",
+        r"    \\end{tabular*}\\vspace{-7pt}%",
+        r"}",
+        r"",
+        r"\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}",
+        r"",
+        r"\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}",
+        r"",
+        r"\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}]}",
+        r"\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}",
+        r"\\newcommand{\\resumeItemListStart}{\\begin{itemize}}",
+        r"\\newcommand{\\resumeItemListEnd}{\\end{itemize}\\vspace{-5pt}}",
+        r""
+    ]
+    preamble = "\\n".join(preamble_lines)
 
     # Document body start
     doc_start = f"""\\begin{{document}}
