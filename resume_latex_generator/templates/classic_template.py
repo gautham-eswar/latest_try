@@ -452,7 +452,12 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
     return "\n".join(final_latex_parts)
 
 def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Optional[str]:
-    if not misc_data or not isinstance(misc_data, dict): return None
+    print(f"AI HINT: _generate_misc_leadership_section received misc_data of type: {type(misc_data)}, value: {misc_data}") # Detailed log
+    if not misc_data or not isinstance(misc_data, dict):
+        print(f"AI HINT: misc_data is not a valid dict or is empty. Type: {type(misc_data)}. Returning None.")
+        return None
+
+    processed_any_content = False
     leadership_data = misc_data.get("Leadership")
     if not leadership_data or not isinstance(leadership_data, dict): return None
     content_lines = []
@@ -483,7 +488,8 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
             for resp in responsibilities:
                 if resp: content_lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
             content_lines.append(r"      \resumeItemListEnd")
-    if not content_lines: return None
+            processed_any_content = True
+    if not processed_any_content: return None
     final_latex_parts = [r"\section{Leadership \& Activities}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
     final_latex_parts.extend([r"  \resumeSubHeadingListEnd", ""])
