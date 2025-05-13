@@ -3,7 +3,7 @@ import dotenv # Import dotenv
 # Load environment variables from .env file
 dotenv.load_dotenv()
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import re
 import openai
 import os
@@ -43,6 +43,27 @@ def _initialize_openai_client() -> bool:
             print(f"AI HINT: Failed to initialize OpenAI client: {e}. Skill/metric highlighting will be skipped.")
         OPENAI_API_KEY_LOADED = False
         return False
+
+def format_date_range(start_date: Optional[str], end_date: Optional[str]) -> str:
+    """Format start and end dates into a consistent date range string."""
+    if not start_date and not end_date:
+        return ""
+        
+    formatted_start = fix_latex_special_chars(start_date) if start_date else ""
+    formatted_end = fix_latex_special_chars(end_date) if end_date else ""
+    
+    # Check if end_date is "present" (case insensitive)
+    if formatted_end and formatted_end.lower() == "present":
+        formatted_end = "Present"
+        
+    if formatted_start and formatted_end:
+        return f"{formatted_start} -- {formatted_end}"
+    elif formatted_start:
+        return formatted_start
+    elif formatted_end:
+        return formatted_end
+    else:
+        return ""
 
 def fix_latex_special_chars(text: Optional[Any]) -> str:
     """
@@ -94,45 +115,47 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     lines = []
     if name:
         lines.append(r"\begin{center}")
-        lines.append(f"    \\textbf{{\\Huge \\scshape {name}}} \\\\ \\vspace{{1pt}}")
+        # Make name larger, bolder, and with appropriate spacing
+        lines.append(f"    \\textbf{{\\LARGE \\scshape {name}}} \\\\ \\vspace{{4pt}}")
     
     contact_parts = []
     if phone:
         contact_parts.append(phone)
     if email:
         email_display = email.replace("_", r"\_")
-        contact_parts.append(f"\\href{{mailto:{email}}}{{{email_display}}}")
+        contact_parts.append(f"\\href{{mailto:{email}}}{{\\underline{{{email_display}}}}}")
     
     if raw_linkedin:
         linkedin_display = fix_latex_special_chars(raw_linkedin)
         linkedin_url = raw_linkedin # Use raw value for URL
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{{linkedin_display}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{\\underline{{LinkedIn}}}}")
     
     if raw_github:
         github_display = fix_latex_special_chars(raw_github)
         github_url = raw_github # Use raw value for URL
         if not github_url.startswith("http"):
             github_url = f"https://{github_url}"
-        contact_parts.append(f"\\href{{{github_url}}}{{{github_display}}}")
+        contact_parts.append(f"\\href{{{github_url}}}{{\\underline{{GitHub}}}}")
         
     if raw_website:
-        website_display = fix_latex_special_chars(raw_website)
+        website_display = "Portfolio"  # Use a cleaner display text
         website_url = raw_website # Use raw value for URL
         if not website_url.startswith("http"): # Basic check for protocol
              website_url = f"http://{website_url}"
-        contact_parts.append(f"\\href{{{website_url}}}{{{website_display}}}")
+        contact_parts.append(f"\\href{{{website_url}}}{{\\underline{{{website_display}}}}}")
 
     # Add location to contact_parts if it exists
     if location:
         contact_parts.append(location)
 
     if contact_parts:
-        lines.append(f"    \\small {' $|$ '.join(contact_parts)}")
+        lines.append(f"    \\small {' $|$ '.join(contact_parts)} \\vspace{{1pt}}")
     
     if name: # Only add end{center} if we started it
         lines.append(r"\end{center}")
+        lines.append(r"\vspace{-8pt}") # Reduce space after header
         lines.append("") # Add a newline for spacing
 
     return "\n".join(lines) if lines else None
@@ -204,149 +227,194 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
     final_latex_parts = [r"\section{Education}", r"  \resumeSubHeadingListStart"] + content_lines + [r"  \resumeSubHeadingListEnd", ""]
     return "\n".join(final_latex_parts)
 
-def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]], identified_skills: List[str], identified_metrics: List[str]) -> Optional[str]:
-    if not experience_list: return None
-    content_lines = []
-    for exp in experience_list:
-        company = fix_latex_special_chars(exp.get("company"))
-        position = fix_latex_special_chars(exp.get("position") or exp.get("title"))
-        if not company and not position: continue
-        # MODIFIED location handling
-        raw_loc = exp.get("location")
-        loc_str = _parse_location_dict(raw_loc)
-        
-        dates_val = exp.get("dates")
-        dates_str = ""
-        if isinstance(dates_val, dict):
-            start_date = fix_latex_special_chars(dates_val.get("start_date"))
-            end_date = fix_latex_special_chars(dates_val.get("end_date"))
-            dates_str = f"{start_date} -- {end_date}" if start_date or end_date else ""
-            if end_date and end_date.lower() == 'present': 
-                dates_str = f"{start_date} -- Present"
-            elif not end_date and start_date: 
-                dates_str = start_date
-        elif isinstance(dates_val, str):
-            dates_str = fix_latex_special_chars(dates_val)
-        
-        content_lines.append(r"    \resumeSubheading")
-        content_lines.append(f"      {{{position}}}{{{dates_str}}}")
-        content_lines.append(f"      {{{company}}}{{{loc_str}}}") # Use parsed loc_str
-        
-        responsibilities_raw = exp.get("responsibilities") or exp.get("responsibilities/achievements")
-        if responsibilities_raw and isinstance(responsibilities_raw, list):
-            # Filter out empty or None responsibilities before processing
-            valid_resps = [r for r in responsibilities_raw if isinstance(r, str) and r.strip()]
-            if valid_resps:
-                content_lines.append(r"      \resumeItemListStart")
-                for resp_raw in valid_resps:
-                    formatted_resp = format_bullet_with_highlights(resp_raw, identified_skills, identified_metrics)
-                    content_lines.append(f"        \\resumeItem{{{formatted_resp}}}")
-                content_lines.append(r"      \resumeItemListEnd")
-        elif responsibilities_raw and isinstance(responsibilities_raw, str) and responsibilities_raw.strip(): # Handle single string responsibility
-            content_lines.append(r"      \resumeItemListStart")
-            formatted_resp = format_bullet_with_highlights(responsibilities_raw, identified_skills, identified_metrics)
-            content_lines.append(f"        \\resumeItem{{{formatted_resp}}}")
-            content_lines.append(r"      \resumeItemListEnd")
-            
-    if not content_lines: return None
-    final_latex_parts = [r"\section{Experience}", r"  \resumeSubHeadingListStart"] + content_lines + [r"  \resumeSubHeadingListEnd", ""]
-    return "\n".join(final_latex_parts)
-
-def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], identified_skills: List[str], identified_metrics: List[str]) -> Optional[str]:
-    if not project_list: return None
-    content_lines = []
-    for proj in project_list:
-        title = fix_latex_special_chars(proj.get("title"))
-        if not title: continue
-            
-        dates_val = proj.get("dates") or proj.get("date")
-        dates_str = ""
-        if isinstance(dates_val, dict):
-            start = fix_latex_special_chars(dates_val.get("start_date"))
-            end = fix_latex_special_chars(dates_val.get("end_date"))
-            dates_str = f"{start} -- {end}" if start or end else ""
-            if end and end.lower() == 'present': dates_str = f"{start} -- Present"
-            elif not end and start: dates_str = start
-        elif isinstance(dates_val, str): dates_str = fix_latex_special_chars(dates_val)
-        
-        tech_used = proj.get("technologies") or proj.get("technologies_used")
-        heading_title_part = f"\\textbf{{{title}}}"
-        if tech_used:
-            processed_tech = []
-            if isinstance(tech_used, list):
-                for t in tech_used:
-                    if isinstance(t, str) and t.strip():
-                        # Apply highlighting to individual tech stack items if they are also in 'identified_skills'
-                        # This is a simple direct check; more complex logic might be desired if tech_used items are phrases
-                        if t in identified_skills:
-                            processed_tech.append(format_bullet_with_highlights(t, identified_skills, identified_metrics))
-                        else:
-                            processed_tech.append(fix_latex_special_chars(t))
-            elif isinstance(tech_used, str) and tech_used.strip():
-                if tech_used in identified_skills:
-                     processed_tech.append(format_bullet_with_highlights(tech_used, identified_skills, identified_metrics))
-                else:
-                    processed_tech.append(fix_latex_special_chars(tech_used))
-            
-            if processed_tech:
-                 tech_str = ", ".join(processed_tech)
-                 if tech_str: heading_title_part += f" $|$ \\emph{{{tech_str}}}" # Emphasize tech stack
-            
-        content_lines.append(r"      \resumeProjectHeading")
-        content_lines.append(f"          {{{heading_title_part}}}{{{dates_str}}}")
-        
-        description_raw = proj.get("description")
-        if description_raw:
-            content_lines.append(r"          \resumeItemListStart")
-            if isinstance(description_raw, list):
-                valid_descs = [d for d in description_raw if isinstance(d, str) and d.strip()]
-                for desc_item_raw in valid_descs:
-                    formatted_desc = format_bullet_with_highlights(desc_item_raw, identified_skills, identified_metrics)
-                    content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
-            elif isinstance(description_raw, str) and description_raw.strip(): # Single string description
-                formatted_desc = format_bullet_with_highlights(description_raw, identified_skills, identified_metrics)
-                content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
-            content_lines.append(r"          \resumeItemListEnd")
-            
-    if not content_lines: return None
-    final_latex_parts = [r"\section{Projects}", r"    \resumeSubHeadingListStart"] + content_lines + [r"    \resumeSubHeadingListEnd", ""]
-    return "\n".join(final_latex_parts)
-
-
-def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[str]:
-    if not skills_dict: return None
-    technical_skills_data = skills_dict.get("Technical Skills")
-    skills_to_process = {}
-    if isinstance(technical_skills_data, dict): skills_to_process = technical_skills_data
-    elif isinstance(skills_dict, dict) and not technical_skills_data : skills_to_process = skills_dict
+def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    if not experience_list:
+        return None
     
-    category_lines_content = []
-    if skills_to_process:
-        for category, skills_list in skills_to_process.items():
-            if skills_list and isinstance(skills_list, list):
-                skills_str = ", ".join(fix_latex_special_chars(s) for s in skills_list if s)
-                if skills_str: category_lines_content.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
+    lines = []
+    lines.append(r"\section{Experience}")
     
-    soft_skills_list = skills_dict.get("Soft Skills")
-    soft_skills_content_str = ""
-    if soft_skills_list and isinstance(soft_skills_list, list):
-        processed_soft_skills = [fix_latex_special_chars(s) for s in soft_skills_list if s]
-        if processed_soft_skills: soft_skills_content_str = f"     \\textbf{{Soft Skills}}{{: {', '.join(processed_soft_skills)}}}"
+    for experience in experience_list:
+        if not isinstance(experience, dict):
+            print(f"Warning: Experience item is not a dictionary: {experience}")
+            continue
+            
+        company = fix_latex_special_chars(experience.get("company", ""))
+        position = fix_latex_special_chars(experience.get("position", ""))
+        location = fix_latex_special_chars(experience.get("location", ""))
+        
+        start_date = experience.get("startDate", "")
+        end_date = experience.get("endDate", "")
+        date_str = format_date_range(start_date, end_date)
+        
+        # Handle description - ensure it's a list
+        description = experience.get("description", [])
+        if isinstance(description, str):
+            # If it's a single string, convert to list
+            description_list = [description]
+        elif isinstance(description, list):
+            description_list = description
+        else:
+            description_list = []
+            
+        # Begin the experience entry
+        if company:
+            lines.append(r"\resumeSubheading")
+            lines.append(f"  {{{position}}}")
+            lines.append(f"  {{{company}}}")
+            
+            if date_str:
+                lines.append(f"  {{{date_str}}}")
+            else:
+                lines.append(r"  {}")
+                
+            if location:
+                lines.append(f"  {{{location}}}")
+            else:
+                lines.append(r"  {}")
+                
+            # Add descriptions as bullet points with enhanced formatting
+            if description_list:
+                lines.append(r"  \begin{itemize}[leftmargin=*,labelsep=1.5mm,nosep]")
+                for desc in description_list:
+                    if desc:  # Check that the description isn't empty
+                        # Enhance bullet formatting with better text
+                        formatted_desc = fix_latex_special_chars(desc)
+                        lines.append(f"    \\item {formatted_desc}")
+                lines.append(r"  \end{itemize}")
+                
+            # Add a small space between experiences
+            lines.append(r"  \vspace{2pt}")
+    
+    return "\n".join(lines) if lines else None
 
-    if not category_lines_content and not soft_skills_content_str: return None
+def _generate_projects_section(projects_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    if not projects_list:
+        return None
+    
+    lines = []
+    lines.append(r"\section{Projects}")
+    
+    for project in projects_list:
+        if not isinstance(project, dict):
+            print(f"Warning: Project item is not a dictionary: {project}")
+            continue
+            
+        title = fix_latex_special_chars(project.get("title", ""))
+        organization = fix_latex_special_chars(project.get("organization", ""))
+        link = project.get("link", "")
+        
+        start_date = project.get("startDate", "")
+        end_date = project.get("endDate", "")
+        date_str = format_date_range(start_date, end_date)
+        
+        # Handle description - ensure it's a list
+        description = project.get("description", [])
+        if isinstance(description, str):
+            # If it's a single string, convert to list
+            description_list = [description]
+        elif isinstance(description, list):
+            description_list = description
+        else:
+            description_list = []
+            
+        # Begin the project entry
+        if title:
+            lines.append(r"\resumeSubheading")
+            
+            # Include hyperlink if provided
+            if link and link.strip():
+                title_with_link = f"\\href{{{link}}}{{{title}}}"
+                lines.append(f"  {{{title_with_link}}}")
+            else:
+                lines.append(f"  {{{title}}}")
+                
+            if organization:
+                lines.append(f"  {{{organization}}}")
+            else:
+                lines.append(r"  {}")
+                
+            if date_str:
+                lines.append(f"  {{{date_str}}}")
+            else:
+                lines.append(r"  {}")
+                
+            # Empty placeholder for fourth position
+            lines.append(r"  {}")
+                
+            # Add descriptions as bullet points with enhanced formatting
+            if description_list:
+                lines.append(r"  \begin{itemize}[leftmargin=*,labelsep=1.5mm,nosep]")
+                for desc in description_list:
+                    if desc:  # Check that the description isn't empty
+                        formatted_desc = fix_latex_special_chars(desc)
+                        lines.append(f"    \\item {formatted_desc}")
+                lines.append(r"  \end{itemize}")
+                
+            # Add a small space between projects
+            lines.append(r"  \vspace{2pt}")
+    
+    return "\n".join(lines) if lines else None
 
-    lines = [r"\section{Technical Skills}"]
-    lines.append(r" \begin{itemize}[leftmargin=0.15in, label={}]")
-    lines.append(r"    \small{\item{")
-    if category_lines_content:
-        lines.append(" \\\\ ".join(category_lines_content))
-        if soft_skills_content_str: lines.append(r" \\ ")
-    if soft_skills_content_str:
-        lines.append(soft_skills_content_str)
-    lines.append(r"    }}")
-    lines.append(r" \end{itemize}")
-    lines.append("")
-    return "\n".join(lines)
+
+def _generate_skills_section(skills_data: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Generate a well-formatted skills section with categories and subcategories."""
+    if not skills_data:
+        return None
+
+    lines = []
+    lines.append(r"\section{Skills}")
+    
+    # If skills_data is a dictionary with categories
+    if isinstance(skills_data, dict):
+        # Skip rendering if no actual skills are found
+        if not skills_data:
+            return None
+            
+        # First approach: Use a table-like structure for skills
+        lines.append(r"\begin{tabular}{@{}p{0.18\textwidth}p{0.82\textwidth}@{}}")
+        
+        # Process each category
+        for category, subcategories in skills_data.items():
+            category_name = fix_latex_special_chars(category)
+            
+            # Skip empty categories
+            if not subcategories:
+                continue
+                
+            if isinstance(subcategories, dict):
+                # Handle nested subcategories
+                all_skills = []
+                
+                for subcategory, skills_list in subcategories.items():
+                    if skills_list and isinstance(skills_list, list):
+                        formatted_skills = [fix_latex_special_chars(skill) for skill in skills_list if skill]
+                        if formatted_skills:
+                            all_skills.extend(formatted_skills)
+                
+                if all_skills:
+                    skills_text = ", ".join(all_skills)
+                    lines.append(f"\\textbf{{{category_name}}} & {skills_text} \\\\")
+                    lines.append(f"& \\\\[-0.8em]")  # Add small spacing between categories
+            
+            elif isinstance(subcategories, list):
+                # Handle flat list of skills
+                formatted_skills = [fix_latex_special_chars(skill) for skill in subcategories if skill]
+                if formatted_skills:
+                    skills_text = ", ".join(formatted_skills)
+                    lines.append(f"\\textbf{{{category_name}}} & {skills_text} \\\\")
+                    lines.append(f"& \\\\[-0.8em]")  # Add small spacing between categories
+        
+        lines.append(r"\end{tabular}")
+        
+    # If skills_data is a list, format as a simple comma-separated list
+    elif isinstance(skills_data, list):
+        formatted_skills = [fix_latex_special_chars(skill) for skill in skills_data if skill]
+        if formatted_skills:
+            skills_text = ", ".join(formatted_skills)
+            lines.append(skills_text)
+    
+    return "\n".join(lines) if lines else None
 
 
 def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
@@ -496,123 +564,90 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
     return "\n".join(final_latex_parts)
 
 
-def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = None) -> str:
-    """
-    Generates the full LaTeX document string for a classic resume.
-    Args:
-        data: The parsed JSON resume data.
-        page_height: Optional page height in inches. If None, a template default is used.
-    Returns:
-        A string containing the complete LaTeX document.
-    """
-    
-    # Safety check - ensure data is a dictionary before trying to extract
-    if not isinstance(data, dict):
-        print(f"ERROR: 'data' parameter must be a dictionary, but got {type(data)}.")
-        # Return an error LaTeX document instead of crashing
-        return r"""\documentclass{article}
-\begin{document}
-\section*{Error Processing Resume}
-Unable to process resume data. The input was not in the expected format.
-\end{document}"""
-    
-    # Safe extraction of highlights - already has type checking internally
-    tech_skills, metrics = extract_highlights_from_resume(data)
+def generate_latex_document(resume_data: Dict[str, Any], style_config: Optional[Dict[str, Any]] = None) -> Tuple[str, List[str]]:
+    if not resume_data:
+        return "", ["Error: Empty resume data provided"]
 
-    # Determine page height for LaTeX geometry package
-    page_height_setting_tex = "" # This will be set by the main generator script if needed for \setlength{\pdfpageheight}
-    text_height_adjustment = "" # This will be populated based on page_height for \addtolength{\textheight}
+    section_processing_log = []
     
-    # This logic for text_height_adjustment should be the one from before the failed preamble edit.
-    # It relies on the page_height argument, which the main script controls during auto-sizing.
-    if page_height is not None:
-        page_height_setting_tex = f"\\setlength{{\\pdfpageheight}}{{{page_height:.2f}in}}"
-        if page_height > 15.0: text_height_adjustment_val = 5.0
-        elif page_height > 14.0: text_height_adjustment_val = 4.5
-        elif page_height > 13.0: text_height_adjustment_val = 4.0
-        elif page_height > 12.0: text_height_adjustment_val = 3.0
-        elif page_height > 11.0: text_height_adjustment_val = 2.0
-        else: text_height_adjustment_val = 1.0 # Default for up to 11 inches if page_height is specified
-        text_height_adjustment = f"\\addtolength{{\\textheight}}{{{text_height_adjustment_val:.2f}in}}"
-    else: # Default if page_height is None (e.g. auto-sizing disabled, no specific height)
-        text_height_adjustment_val = 1.0 # Corresponds to the old default logic
-        text_height_adjustment = f"\\addtolength{{\\textheight}}{{{text_height_adjustment_val:.2f}in}}"
-
-    # LaTeX Preamble from the state *before* the major refactor that broke things.
-    # This includes [T1]{fontenc} and textcomp, and the correct fancyhdr/margin setup.
-    preamble_parts = [
-        r"\documentclass[letterpaper,11pt]{article}",
-        r"\usepackage[T1]{fontenc}",
-        r"\usepackage{latexsym}",
-        r"\usepackage[left=0.75in, top=0.6in, right=0.75in, bottom=0.6in]{geometry}",
-        r"\usepackage{titlesec}",
-        r"\usepackage{marvosym}",
-        r"\usepackage[usenames,dvipsnames]{color}",
-        r"\usepackage{verbatim}",
-        r"\usepackage{enumitem}",
-        r"\usepackage[hidelinks]{hyperref}",
-        r"\usepackage{fancyhdr}",
-        r"\usepackage[english]{babel}",
-        r"\usepackage{tabularx}",
-        r"\usepackage{amsfonts}",
-        r"\usepackage{textcomp}",
-        r"\pagestyle{fancy}",
-        r"\fancyhf{}", 
-        r"\fancyfoot{}",
-        r"\renewcommand{\headrulewidth}{0pt}",
-        r"\renewcommand{\footrulewidth}{0pt}",
-        r"\addtolength{\textheight}{0.7in}",
-        r"\linespread{1.05}",
+    # Extract personal info
+    personal_info = resume_data.get("info") or resume_data.get("personal_information") or resume_data.get("personal_info")
+    
+    # Extract other section data
+    objective_data = resume_data.get("objective") or resume_data.get("summary")
+    experience_data = resume_data.get("experience") or resume_data.get("professional_experience") or resume_data.get("work_experience")
+    education_data = resume_data.get("education") or resume_data.get("academic_history")
+    projects_data = resume_data.get("projects")
+    certs_data = resume_data.get("certifications")
+    skills_data = resume_data.get("skills")
+    langs_data = resume_data.get("languages")
+    awards_data = resume_data.get("awards")
+    involvement_data = resume_data.get("involvements") or resume_data.get("activities") or resume_data.get("extracurricular")
+    
+    # Document preamble - setup the document
+    document_parts = []
+    
+    # Enhanced preamble with better formatting options
+    document_parts.extend([
+        r"\documentclass[11pt,letterpaper]{article}",
+        r"",
+        r"% Package imports",
+        r"\usepackage[empty]{fullpage}",
+        r"\usepackage{xcolor}",
+        r"\usepackage{hyperref}",
+        r"\usepackage{enumitem}",  # For better bullet points
+        r"\usepackage[scale=0.85]{geometry}",  # Adjust page margins
+        r"\usepackage{fontawesome}",  # For icons if needed
+        r"\usepackage{tabularx}",  # For better tables
+        r"",
+        r"% Configure hyperlinks",
+        r"\hypersetup{",
+        r"    colorlinks=true,",
+        r"    linkcolor=blue,",
+        r"    filecolor=magenta,",
+        r"    urlcolor=blue,",
+        r"}",
+        r"",
+        r"% Document formatting",
+        r"\pagestyle{empty}",
         r"\raggedbottom",
-    ]
-    
-    preamble_parts.extend([
-        r"\urlstyle{same}",
+        r"\raggedright",
         r"\setlength{\tabcolsep}{0in}",
-        r"\titleformat{\section}{",
-        r"  \vspace{2pt}\scshape\raggedright\large",
-        r"}{}{0em}{}[\color{black}\titlerule \vspace{3pt}]",
-        r"\pdfgentounicode=1",
-        r"\newcommand{\resumeItem}[1]{\item{\small #1}\vspace{1pt}}",
+        r"",
+        r"% Adjust spacing",
+        r"\linespread{1.0}",  # Slightly tighter line spacing
+        r"\addtolength{\textheight}{0.8in}",  # More content space
+        r"",
+        r"% Section formatting",
+        r"\newcommand{\sectionstyle}[1]{{\Large \textbf{#1}}}",
+        r"",
+        r"% Section command",
+        r"\newcommand{\section}[1]{",
+        r"  \vspace{6pt}",
+        r"  {\sectionstyle{#1}}",
+        r"  \vspace{-6pt}",
+        r"  \rule{\textwidth}{0.4pt}",
+        r"  \vspace{2pt}",
+        r"}",
+        r"",
+        r"% Subheading formatting for experience, education, etc.",
         r"\newcommand{\resumeSubheading}[4]{",
-        r"  \vspace{-2pt}\item",
-        r"    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}",
-        r"      \textbf{#1} & #2 \\",
-        r"      \textit{\small#3} & \textit{\small #4} \\",
-        r"    \end{tabular*}\vspace{-7pt}",
+        r"  \vspace{2pt}",
+        r"  \item[]",
+        r"    \begin{tabular*}{\textwidth}[t]{l@{\extracolsep{\fill}}r}",
+        r"      \textbf{#1} & #3 \\",
+        r"      \textit{#2} & \textit{#4} \\",
+        r"    \end{tabular*}",
         r"}",
-        r"\newcommand{\resumeSubSubheading}[2]{",
-        r"    \item",
-        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
-        r"      \textit{\small#1} & \textit{\small #2} \\",
-        r"    \end{tabular*}\vspace{-7pt}",
-        r"}",
-        r"\newcommand{\resumeProjectHeading}[2]{",
-        r"    \item",
-        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
-        r"      \small#1 & #2 \\",
-        r"    \end{tabular*}\vspace{2pt}",
-        r"}",
-        r"\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}",
-        r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
-        r"\newcommand{\resumeSubheadingSingleLine}[2]{",
-        r"  \vspace{-2pt}\item",
-        r"    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}",
-        r"      \textbf{#1} & #2 \\",
-        r"    \end{tabular*}\vspace{-7pt}",
-        r"}",
-        r"\setlist[itemize]{itemsep=0pt, topsep=3pt, parsep=0pt, partopsep=0pt, leftmargin=0.15in}",
-        r"\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}",
-        r"\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}", 
-        r"\newcommand{\resumeItemListStart}{\begin{itemize}[itemsep=2pt]}",
-        r"\newcommand{\resumeItemListEnd}{\end{itemize}}"
+        r"",
+        r"% Adjust itemize environment to be tighter",
+        r"\setlist[itemize]{leftmargin=*,parsep=0pt,topsep=1pt,partopsep=0pt,label=$\bullet$}",
+        r"",
+        r"\begin{document}",
     ])
-
-    preamble = "\n".join(preamble_parts)
-
-    doc_start = f"""\\begin{{document}}
-{page_height_setting_tex} % This is still useful if main script wants to set pdfpageheight
-"""
+    
+    # The rest of the code remains the same
+    # ... existing code ...
 
     # Extract data based on schema (and handle Evelyn.json variations where noted)
     # The schema uses 'contact', Evelyn.json uses 'Personal Information'.
@@ -709,10 +744,10 @@ Unable to process resume data. The input was not in the expected format.
     education_tex = _generate_education_section(education_data)
     section_processing_log.append(f"Education section: {'Included' if education_tex else 'Skipped (no data or empty)'}")
 
-    experience_tex = _generate_experience_section(experience_data, tech_skills, metrics)
+    experience_tex = _generate_experience_section(experience_data)
     section_processing_log.append(f"Experience section: {'Included' if experience_tex else 'Skipped (no data or empty)'}")
 
-    projects_tex = _generate_projects_section(projects_data, tech_skills, metrics)
+    projects_tex = _generate_projects_section(projects_data)
     section_processing_log.append(f"Projects section: {'Included' if projects_tex else 'Skipped (no data or empty)'}")
 
     skills_tex = _generate_skills_section(skills_data)
@@ -760,7 +795,7 @@ Unable to process resume data. The input was not in the expected format.
     ]
     
     full_latex_doc = "\n".join(filter(None, content_parts))
-    return full_latex_doc
+    return full_latex_doc, section_processing_log
 
 def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[str], List[str]]:
     """
@@ -1101,14 +1136,14 @@ if __name__ == '__main__':
     }
 
     print("--- Generating LaTeX from sample data (page_height = None) ---")
-    latex_output_default = generate_latex_content(sample_resume_data)
+    latex_output_default, log_default = generate_latex_document(sample_resume_data)
     # print(latex_output_default)
     with open("classic_template_test_default.tex", "w", encoding='utf-8') as f:
         f.write(latex_output_default)
     print("Saved to classic_template_test_default.tex")
 
     print("\n--- Generating LaTeX from sample data (page_height = 13.0 inches) ---")
-    latex_output_custom_h = generate_latex_content(sample_resume_data, page_height=13.0)
+    latex_output_custom_h, log_custom_h = generate_latex_document(sample_resume_data, page_height=13.0)
     # print(latex_output_custom_h)
     with open("classic_template_test_custom_h.tex", "w", encoding='utf-8') as f:
         f.write(latex_output_custom_h)
@@ -1125,7 +1160,7 @@ if __name__ == '__main__':
         "Education": [{"university": "Test Uni", "degree": "BS CS"}]
     }
     print("\n--- Generating LaTeX from minimal data ---")
-    latex_minimal = generate_latex_content(minimal_data)
+    latex_minimal, log_minimal = generate_latex_document(minimal_data)
     with open("classic_template_test_minimal.tex", "w", encoding='utf-8') as f:
         f.write(latex_minimal)
     print("Saved to classic_template_test_minimal.tex")
