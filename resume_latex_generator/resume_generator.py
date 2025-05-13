@@ -70,6 +70,7 @@ def compile_latex(tex_filepath: str) -> bool:
     ]
     
     print(f"Compiling LaTeX file: {tex_filepath}")
+    sys.stdout.flush() # Force flush
     
     try:
         # Run pdflatex twice to handle references, TOC, etc. (may not be needed for resumes)
@@ -84,43 +85,57 @@ def compile_latex(tex_filepath: str) -> bool:
             # Check if compilation was successful
             if result.returncode != 0:
                 print(f"Error during LaTeX compilation (attempt {attempt+1}):")
+                sys.stdout.flush() # Force flush
                 print(result.stderr or result.stdout)
+                sys.stdout.flush() # Force flush
                 
                 # Try once more with the second attempt
                 if attempt == 0:
                     print("Retrying compilation...")
+                    sys.stdout.flush() # Force flush
                     continue
                 
                 print("LaTeX compilation failed. Please check the .tex file and LaTeX installation.")
+                sys.stdout.flush() # Force flush
                 # Show path to .log file for debugging
                 log_file = os.path.join(output_dir, f"{filename}.log")
                 if os.path.exists(log_file):
                     print(f"LaTeX log file available at: {log_file}")
+                    sys.stdout.flush() # Force flush
                 return False
             
             # Success on this attempt - if it's the first, continue to the second run
             if attempt == 0:
                 print("First pass successful, running second pass...")
+                sys.stdout.flush() # Force flush
         
         # If we reached here, both compilations were successful
         pdf_path = os.path.join(output_dir, f"{filename}.pdf")
         if os.path.exists(pdf_path):
             print(f"PDF successfully created: {pdf_path}")
+            sys.stdout.flush() # Force flush
             return True
         else:
             print(f"Expected PDF file not found at {pdf_path} despite successful compilation.")
+            sys.stdout.flush() # Force flush
             return False
     
     except FileNotFoundError:
         print("Error: LaTeX compiler (pdflatex) not found. Please ensure LaTeX is installed and in your PATH.")
+        sys.stdout.flush() # Force flush
         print("On most systems, you can install LaTeX through:")
+        sys.stdout.flush()
         print("  - macOS: 'brew install --cask mactex' or install MacTeX from https://tug.org/mactex/")
+        sys.stdout.flush()
         print("  - Linux: 'sudo apt-get install texlive-full' (Ubuntu/Debian) or 'sudo dnf install texlive-scheme-full' (Fedora)")
+        sys.stdout.flush()
         print("  - Windows: Install MiKTeX from https://miktex.org/download")
+        sys.stdout.flush()
         return False
     
     except Exception as e:
         print(f"Unexpected error during LaTeX compilation: {e}")
+        sys.stdout.flush() # Force flush
         return False
 
 def get_pdf_page_count(pdf_path):
