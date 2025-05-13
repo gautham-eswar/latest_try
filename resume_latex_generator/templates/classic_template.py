@@ -638,7 +638,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     # or the other, or a combined section. Given the prompt, let's assume separate lists are preferred.
 
     involvement_data = data.get("involvement") or data.get("leadership") # Schema direct keys
-    misc_data = data.get("Misc") # For Evelyn.json specific "Misc" -> "Leadership"
+    misc_content_from_data = data.get("Misc") # For Evelyn.json specific "Misc" -> "Leadership"
 
     print("\n--- Section Generation Log ---")
     section_processing_log = []
@@ -674,9 +674,12 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     if involvement_data: # Prioritize schema's direct key
         involvement_tex = _generate_involvement_section(involvement_data)
         section_processing_log.append(f"Involvement/Leadership section (direct key): {'Included' if involvement_tex else 'Skipped (no data or empty)'}")
-    elif misc_data: # Fallback to Evelyn.json's Misc.Leadership structure
-        involvement_tex = _generate_misc_leadership_section(misc_data)
-        section_processing_log.append(f"Misc/Leadership section (fallback): {'Included' if involvement_tex else 'Skipped (no data or empty)'}")
+    elif misc_content_from_data and isinstance(misc_content_from_data, dict): # Fallback to Misc if it's a dict
+        involvement_tex = _generate_misc_leadership_section(misc_content_from_data)
+        section_processing_log.append(f"Misc/Leadership section (fallback, was dict): {'Included' if involvement_tex else 'Skipped (no data or empty)'}")
+    elif misc_content_from_data: # It exists but is not a dict (e.g., it's a list)
+        section_processing_log.append(f"Misc/Leadership section (fallback): Skipped (data found but type was {type(misc_content_from_data)} instead of dict)")
+        # involvement_tex remains None
     else:
         section_processing_log.append("Involvement/Leadership/Misc section: Skipped (no relevant data found)")
 
