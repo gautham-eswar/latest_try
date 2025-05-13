@@ -13,27 +13,46 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
         return ""
     if not isinstance(text, str):
         text = str(text)
+    
+    # Order of replacements can be important.
+    # Handle specific multi-character sequences first if necessary, then general characters.
+
+    # Protect specific sequences like C++, C# before general char replacement
+    # This is a bit simplistic; a more robust way might involve regex lookarounds
+    # or a more sophisticated tokenization if many such cases exist.
+    text = text.replace("C++", "C{+}{+}") # Ensures ++ are treated as text characters
+    text = text.replace("C#", "C{\#}")   # Ensures # is typeset correctly
+
     protected_percentages = {}
+    # Regex to find numbers followed by % (e.g., "15%", "100%")
     for i, match in enumerate(re.finditer(r'(\d+)%', text)):
         placeholder = f"__PCT_PLACEHOLDER_{i}__"
         text = text.replace(match.group(0), placeholder)
-        protected_percentages[placeholder] = f"{match.group(1)}\\%"
+        protected_percentages[placeholder] = f"{match.group(1)}\\%" # Correctly escape % for LaTeX
+    
     replacements = [
-        ("\\", r"\textbackslash{}"),
+        ("\\", r"\textbackslash{}"), # Must be first for backslashes
         ("&", r"\&"),
-        ("%", r"\%"),
+        ("%", r"\%"),   # General % if not part of a number sequence already handled
         ("$", r"\$"),
-        ("#", r"\#"),
+        ("#", r"\#"),   # General # if not C# already handled
         ("_", r"\_"),
         ("{", r"\{"),
         ("}", r"\}"),
         ("~", r"\textasciitilde{}"),
         ("^", r"\textasciicircum{}"),
+        # Add other characters as needed, e.g.:
+        # (">", r"\textgreater{}"),
+        # ("<", r"\textless{}"),
+        # ("|", r"\textbar{}"),
     ]
     for old, new in replacements:
         text = text.replace(old, new)
+    
+    # Restore protected percentage patterns
     for placeholder, replacement in protected_percentages.items():
         text = text.replace(placeholder, replacement)
+        
     return text
 
 def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> str:
@@ -66,7 +85,9 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> str:
     if contact_parts: lines.append(f"    \\small {' $|$ '.join(contact_parts)}")
     if location and name: lines.append(f"    \\small {location}")
     elif location: lines.append(f"    \\small {location}") # if only location
-    if name: lines.append(r"\end{center}")
+    if name: 
+        lines.append(r"\end{center}")
+        lines.append(r"\vspace{-10pt}") # Add negative vspace for tighter spacing after header
     return "\n".join(lines)
 
 def _generate_objective_section(objective: Optional[str]) -> str:
@@ -154,24 +175,38 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> 
     return "\n".join(lines)
 
 def _generate_skills_section(skills_dict_input: Optional[Dict[str, Any]]) -> str:
-    if not skills_dict_input: return ""
-    skills_dict = skills_dict_input
-    if isinstance(skills_dict_input, list):
-        skills_dict = {"Technical Skills": {"General": skills_dict_input}}
-        print("AI HINT: Converted skills list to dictionary for _generate_skills_section.")
-    lines = ["\\section{Technical Skills}"]
-    technical_skills_data = skills_dict.get("Technical Skills")
-    skills_to_process = technical_skills_data if isinstance(technical_skills_data, dict) else (skills_dict if isinstance(skills_dict, dict) and not technical_skills_data else {})
-    if not skills_to_process:
-        soft_skills = skills_dict.get("Soft Skills")
-        if isinstance(soft_skills, list) and soft_skills:
-            lines.extend([r" \begin{itemize}[leftmargin=0.15in, label={}]", r"    \small{\item{", f"     \\textbf{{Soft Skills}}{{: {fix_latex_special_chars(', '.join(soft_skills))}}} \\\\", r"    }}", r" \end{itemize}", ""])
-            return "\n".join(lines)
+    """DEBUG: Temporarily simplified to output a flat list of all skills for testing."""
+    if not skills_dict_input:
         return ""
-    lines.extend([r" \begin{itemize}[leftmargin=0.15in, label={}]", r"    \small{\item{"])
-    category_lines = [f"     \\textbf{{{fix_latex_special_chars(cat)}}}{{: {fix_latex_special_chars(', '.join(slist))}}}" for cat, slist in skills_to_process.items() if isinstance(slist, list) and slist]
-    lines.append(" \\\\ ".join(category_lines))
-    lines.extend([r"    }}", r" \end{itemize}", ""])
+
+    all_skill_strings = []
+    if isinstance(skills_dict_input, list):
+        for item in skills_dict_input:
+            if isinstance(item, str):
+                all_skill_strings.append(fix_latex_special_chars(item))
+            # If items in the list can be dicts with a 'name' or similar, add handling here
+
+    elif isinstance(skills_dict_input, dict):
+        for category, skills_or_subcategories in skills_dict_input.items():
+            if isinstance(skills_or_subcategories, list):
+                for skill in skills_or_subcategories:
+                    if isinstance(skill, str):
+                        all_skill_strings.append(fix_latex_special_chars(skill))
+            elif isinstance(skills_or_subcategories, dict): # Nested categories
+                for sub_category, skills_list in skills_or_subcategories.items():
+                    if isinstance(skills_list, list):
+                        for skill in skills_list:
+                            if isinstance(skill, str):
+                                all_skill_strings.append(fix_latex_special_chars(skill))
+    
+    if not all_skill_strings:
+        return ""
+
+    # Simple LaTeX output for debugging
+    lines = [
+        "\\section{Skills (Debug Test)}",
+        ", ".join(all_skill_strings) # Join all collected & escaped skills
+    ]
     return "\n".join(lines)
 
 def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> str:
