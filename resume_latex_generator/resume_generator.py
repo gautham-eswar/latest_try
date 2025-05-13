@@ -6,6 +6,8 @@ import glob
 import re
 import subprocess
 import json
+import tempfile
+import shutil # For moving the file
 from typing import Dict, Any, Optional, List
 
 # Default directory names
@@ -20,6 +22,7 @@ PAGE_HEIGHT_INCREMENT_INCHES = 1.0
 
 # Import template loading functions
 from .templates import get_available_templates, load_template
+from .templates.classic_template import generate_latex_content
 
 def load_json_data(file_path: str) -> Optional[Dict[str, Any]]:
     """Loads JSON data from the specified file."""
@@ -597,4 +600,185 @@ def create_pdf_generator():
                 # Re-raise the exception for the caller to handle
                 raise
     
-    return PDFGenerator() 
+    return PDFGenerator()
+
+class LatexPdfGenerator:
+    def __init__(self, template_name='classic', no_auto_size=False):
+        self.template_name = template_name
+        self.no_auto_size = no_auto_size
+        # In a more complex setup, we might load the template module here using load_template
+        # For now, we directly use generate_latex_content from classic_template
+        self.template_generate_func = generate_latex_content
+
+    def check_environment(self):
+        # Basic check for pdflatex
+        try:
+            subprocess.run(["pdflatex", "-version"], capture_output=True, check=True)
+            return {"status": "OK", "message": "pdflatex found."}
+        except FileNotFoundError:
+            return {"status": "Error", "message": "pdflatex not found. Please ensure LaTeX is installed."}
+        except subprocess.CalledProcessError as e:
+            return {"status": "Error", "message": f"pdflatex found but error on version check: {e}"}
+
+    def generate_pdf(self, resume_data: Dict[str, Any], output_path_target_pdf: str, timeout: Optional[int] = None) -> Optional[str]:
+        """
+        Generates a PDF from resume_data, incorporating auto-sizing logic.
+        output_path_target_pdf is the final desired path for the PDF.
+        Timeout is not directly used by the pdflatex command here but kept for signature compatibility.
+        """
+        
+        # Determine the directory and base name for the final PDF
+        final_output_dir = os.path.dirname(output_path_target_pdf)
+        # Use a fixed name for temp .tex file, let compile_latex handle final naming based on input .tex name
+        # The temp .tex name should not influence the final PDF name if _compile_latex is robust
+        temp_base_name = "resume_temp_for_compile"
+
+        # Use a temporary directory for all intermediate files (.tex, .log, .aux, temp .pdf)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Path for the temporary .tex file
+            tex_filepath_temp = os.path.join(temp_dir, f"{temp_base_name}.tex")
+
+            current_page_height = DEFAULT_INITIAL_PAGE_HEIGHT_INCHES
+            compiled_pdf_path = None
+
+            if self.no_auto_size:
+                print(f"Auto-sizing disabled. Using page height: {current_page_height:.2f} inches (or template default if None passed)")
+                # Pass None for page_height if default from template is desired, or a specific value
+                # The user's template `generate_latex_content` uses DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES if page_height is None.
+                latex_content = self.template_generate_func(resume_data, page_height=current_page_height)
+                with open(tex_filepath_temp, 'w', encoding='utf-8') as f:
+                    f.write(latex_content)
+                print(f"LaTeX content saved to {tex_filepath_temp}")
+                compiled_pdf_path = _compile_latex(tex_filepath_temp, final_output_dir) # Pass final_output_dir
+            else:
+                print("Starting auto-sizing process...")
+                attempts_remaining = MAX_AUTO_SIZE_ATTEMPTS
+                success = False
+                
+                while attempts_remaining > 0:
+                    print(f"Attempt {MAX_AUTO_SIZE_ATTEMPTS - attempts_remaining + 1}/{MAX_AUTO_SIZE_ATTEMPTS}: Page height {current_page_height:.2f} in")
+                    
+                    latex_content = self.template_generate_func(resume_data, page_height=current_page_height)
+                    with open(tex_filepath_temp, 'w', encoding='utf-8') as f:
+                        f.write(latex_content)
+                    print(f"LaTeX content saved to {tex_filepath_temp}")
+                    
+                    # _compile_latex will output the PDF initially to temp_dir, then move it
+                    # For page counting, we need the path of the PDF in the temp_dir *before* potential move.
+                    temp_pdf_for_page_count = os.path.join(temp_dir, f"{temp_base_name}.pdf")
+
+                    # We need to adjust _compile_latex or how we call it. 
+                    # Let _compile_latex return the path of the PDF *in the temp_dir* first for counting.
+                    # Then, if successful, move it.
+                    
+                    # Simplified flow: compile, then check page count on the temp PDF.
+                    # For this to work, _compile_latex must not move the file yet OR page count happens on a known temp path.
+
+                    # Re-thinking: _compile_latex should just compile to its input's directory.
+                    # The move to final_output_dir happens *after* auto-sizing loop if successful.
+
+                    # Let's ensure _compile_latex places the PDF in temp_dir (its input .tex dir)
+                    # For the auto-sizing loop, we compile into temp_dir. The final move is separate.
+                    pdf_in_temp_dir = _compile_latex(tex_filepath_temp, temp_dir) # Compile into temp_dir
+
+                    if not pdf_in_temp_dir:
+                        print("LaTeX compilation failed. Aborting auto-sizing.")
+                        compiled_pdf_path = None # Ensure it's None
+                        break 
+                    
+                    page_count = _get_pdf_page_count(pdf_in_temp_dir)
+                    if page_count is None or page_count > 1:
+                        if attempts_remaining > 1:
+                            print(f"Content spans {page_count or '>1'} pages. Increasing page height...")
+                            current_page_height += PAGE_HEIGHT_INCREMENT_INCHES
+                            attempts_remaining -= 1
+                            if os.path.exists(pdf_in_temp_dir): # Clean up for next attempt
+                                os.remove(pdf_in_temp_dir)
+                        else:
+                            print(f"Max attempts reached. Content still spans {page_count or '>1'} pages.")
+                            compiled_pdf_path = pdf_in_temp_dir # Keep the last multi-page PDF
+                            break
+                    else:
+                        print("Success! Content fits on a single page.")
+                        compiled_pdf_path = pdf_in_temp_dir # Path in temp_dir
+                        success = True
+                        break
+                
+                if not compiled_pdf_path: # Loop finished due to compilation error or max attempts with no PDF
+                    print("Auto-sizing failed to produce a valid PDF.")
+                    return None
+
+            # After loop (or if no_auto_size), if compiled_pdf_path is set, it's in temp_dir.
+            # Now move it to the final output_path_target_pdf.
+            if compiled_pdf_path and os.path.exists(compiled_pdf_path):
+                try:
+                    # Ensure final output directory exists
+                    os.makedirs(os.path.dirname(output_path_target_pdf), exist_ok=True)
+                    shutil.move(compiled_pdf_path, output_path_target_pdf)
+                    print(f"Final PDF successfully moved to: {output_path_target_pdf}")
+                    return output_path_target_pdf
+                except Exception as e:
+                    print(f"Error moving final PDF from {compiled_pdf_path} to {output_path_target_pdf}: {e}")
+                    # Try to copy if move fails, then cleanup source (less atomic but better than nothing)
+                    try:
+                        shutil.copy(compiled_pdf_path, output_path_target_pdf)
+                        os.remove(compiled_pdf_path)
+                        print(f"Final PDF successfully COPIED to: {output_path_target_pdf} (original moved failed)")
+                        return output_path_target_pdf
+                    except Exception as e_copy:
+                        print(f"Also failed to copy PDF: {e_copy}")
+                        return None # Failed to place PDF at target
+            else:
+                print(f"No PDF produced or found at expected temporary path: {compiled_pdf_path}")
+                return None
+
+# This function is what working_app.py will import and call
+def create_pdf_generator(template_name='classic', no_auto_size=False):
+    return LatexPdfGenerator(template_name=template_name, no_auto_size=no_auto_size)
+
+
+# Minimal main for CLI testing if this file is run directly (optional)
+if __name__ == '__main__':
+    # This is a placeholder for potential CLI testing of this module
+    # The main CLI logic is in the user's original resume_generator.py
+    print("Testing PDF Generation Module...")
+    
+    # Create a dummy resume_data for testing
+    dummy_data = {
+        "Personal Information": {"name": "Test User CLI", "email": "test@example.com"},
+        "Summary/Objective": "This is a test summary.",
+        "Education": [{"university": "Test Uni", "degree": "BS CS", "start_date": "2020", "end_date": "2024"}]
+    }
+    
+    # Ensure output directory exists for testing
+    cli_output_dir = "cli_test_output"
+    os.makedirs(cli_output_dir, exist_ok=True)
+    test_output_path = os.path.join(cli_output_dir, "test_resume_cli.pdf")
+
+    # Test with auto-sizing enabled
+    print("\n--- Test with auto-sizing ENABLED ---")
+    generator_auto = create_pdf_generator(no_auto_size=False)
+    env_status = generator_auto.check_environment()
+    print(f"Environment Check: {env_status}")
+    if env_status["status"] == "OK":
+        pdf_path_auto = generator_auto.generate_pdf(dummy_data, test_output_path)
+        if pdf_path_auto:
+            print(f"CLI Test (auto-size): PDF generated at {pdf_path_auto}")
+        else:
+            print("CLI Test (auto-size): PDF generation failed.")
+    else:
+        print("CLI Test: Environment check failed, cannot generate PDF.")
+
+    # Test with auto-sizing disabled
+    # print("\n--- Test with auto-sizing DISABLED ---")
+    # test_output_path_no_auto = os.path.join(cli_output_dir, "test_resume_cli_no_auto.pdf")
+    # generator_no_auto = create_pdf_generator(no_auto_size=True)
+    # env_status_no_auto = generator_no_auto.check_environment()
+    # if env_status_no_auto["status"] == "OK":
+    #     pdf_path_no_auto = generator_no_auto.generate_pdf(dummy_data, test_output_path_no_auto)
+    #     if pdf_path_no_auto:
+    #         print(f"CLI Test (no-auto-size): PDF generated at {pdf_path_no_auto}")
+    #     else:
+    #         print("CLI Test (no-auto-size): PDF generation failed.")
+    # else:
+    #      print("CLI Test: Environment check failed for no-auto-size, cannot generate PDF.") 
