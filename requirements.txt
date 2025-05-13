@@ -44,3 +44,5 @@ pdflatex==0.1.3        # Python wrapper for pdflatex (optional, system pdflatex 
 # Utility Libraries
 packaging>=21.0        # Added for version comparison
  
+gunicorn>=20.0.4
+ 

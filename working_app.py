@@ -30,6 +30,8 @@ from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
 
+from resume_latex_generator.resume_generator import create_pdf_generator
+
 
 # Load environment variables
 load_dotenv()
@@ -96,6 +98,17 @@ def create_app():
     
     # Track application start time
     app.config["START_TIME"] = time.time()
+    
+    # Initialize PDF Generator
+    try:
+        pdf_gen = create_pdf_generator()
+        app.config['pdf_generator'] = pdf_gen
+        env_check_result = pdf_gen.check_environment()
+        logger.info(f"PDF Generator Environment Check: {env_check_result}")
+    except Exception as e:
+        logger.error(f"Failed to initialize PDF Generator: {e}", exc_info=True)
+        # Optionally, you might want to set a flag in app.config or handle this error more gracefully
+        # For now, just logging the error.
     
     # Initialize diagnostic system
     if diagnostic_system:
@@ -252,6 +265,13 @@ def create_app():
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])
     def download_resume_endpoint(resume_id, format_type):
         """Download a resume in different formats, loading data from Supabase."""
+        if format_type.lower() == 'pdf':
+            # Simple test response for now
+            return jsonify({
+                "success": True,
+                "resume_id": resume_id,
+                "pdf_url": f"http://example.com/{resume_id}.pdf"
+            })
         return download_resume(resume_id, format_type)
 
     @app.route("/status")
@@ -404,3 +424,10 @@ def create_app():
             return "", 204
     
     return app
+
+import os
+
+if __name__ == "__main__":
+    app = create_app() # Ensure create_app has been called to initialize the 'app' instance
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
