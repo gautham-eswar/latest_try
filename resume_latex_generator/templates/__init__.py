@@ -39,10 +39,10 @@ def load_template(template_name: str) -> Any:
     Raises:
         ImportError: If the template module cannot be found or loaded.
     """
-    module_name = f".{template_name}{TEMPLATE_FILE_SUFFIX[:-3]}" # Relative import
+    module_name = f".{template_name}{TEMPLATE_FILE_SUFFIX[:-3]}" # Relative import from current package
     try:
-        # The package is 'templates' (the directory this __init__.py is in)
-        template_module = importlib.import_module(module_name, package=TEMPLATES_DIR_NAME)
+        # The package is the current package 'resume_latex_generator.templates'
+        template_module = importlib.import_module(module_name, package=__name__)
         
         # Check if the required function exists
         if not hasattr(template_module, 'generate_latex_content'):

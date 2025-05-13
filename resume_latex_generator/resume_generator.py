@@ -19,7 +19,7 @@ MAX_AUTO_SIZE_ATTEMPTS = 5
 PAGE_HEIGHT_INCREMENT_INCHES = 1.0
 
 # Import template loading functions
-from resume_latex_generator.templates import get_available_templates, load_template
+from .templates import get_available_templates, load_template
 
 def load_json_data(file_path: str) -> Optional[Dict[str, Any]]:
     """Loads JSON data from the specified file."""
