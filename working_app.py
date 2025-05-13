@@ -2,7 +2,6 @@
 Working Resume Optimizer Flask App with proper port handling
 """
 
-import os
 import logging
 from datetime import datetime
 import uuid
@@ -525,9 +524,16 @@ def create_app():
     
     return app
 
-import os
+# Create the Flask app instance at the module level for Gunicorn and other WSGI servers
+app = create_app()
 
 if __name__ == "__main__":
-    app = create_app() # Ensure create_app has been called to initialize the 'app' instance
-    port = int(os.environ.get("PORT", 5000))
+    # The 'app' instance is already created and configured by the module-level call.
+    # We can use it directly here for local development runs.
+    # The PORT environment variable is standard for web apps.
+    # Default to 5000 if PORT is not set, suitable for local development.
+    port = int(os.environ.get("PORT", 5000)) 
+    # For local development, you might want to enable debug mode:
+    # app.run(host="0.0.0.0", port=port, debug=True)
+    # For production-like testing without Gunicorn, run without debug mode:
     app.run(host="0.0.0.0", port=port)
