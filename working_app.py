@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from flask import Flask, jsonify, request, g
+from flask import Flask, jsonify, request, g, current_app
 from flask_cors import CORS
 
 # Import the advanced modules
@@ -266,12 +266,111 @@ def create_app():
     def download_resume_endpoint(resume_id, format_type):
         """Download a resume in different formats, loading data from Supabase."""
         if format_type.lower() == 'pdf':
-            # Simple test response for now
-            return jsonify({
-                "success": True,
-                "resume_id": resume_id,
-                "pdf_url": f"http://example.com/{resume_id}.pdf"
-            })
+            output_path = None # Initialize for cleanup in finally block
+            try:
+                db_client = get_db()
+                if not db_client:
+                    current_app.logger.error(f"Supabase client not available for PDF generation of {resume_id}.")
+                    return error_response("DatabaseError", "Database client not available.", 500)
+
+                # 1. Fetch user_id associated with the resume
+                user_id_data = db_client.table("resumes").select("user_id").eq("id", resume_id).maybe_single().execute()
+                if not user_id_data.data or not user_id_data.data.get("user_id"):
+                    current_app.logger.error(f"User ID not found for resume_id {resume_id}.")
+                    return error_response("NotFound", f"User ID not found for resume ID {resume_id}", 404)
+                user_id = user_id_data.data["user_id"]
+                current_app.logger.info(f"Fetched user_id '{user_id}' for resume_id '{resume_id}'.")
+
+                # 2. Fetch resume data (try enhanced_resumes, then resumes)
+                resume_data = None
+                response = db_client.table("enhanced_resumes").select("*").eq("resume_id", resume_id).maybe_single().execute()
+                if response.data:
+                    resume_data = response.data
+                    current_app.logger.info(f"Fetched data for {resume_id} from enhanced_resumes.")
+                else:
+                    response = db_client.table("resumes").select("*").eq("id", resume_id).maybe_single().execute()
+                    if response.data:
+                        resume_data = response.data
+                        current_app.logger.info(f"Fetched data for {resume_id} from resumes table.")
+                
+                if not resume_data:
+                    current_app.logger.error(f"No resume data found for {resume_id} in enhanced_resumes or resumes table.")
+                    return error_response("NotFound", f"Resume data not found for ID {resume_id}", 404)
+                current_app.logger.info(f"Fetched resume data for {resume_id}: {list(resume_data.keys())}")
+
+                # 3. Flatten skills if necessary
+                if "Skills" in resume_data and isinstance(resume_data["Skills"], dict):
+                    flattened_skills = []
+                    for category, skills_list in resume_data["Skills"].items():
+                        if isinstance(skills_list, list):
+                            for skill in skills_list:
+                                if skill not in flattened_skills:
+                                    flattened_skills.append(skill)
+                    resume_data["Skills"] = flattened_skills
+                    current_app.logger.info(f"Flattened skills for LaTeX rendering for resume {resume_id}.")
+                elif "Skills" in resume_data and isinstance(resume_data["Skills"], list):
+                    resume_data["Skills"] = list(set(resume_data["Skills"])) # Ensure uniqueness
+                    current_app.logger.info(f"Ensured skills list uniqueness for resume {resume_id}.")
+
+                # 4. Get PDF generator and generate PDF
+                pdf_generator = current_app.config.get('pdf_generator')
+                if not pdf_generator:
+                    current_app.logger.error(f"PDF generator not available in app config for {resume_id}.")
+                    return error_response("ServerError", "PDF generator not configured.", 500)
+
+                output_filename = f"enhanced_resume_{resume_id}.pdf"
+                output_path = os.path.join(OUTPUT_FOLDER, output_filename) # OUTPUT_FOLDER should be defined globally
+                os.makedirs(OUTPUT_FOLDER, exist_ok=True) # Ensure output folder exists
+
+                current_app.logger.info(f"Calling PDF generator for resume {resume_id} to output at {output_path}")
+                generation_success = pdf_generator.generate_pdf(resume_data, output_path)
+
+                if not generation_success or not os.path.exists(output_path):
+                    current_app.logger.error(f"PDF generation failed for {resume_id}. Output file not found at {output_path}.")
+                    return error_response("PDFGenerationError", "Failed to generate PDF document.", 500)
+                current_app.logger.info(f"PDF generated at path: {output_path}")
+
+                # 5. Upload to Supabase
+                upload_path = f"{user_id}/{resume_id}/{output_filename}"
+                current_app.logger.info(f"Uploading {output_path} to Supabase bucket 'resume-pdfs' at path {upload_path}")
+                
+                with open(output_path, 'rb') as f:
+                    # The Supabase client's upload method throws an exception on failure.
+                    db_client.storage.from_("resume-pdfs").upload(
+                        path=upload_path, 
+                        file=f, 
+                        file_options={"content-type": "application/pdf", "upsert": "true"}
+                    )
+                current_app.logger.info(f"Successfully uploaded {output_filename} to Supabase at {upload_path}.")
+
+                # 6. Get signed URL
+                signed_url_response = db_client.storage.from_("resume-pdfs").create_signed_url(upload_path, 3600) # 1 hour expiry
+                pdf_url = signed_url_response.get('signedURL') # Correct key based on Supabase response
+                
+                if not pdf_url:
+                    current_app.logger.error(f"Failed to create signed URL for {upload_path}. Response: {signed_url_response}")
+                    return error_response("StorageError", "Failed to create signed URL for PDF.", 500)
+                current_app.logger.info(f"Generated signed URL for {upload_path}: {pdf_url}")
+
+                return jsonify({
+                    "success": True,
+                    "resume_id": resume_id,
+                    "pdf_url": pdf_url
+                })
+
+            except Exception as e:
+                current_app.logger.error(f"PDF generation/upload failed for {resume_id}: {str(e)}", exc_info=True)
+                # Ensure the error message from e is passed to the client for better debugging
+                return error_response("ServerError", f"An unexpected error occurred during PDF processing: {str(e)}", 500)
+            finally:
+                # Cleanup local PDF file
+                if output_path and os.path.exists(output_path):
+                    try:
+                        os.remove(output_path)
+                        current_app.logger.info(f"Cleaned up local PDF file: {output_path}")
+                    except Exception as e:
+                        current_app.logger.error(f"Error cleaning up local PDF file {output_path}: {str(e)}", exc_info=True)
+        
         return download_resume(resume_id, format_type)
 
     @app.route("/status")
