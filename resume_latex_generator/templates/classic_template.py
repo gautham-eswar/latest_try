@@ -85,45 +85,53 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
 
     lines = []
     if name:
-        lines.append(r"\begin{center}")
-        lines.append(f"    \\textbf{{\\\\Huge \\\\scshape {name}}} \\\\ \\\\vspace{{1pt}}")
+        lines.append(r"\\begin{center}")
+        lines.append(f"    \\\\textbf{{\\\\\\\\Huge \\\\\\\\scshape {name}}} \\\\\\\\ \\\\vspace{{1pt}}") 
     
     contact_parts = []
     if phone:
         contact_parts.append(phone)
     if email:
-        email_display = email.replace("_", r"\_")
-        contact_parts.append(f"\href{{mailto:{email}}}{{\\\\underline{{{email_display}}}}}")
+        email_display = email.replace("_", r"\\_")
+        safe_email_display = fix_latex_special_chars(email_display)
+        contact_parts.append(f"\\\\href{{mailto:{email}}}{{\\\\\\\\underline{{{safe_email_display}}}}}")
     if linkedin: 
         linkedin_url = linkedin
         if not linkedin.startswith("http"):
             linkedin_url = f"https://{linkedin}"
-        contact_parts.append(f"\href{{{linkedin_url}}}{{\\\\underline{{{linkedin}}}}}")
+        safe_linkedin_display = fix_latex_special_chars(linkedin)
+        contact_parts.append(f"\\\\href{{{linkedin_url}}}{{\\\\\\\\underline{{{safe_linkedin_display}}}}}")
     if github: 
         github_url = github
         if not github.startswith("http"):
             github_url = f"https://{github}"
-        contact_parts.append(f"\href{{{github_url}}}{{\\\\underline{{{github}}}}}")
+        safe_github_display = fix_latex_special_chars(github)
+        contact_parts.append(f"\\\\href{{{github_url}}}{{\\\\\\\\underline{{{safe_github_display}}}}}")
     if website: 
         website_url = website
         if not website.startswith("http"): 
              website_url = f"http://{website}"
-        contact_parts.append(f"\href{{{website_url}}}{{\\\\underline{{{website}}}}}")
+        safe_website_display = fix_latex_special_chars(website)
+        contact_parts.append(f"\\\\href{{{website_url}}}{{\\\\\\\\underline{{{safe_website_display}}}}}")
 
     if contact_parts:
-        joined_contacts = ' $|$ '.join(contact_parts)
-        lines.append(f"    \\\\small{{{joined_contacts}}}")
+        joined_contacts = ' $|$ '.join(filter(None, contact_parts))
+        if joined_contacts.strip():
+            lines.append(f"    \\\\\\\\small{{{joined_contacts}}}")
     
-    if location and not name: 
-         lines.append(f"    \\\\small {location}")
-    elif location and name: 
-        lines.append(f"    \\\\small {location}")
+    if location:
+        if name:
+            lines.append(f"    \\\\\\\\small {location}")
+        else:
+             lines.append(r"\\begin{center}")
+             lines.append(f"    \\\\\\\\small {location}")
+             lines.append(r"\\end{center}")
 
 
-    if name: 
-        lines.append(r"\end{center}")
+    if name and not (location and not contact_parts):
+        lines.append(r"\\end{center}")
 
-    return "\n".join(lines) if lines else None
+    return "\\n".join(lines) if lines else None
 
 
 def _generate_objective_section(objective: Optional[str]) -> Optional[str]:
