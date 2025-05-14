@@ -30,8 +30,8 @@ from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
 
 from resume_latex_generator.resume_generator import create_pdf_generator
-from pdf_generator import ResumePDFGenerator
-from classic_template_adapter import generate_resume_latex
+# We'll use the dynamic LaTeX generator directly
+pdf_service_factory = create_pdf_generator
 
 
 # Load environment variables
@@ -272,123 +272,63 @@ def create_app():
         db = get_db()
         logger.info(f"Attempting to generate PDF for resume_id: {resume_id}")
 
-        # Step 1: Load main resume data (resume_data_to_use)
-        # Assuming this comes from the 'resumes' table as per "done for JSON format"
+        # Step 1: Load main resume data (resume_data_to_use) and user_id (from resume_record)
+        # This part is assumed to be similar to previous logic, adapted for the new needs.
+        # The user's new block expects 'resume_data' and 'resume_record["user_id"]'.
         try:
-            resp_main_data = db.table("resumes").select("data").eq("id", resume_id).execute()
-            if not resp_main_data.data:
+            # Fetching both 'data' and 'user_id' from the 'resumes' table now,
+            # as 'resume_record' is used in the new block.
+            response = db.table("resumes").select("data, user_id").eq("id", resume_id).maybe_single().execute()
+
+            if not response.data:
                 logger.warning(f"No resume data found in 'resumes' table for resume_id: {resume_id}")
                 return app.create_error_response("NotFound", "Resume data not found", 404)
             
-            resume_data_to_use = resp_main_data.data[0].get("data")
-            if not resume_data_to_use: 
+            resume_record = response.data # This is the dictionary containing 'data' and 'user_id'
+            resume_data = resume_record.get("data") # Get the nested JSON data
+
+            if not resume_data: 
                 logger.error(f"'data' field is empty for resume_id: {resume_id} in 'resumes' table.")
                 return app.create_error_response("ProcessError", "Resume content is empty", 400)
-            logger.info(f"Successfully loaded resume_data_to_use for {resume_id}")
+            
+            if not resume_record.get("user_id"):
+                 logger.warning(f"'user_id' field is missing for resume_id: {resume_id} in 'resumes' table. Upload might use default path.")
+            
+            logger.info(f"Successfully loaded resume_data and resume_record for {resume_id}")
 
         except Exception as e_load:
             logger.exception(f"Error loading resume data for {resume_id} from 'resumes' table: {e_load}")
             return app.create_error_response("DatabaseError", "Failed to load resume data", 500)
 
+        # --- USER'S PROVIDED BLOCK STARTS HERE ---
         try:
-            logger.info(f"Generating PDF via LaTeX for resume {resume_id}")
-            # 1. Build LaTeX content from resume data using dynamic template logic
-            latex_content = generate_resume_latex(resume_data_to_use)
-            
-            # 2. Compile the LaTeX content to PDF
-            pdf_generator = ResumePDFGenerator()
-            
-            output_dir = "/tmp/resume_pdfs" 
-            os.makedirs(output_dir, exist_ok=True) 
-            output_path = os.path.join(output_dir, f"enhanced_resume_{resume_id}.pdf")
+            # 1️⃣ Generate PDF via your dynamic LaTeX code
+            latex_service = pdf_service_factory()
+            # Assuming generate_resume method from your service takes the resume_data
+            gen = latex_service.generate_resume(resume_data) 
+            if not gen["success"]:
+                # Use current_app.logger as per user's block
+                current_app.logger.error(f"PDF gen failed: {gen.get('error')}")
+                return jsonify({"success": False, "error": "PDF generation error"}), 500
 
-            # generate_pdf takes resume_data_to_use and output_path as per user's specific instructions
-            result = pdf_generator.generate_pdf(resume_data_to_use, output_path) 
+            # 2️⃣ Upload to Supabase
+            user_id = resume_record["user_id"]  # from your earlier query
+            # The key is constructed within upload_to_supabase in the service as per typical design
+            # The call to upload_to_supabase implies it handles key construction or takes necessary parts.
+            # User provided: latex_service.upload_to_supabase(gen["pdf_path"], resume_id)
+            # This implies resume_id is sufficient for the service to construct the full path with user_id.
+            upload = latex_service.upload_to_supabase(gen["pdf_path"], resume_id, user_id) # Passing user_id explicitly if service needs it
+            if not upload["success"]:
+                current_app.logger.error(f"Upload failed: {upload.get('error')}")
+                return jsonify({"success": False, "error": "Upload error"}), 500
 
-            if not result["success"]:
-                error_msg = result.get("error", "Unknown LaTeX compilation error")
-                detailed_error = result.get("details", "") 
-                logger.error(f"PDF generation failed for {resume_id}: {error_msg}. Details: {detailed_error}")
-                return app.create_error_response("PdfGenerationError", "Error generating PDF (see logs)", 500)
-            
-            logger.info(f"PDF generated for resume {resume_id} at {output_path}")
-
-            # 3. Upload PDF to Supabase Storage
-            user_id_for_storage = None
-            try:
-                resp_user_id = db.table("resumes_new").select("user_id").eq("id", resume_id).execute()
-                if resp_user_id.data:
-                    user_id_for_storage = resp_user_id.data[0]["user_id"]
-                else:
-                    logger.warning(f"No user_id found in 'resumes_new' for resume_id {resume_id}. Using 'unknown-user'.")
-            except Exception as e_user_fetch:
-                logger.warning(f"Could not fetch user_id from 'resumes_new' for resume {resume_id}: {e_user_fetch}. Using 'unknown-user'.")
-            
-            storage_path_prefix = f"{user_id_for_storage or 'unknown-user'}/{resume_id}"
-            pdf_filename = f"enhanced_resume_{resume_id}.pdf"
-            storage_path = f"{storage_path_prefix}/{pdf_filename}"
-            
-            bucket_name = "resume-pdfs"
-            bucket = db.storage.from_(bucket_name)
-            
-            if not os.path.exists(output_path):
-                logger.error(f"Generated PDF file not found at {output_path} for resume {resume_id}")
-                return app.create_error_response("PdfGenerationError", "Generated PDF file missing", 500)
-
-            # Using user's specified upload call structure
-            upload_response = bucket.upload(storage_path, output_path).execute()
-
-            # Using user's specified error checking for upload_response
-            if hasattr(upload_response, 'error') and upload_response.error is not None:
-                error_details = str(upload_response.error)
-                logger.error(f"Supabase upload error for {resume_id}: {error_details}")
-                return app.create_error_response("StorageUploadError", f"Failed to upload PDF to storage: {error_details}", 500)
-            
-            # Fallback check for other types of errors if the above doesn't catch it
-            if hasattr(upload_response, 'status_code') and upload_response.status_code >= 400:
-                logger.error(f"Supabase upload error for {resume_id}. Status: {upload_response.status_code}, Response: {getattr(upload_response, 'text', 'No text')}")
-                return app.create_error_response("StorageUploadError", "Failed to upload PDF to storage", 500)
-
-            logger.info(f"PDF for resume {resume_id} uploaded to Supabase at {storage_path}")
-            
-            # 4. Generate a signed URL for the uploaded PDF
-            expires_in_seconds = 60 * 60 * 24 # 24 hours
-            signed_url = None
-            try:
-                # Using user's specified signed URL call structure and attribute checking
-                signed_response_after_execute = bucket.create_signed_url(storage_path, expires_in=expires_in_seconds).execute()
-
-                if hasattr(signed_response_after_execute, "link"):
-                    signed_url = signed_response_after_execute.link
-                elif hasattr(signed_response_after_execute, "data") and signed_response_after_execute.data and isinstance(signed_response_after_execute.data, dict):
-                    signed_url = signed_response_after_execute.data.get("signedURL") or signed_response_after_execute.data.get("publicURL")
-                elif isinstance(signed_response_after_execute, dict) and "signedURL" in signed_response_after_execute: # Common v2 direct dict
-                     signed_url = signed_response_after_execute["signedURL"]
-                else:
-                    signed_url = getattr(signed_response_after_execute, "url", None)
-
-                if not signed_url:
-                    logger.error(f"Failed to extract signed URL for {resume_id}. Response from execute: {signed_response_after_execute}")
-                    return app.create_error_response("StorageError", "Failed to generate signed URL", 500)
-
-            except Exception as e_url:
-                logger.exception(f"Error generating signed URL for {resume_id}: {e_url}")
-                return app.create_error_response("StorageError", f"Error generating signed URL: {str(e_url)}", 500)
-
-            logger.info(f"Generated signed URL for resume PDF: {signed_url}")
-            
-            try:
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-                    logger.info(f"Cleaned up temporary PDF file: {output_path}")
-            except Exception as e_clean:
-                logger.warning(f"Could not clean up temporary PDF file {output_path}: {e_clean}")
-            
-            return jsonify({"status": "success", "signedUrl": signed_url}), 200
+            # 3️⃣ Return the signed URL
+            return jsonify({"success": True, "resume_id": resume_id, "pdf_url": upload["pdf_url"]}), 200
 
         except Exception as e:
-            logger.exception(f"Unexpected error generating PDF for {resume_id}: {e}")
-            return app.create_error_response("PdfGenerationError", f"Error generating PDF: {str(e)}", 500)
+            current_app.logger.exception(f"Unexpected PDF pipeline error for {resume_id}")
+            return jsonify({"success": False, "error": "Server error"}), 500
+        # --- USER'S PROVIDED BLOCK ENDS HERE ---
 
     @app.route("/status")
     def status():
