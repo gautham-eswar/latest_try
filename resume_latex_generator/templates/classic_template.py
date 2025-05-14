@@ -61,7 +61,7 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     lines = []
     if name:
         lines.append(r"\begin{center}")
-        lines.append(f"    \\\\textbf{{\\\\Huge \\\\scshape {name}}} \\\\\\\\ \\\\vspace{{1pt}}")
+        lines.append(f"    \\textbf{{\\\\Huge \\\\scshape {name}}} \\\\ \\\\vspace{{1pt}}")
     
     contact_parts = []
     if phone:
@@ -97,7 +97,6 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
 
     if name: 
         lines.append(r"\end{center}")
-        lines.append("") 
 
     return "\n".join(lines) if lines else None
 
@@ -161,7 +160,6 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
             lines.append(r"      \\\\resumeItemListEnd")
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
@@ -195,7 +193,6 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
             lines.append(r"      \\\\resumeItemListEnd")
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
@@ -241,7 +238,6 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> 
             lines.append(r"          \\\\resumeItemListEnd")
             
     lines.append("    \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -264,10 +260,9 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
         if isinstance(soft_skills, list) and soft_skills:
             lines.append(r" \\\\begin{itemize}[leftmargin=0.15in, label={}]")
             lines.append(r"    \\\\small{\\\\item{")
-            lines.append(f"     \\\\textbf{{Soft Skills}}{{: {fix_latex_special_chars(', '.join(soft_skills))}}} \\\\\\\\")
+            lines.append(f"     \\\\textbf{{Soft Skills}}{{:{fix_latex_special_chars(', '.join(soft_skills))}}}")
             lines.append(r"    }}")
             lines.append(r" \\\\end{itemize}")
-            lines.append("")
             return "\n".join(lines)
         return None 
 
@@ -284,7 +279,6 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     
     lines.append(r"    }}")
     lines.append(r" \\\\end{itemize}")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -305,7 +299,6 @@ def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) 
          lines.append(f"    \\\\small{{\\\\item{{{', '.join(lang_items)}}}}}")
 
     lines.append(r" \\\\end{itemize}")
-    lines.append("")
     return "\n".join(lines) if lang_items else None
 
 
@@ -324,7 +317,6 @@ def _generate_certifications_section(cert_list: Optional[List[Dict[str, Any]]]) 
         lines.append(f"      {{{institution}}}{{}}") 
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
@@ -348,7 +340,6 @@ def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> Opt
             lines.append(r"      \\\\resumeItemListEnd")
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -385,7 +376,6 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
             lines.append(r"      \\\\resumeItemListEnd")
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -423,7 +413,6 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
             lines.append(r"      \\\\resumeItemListEnd")
             
     lines.append("  \\\\resumeSubHeadingListEnd")
-    lines.append("")
     return "\n".join(lines)
 
 
