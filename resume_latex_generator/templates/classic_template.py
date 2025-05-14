@@ -16,18 +16,19 @@ def sanitize_latex(lines: List[str]) -> List[str]:
             continue
             
         # Pattern 1: Lines that consist of only multiple backslashes
-        if L.strip() == r"\\\\" or L.strip() == r"\\" or L.strip().startswith(r"\\") and L.strip().count('\\') > 1:
+        # (e.g., \\ or \\\\) should be skipped as they can cause errors or unwanted space.
+        if L.strip() == r"\\" or L.strip() == r"\\\\".strip(): # check for single or double \\
             continue
             
         # Pattern 2: Fix lines ending with multiple backslashes (e.g., "\\ \\")
-        # which often cause "no line here to end" errors
+        # which often cause "no line here to end" errors. This converts it to a single line break.
         if L.rstrip().endswith(r"\\ \\"):
             L = L.rstrip()[:-4] + r"\\"  # Replace "\\ \\" with a single "\\"
             
-        # Pattern 3: Fix lines containing consecutive backslashes "\\\\", often improperly escaped
-        # Replace "\\\\" with "\\" when not part of a LaTeX command
-        if r"\\\\" in L and not any(cmd in L for cmd in [r"resumeItem", r"begin", r"end"]):
-            L = L.replace(r"\\\\", r"\\")
+        # Removed Pattern 3: The rule that replaced "\\\\" with "\\" globally (conditionally)
+        # was problematic as it could incorrectly modify already escaped characters like \\{ or \\_,
+        # turning them into \{ or \_, which are unterminated LaTeX commands.
+        # fix_latex_special_chars is now responsible for correct initial escaping.
             
         # Add the cleaned line
         cleaned.append(L)
