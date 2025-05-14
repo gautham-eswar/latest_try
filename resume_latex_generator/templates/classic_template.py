@@ -48,18 +48,24 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
         text = text.replace(match.group(0), placeholder)
         protected_percentages[placeholder] = f"{match.group(1)}\\%"
 
-    # Now handle standard LaTeX special characters
+    # Handle backslashes carefully to avoid double escaping
+    # Replace \ with \textbackslash{} only if not already part of \textbackslash{}
+    text = re.sub(r'(?<!\textbackslash)%(?![a-zA-Z])', r'\\%', text) # Escape % not followed by letters (likely comments)
+    text = re.sub(r'(?<!\textbackslas)\(?<!h)\\', r'\\textbackslash{}', text) # More precise backslash replacement
+
+    # Now handle other standard LaTeX special characters
+    # Order matters: process more specific or problematic ones first if needed
     replacements = [
-        ("\\", r"\textbackslash{}"), # Corrected: Python string for single backslash
-        ("&", r"\&"),
-        ("%", r"\%"),
-        ("$", r"\$"),
-        ("#", r"\#"),
-        ("_", r"\_"),
-        ("{", r"\{"),
-        ("}", r"\}"),
-        ("~", r"\textasciitilde{}"),
-        ("^", r"\textasciicircum{}"),
+        # Backslash is handled above by re.sub
+        ("&", r"\\&"),
+        # Percentage is handled above by re.sub for comments, and by placeholder for X%
+        ("$", r"\\$"),
+        ("#", r"\\#"),
+        ("_", r"\\_"),
+        ("{", r"\\{"),
+        ("}", r"\\}"),
+        ("~", r"\\textasciitilde{}"),
+        ("^", r"\\textasciicircum{}"),
     ]
 
     for old, new in replacements:
