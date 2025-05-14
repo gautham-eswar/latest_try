@@ -50,15 +50,16 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
 
     # Handle backslashes carefully to avoid double escaping
     # Replace \ with \textbackslash{} only if not already part of \textbackslash{}
-    text = re.sub(r'(?<!\textbackslash)%(?![a-zA-Z])', r'\\%', text) # Escape % not followed by letters (likely comments)
-    text = re.sub(r'(?<!\textbackslas)\(?<!h)\\', r'\\textbackslash{}', text) # More precise backslash replacement
+    text = re.sub(r'(?<!\\textbackslash)\\', r'\\\\textbackslash{}', text) # Corrected regex for backslashes
+
+    # Escape % not followed by letters (likely comments), ensuring not to double-escape % already escaped by placeholder
+    # This regex finds % not preceded by a backslash (already escaped) and not part of a placeholder
+    text = re.sub(r'(?<!\\)%(?![a-zA-Z])(?![_A-Z0-9]{{10,}})', r'\\%', text) 
 
     # Now handle other standard LaTeX special characters
-    # Order matters: process more specific or problematic ones first if needed
     replacements = [
-        # Backslash is handled above by re.sub
+        # Backslash and Percentage are handled above by re.sub
         ("&", r"\\&"),
-        # Percentage is handled above by re.sub for comments, and by placeholder for X%
         ("$", r"\\$"),
         ("#", r"\\#"),
         ("_", r"\\_"),
