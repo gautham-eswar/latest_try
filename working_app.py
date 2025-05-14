@@ -103,7 +103,7 @@ def create_app():
     
     # Initialize PDF Generator
     try:
-        pdf_gen = create_pdf_generator()
+        pdf_gen = create_pdf_generator(no_auto_size=True)
         app.config['pdf_generator'] = pdf_gen
         env_check_result = pdf_gen.check_environment()
         logger.info(f"PDF Generator Environment Check: {env_check_result}")

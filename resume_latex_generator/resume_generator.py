@@ -768,28 +768,46 @@ class LatexPdfGenerator:
                         f.write(latex_content)
                     print(f"LaTeX content saved to {tex_filepath_temp}")
                     
-                    pdf_in_temp_dir = self._compile_latex(tex_filepath_temp, temp_dir)
+                    # Sanitize the .tex file to remove lines that are just \ or \\
+                    print(f"Sanitizing {tex_filepath_temp}...")
+                    try:
+                        with open(tex_filepath_temp, 'r+', encoding='utf-8') as f:
+                            lines = f.readlines()
+                            f.seek(0)
+                            f.truncate()
+                            for ln in lines:
+                                # Regex to match lines that consist *only* of one or more backslashes,
+                                # optionally surrounded by whitespace.
+                                if not re.match(r'^\s*\\\\+\s*$', ln):
+                                    f.write(ln)
+                        print(f"Sanitization complete for {tex_filepath_temp}.")
+                    except Exception as e:
+                        print(f"Error during .tex file sanitization: {e}")
+                        # Decide if you want to raise e or just log and continue
 
-                    if not pdf_in_temp_dir:
+                    # Compile the .tex file to PDF
+                    compiled_pdf_path = self._compile_latex(tex_filepath_temp, temp_dir)
+
+                    if not compiled_pdf_path:
                         print("LaTeX compilation failed during auto-sizing. Aborting.")
                         compiled_pdf_path_in_temp = None
                         break 
                     
-                    page_count = self._get_pdf_page_count(pdf_in_temp_dir)
+                    page_count = self._get_pdf_page_count(compiled_pdf_path)
                     if page_count is None or page_count > 1:
                         if attempts_remaining > 1:
                             print(f"Content spans {page_count or '>1'} pages. Increasing page height...")
                             current_page_height += PAGE_HEIGHT_INCREMENT_INCHES
                             attempts_remaining -= 1
-                            if os.path.exists(pdf_in_temp_dir):
-                                os.remove(pdf_in_temp_dir)
+                            if os.path.exists(compiled_pdf_path):
+                                os.remove(compiled_pdf_path)
                         else:
                             print(f"Max attempts reached. Content still spans {page_count or '>1'} pages.")
-                            compiled_pdf_path_in_temp = pdf_in_temp_dir
+                            compiled_pdf_path_in_temp = compiled_pdf_path
                             break
                     else:
                         print("Success! Content fits on a single page.")
-                        compiled_pdf_path_in_temp = pdf_in_temp_dir
+                        compiled_pdf_path_in_temp = compiled_pdf_path
                         success = True
                         break
                 
