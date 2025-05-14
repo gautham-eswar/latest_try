@@ -7,6 +7,7 @@ from datetime import datetime
 import uuid
 import json
 import time
+import os
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -23,7 +24,6 @@ from Pipeline.job_tracking import create_optimization_job, update_optimization_j
 from Pipeline.resume_uploader import parse_and_upload_resume
 from Pipeline.optimizer import enhance_resume
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
-
 
 from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
@@ -52,9 +52,6 @@ logger = logging.getLogger(__name__)
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
-
-# Ensure 'os' is imported before it's used for makedirs
-import os
 
 # Create directories if they don't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -110,9 +107,9 @@ def create_app():
     
     # Initialize PDF Generator
     try:
-        pdf_gen = create_pdf_generator(no_auto_size=True)
-        app.config['pdf_generator'] = pdf_gen
-        env_check_result = pdf_gen.check_environment()
+        pdf_service = create_pdf_generator(no_auto_size=True)
+        app.config["pdf_service"] = pdf_service
+        env_check_result = pdf_service.check_environment()
         logger.info(f"PDF Generator Environment Check: {env_check_result}")
     except Exception as e:
         logger.error(f"Failed to initialize PDF Generator: {e}", exc_info=True)
@@ -276,11 +273,10 @@ def create_app():
 
     @app.route("/api/download/<resume_id>/pdf", methods=["GET"])
     def download_resume_pdf(resume_id):
-        db_for_route = get_db() # Renamed to avoid conflict if get_db() is also used inside Supabase interaction
-        logger.info(f"Attempting to generate PDF for resume_id: {resume_id}")
-
-        # Step 1: Load main resume data (resume_data_to_use) and user_id (from resume_record)
         try:
+            db_for_route = get_db()
+            logger.info(f"Attempting to generate PDF for resume_id: {resume_id}")
+
             response = db_for_route.table("resumes").select("data, user_id").eq("id", resume_id).maybe_single().execute()
             if not response.data:
                 logger.warning(f"No resume data found in 'resumes' table for resume_id: {resume_id}")
@@ -288,7 +284,7 @@ def create_app():
             
             resume_record = response.data
             resume_data = resume_record.get("data")
-            user_id = resume_record.get("user_id") # Extracted user_id here
+            user_id = resume_record.get("user_id")
 
             if not resume_data: 
                 logger.error(f"'data' field is empty for resume_id: {resume_id}")
@@ -296,83 +292,39 @@ def create_app():
             if not user_id:
                 logger.error(f"'user_id' is missing for resume_id: {resume_id}")
                 return app.create_error_response("ProcessError", "User ID is missing for resume", 500)
-
             logger.info(f"Successfully loaded resume_data and user_id for {resume_id}")
 
-        except Exception as e_load:
-            logger.exception(f"Error loading resume data for {resume_id} from 'resumes' table: {e_load}")
-            return app.create_error_response("DatabaseError", "Failed to load resume data", 500)
-
-        # --- USER'S NEW PDF ENDPOINT LOGIC STARTS HERE ---
-        try:
-            service = pdf_service_factory()   # from step 1 (ensure pdf_service_factory is defined globally or passed appropriately)
+            pdf_out = os.path.join(OUTPUT_FOLDER, f"{resume_id}.pdf")
+            service = current_app.config["pdf_service"]
             
-            # Ensure OUTPUT_FOLDER is defined and accessible, typically a config or global var
-            # os.makedirs(OUTPUT_FOLDER, exist_ok=True) # Ensure output folder exists, though generate_pdf should handle its specific output_path dir
-            
-            # Define a unique name for the PDF before it's uploaded to prevent collisions locally if needed,
-            # though the primary unique naming will be on Supabase.
-            # Using a subfolder within OUTPUT_FOLDER or /tmp for intermediate local storage before upload.
-            # The user's new service.generate_pdf takes full output_path.
-            # Let's create a unique local path for the PDF.
-            temp_pdf_dir = os.path.join(OUTPUT_FOLDER, "temp_pdfs") # Or use /tmp directly
-            os.makedirs(temp_pdf_dir, exist_ok=True)
-            local_pdf_filename = f"{resume_id}_{uuid.uuid4().hex[:8]}.pdf"
-            local_pdf_path = os.path.join(temp_pdf_dir, local_pdf_filename)
+            current_app.logger.info(f"Calling service.generate_pdf for {resume_id} to output at {pdf_out}")
+            service.generate_pdf(resume_data, pdf_out)
+            current_app.logger.info(f"PDF generated locally at: {pdf_out}")
 
-            current_app.logger.info(f"Calling service.generate_pdf for {resume_id} to output at {local_pdf_path}")
-            # Generate PDF - service.generate_pdf should handle actual PDF creation at local_pdf_path
-            gen_path = service.generate_pdf(resume_data, local_pdf_path)
-
-            if not gen_path or not os.path.exists(gen_path):
-                current_app.logger.error(f"PDF generation failed. service.generate_pdf returned {gen_path} or file does not exist.")
-                return jsonify({"success":False,"error":"PDF generation failed at service level"}), 500
-
-            current_app.logger.info(f"PDF generated locally at: {gen_path}")
-
-            # Upload to Supabase storage
-            supa_client = get_db() # Get a fresh Supabase client instance
-            supa_bucket = supa_client.storage.from_("resume-pdfs")
+            supa_storage_client = get_db().storage.from_("resume-pdfs")
+            key = f"{user_id}/{resume_id}/enhanced_resume_{resume_id}.pdf"
             
-            # Define a unique key for Supabase storage
-            # Using a fixed part like "enhanced_resume" and then the resume_id ensures some structure.
-            # Adding a UUID or timestamp can prevent overwrites if multiple versions for the same resume_id are possible.
-            storage_filename = f"enhanced_resume_{resume_id}_{uuid.uuid4().hex[:8]}.pdf"
-            supa_storage_key = f"{user_id}/{resume_id}/{storage_filename}"
-            
-            current_app.logger.info(f"Uploading {gen_path} to Supabase at key: {supa_storage_key}")
-            with open(gen_path, "rb") as fd:
-                # The upload method might vary slightly based on supabase-py version (e.g., file_options vs options)
-                # Assuming options is the more modern way if file_options was older or vice-versa.
-                # The user provided: {"content-type":"application/pdf","upsert":True}
-                upload_response = supa_bucket.upload(supa_storage_key, fd.read(), file_options={"content-type":"application/pdf","upsert":"true"})
-            
-            # Basic check, proper error handling for Supabase would involve checking response status or for errors.
-            current_app.logger.info(f"Supabase upload initiated for {supa_storage_key}. Response: {upload_response}")
-            
-            # Get public URL (or signed URL if preferred and using that logic)
-            # User specified get_public_url
-            pdf_public_url = supa_bucket.get_public_url(supa_storage_key)
-            current_app.logger.info(f"Supabase public URL: {pdf_public_url}")
+            current_app.logger.info(f"Uploading {pdf_out} to Supabase at key: {key}")
+            with open(pdf_out, "rb") as F:
+                supa_storage_client.upload(key, F.read(), file_options={"content-type":"application/pdf","upsert":True})
+            url = supa_storage_client.get_public_url(key)
+            current_app.logger.info(f"Supabase public URL: {url}")
 
-            # Clean up local temporary PDF file after successful upload
-            if os.path.exists(gen_path):
+            if os.path.exists(pdf_out):
                 try:
-                    os.remove(gen_path)
-                    current_app.logger.info(f"Cleaned up local PDF: {gen_path}")
+                    os.remove(pdf_out)
+                    current_app.logger.info(f"Cleaned up local PDF: {pdf_out}")
                 except Exception as e_clean:
-                    current_app.logger.error(f"Error cleaning up local PDF {gen_path}: {e_clean}")
+                    current_app.logger.error(f"Error cleaning up local PDF {pdf_out}: {e_clean}")
 
-            return jsonify({"success":True,"resume_id":resume_id,"pdf_url":pdf_public_url}), 200
+            return jsonify({"success":True, "resume_id":resume_id, "pdf_url":url}), 200
         
         except Exception as e:
             current_app.logger.exception(f"PDF pipeline error for {resume_id}: {str(e)}")
-            # Clean up local temp PDF if it exists and an error occurred
-            if 'local_pdf_path' in locals() and os.path.exists(local_pdf_path):
-                 try: os.remove(local_pdf_path)
-                 except: pass # best effort
+            if 'pdf_out' in locals() and os.path.exists(pdf_out):
+                 try: os.remove(pdf_out)
+                 except: pass
             return jsonify({"success":False,"error":f"PDF generation failed: {str(e)}"}), 500
-        # --- USER'S NEW PDF ENDPOINT LOGIC ENDS HERE ---
 
     @app.route("/status")
     def status():

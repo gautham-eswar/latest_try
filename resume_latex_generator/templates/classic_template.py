@@ -8,6 +8,15 @@ DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES = 11.0
 # --- Helper functions to generate LaTeX for each section (assumed to be defined below as before) ---
 # e.g. fix_latex_special_chars, _generate_header_section, _generate_objective_section, etc.
 
+def sanitize_latex(lines: List[str]) -> List[str]:
+    cleaned = []
+    for L in lines:
+        # drop any line that is only "\\\\" or whitespace + "\\\\"
+        if L.strip() == r"\\\\":
+            continue
+        cleaned.append(L)
+    return cleaned
+
 def fix_latex_special_chars(text: Optional[Any]) -> str:
 
     if text is None:
@@ -566,5 +575,9 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     ]
     
     full_latex_doc = "\n".join(filter(None, content_parts))
+    
+    # +++ Instruction A: Apply sanitize_latex +++
+    full_latex_doc = "\n".join(sanitize_latex(full_latex_doc.splitlines()))
+    # +++ End Instruction A +++
     
     return full_latex_doc
