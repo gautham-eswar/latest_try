@@ -39,9 +39,11 @@ RUN echo "Content of working_app.py:" && cat working_app.py | head -50
 # Check if pdflatex is installed correctly
 RUN which pdflatex || echo "pdflatex NOT FOUND in PATH"
 
-# Expose port 5000 to the outside world
-EXPOSE 5000
+# Expose the port the app runs on, using the PORT environment variable if available
+# Render typically sets PORT, default to 5000 if not set (though Gunicorn will use it directly)
+EXPOSE ${PORT:-5000}
 
 # Define the command to run the application
 # This replaces the Procfile for Docker deployments on Render
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "working_app:app"] 
+# Use $PORT environment variable which Render provides
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "working_app:app"] 
