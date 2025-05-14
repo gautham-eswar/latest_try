@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim-buster
+FROM python:3.9-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
@@ -8,11 +8,11 @@ ENV PYTHONUNBUFFERED 1
 # Install system dependencies including LaTeX
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    texlive-base \
-    texlive-latex-base \
-    texlive-fonts-recommended \
+    build-essential \
     texlive-latex-recommended \
     texlive-latex-extra \
+    texlive-fonts-recommended \
+    # Optional: texlive-fonts-extra if specific fonts like Marvosym are absolutely needed and not in the above
     # Clean up apt caches to reduce image size
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -39,9 +39,9 @@ RUN echo "Content of working_app.py:" && cat working_app.py | head -50
 # Check if pdflatex is installed correctly
 RUN which pdflatex || echo "pdflatex NOT FOUND in PATH"
 
-# Expose port 8080 to the outside world
-EXPOSE 8080
+# Expose port 5000 to the outside world
+EXPOSE 5000
 
 # Define the command to run the application
 # This replaces the Procfile for Docker deployments on Render
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "working_app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "working_app:app"] 
