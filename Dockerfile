@@ -45,5 +45,5 @@ EXPOSE ${PORT:-5000}
 
 # Define the command to run the application
 # This replaces the Procfile for Docker deployments on Render
-# Use $PORT environment variable which Render provides, ensuring shell expansion
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT working_app:app"] 
+# Use $PORT environment variable which Render provides
+CMD ["gunicorn", "working_app:app", "-b", "0.0.0.0:$PORT"] 

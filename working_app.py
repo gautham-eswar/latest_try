@@ -29,16 +29,18 @@ from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
 
-# Remove old PDF generator imports if they exist (example)
-# - from pdf_generator import ResumePDFGenerator # Assuming this might be an old one
-# - from classic_template_adapter import generate_resume_latex # Assuming this might be an old one
+# Instruction 1: Remove these lines (already commented/absent)
+# from pdf_generator import ResumePDFGenerator
+# from classic_template_adapter import generate_resume_latex
 
-# Ensure new imports are present
+# Instruction 1: Add/ensure this line (already present)
 from resume_latex_generator.resume_generator import create_pdf_generator
-from resume_latex_generator.templates.classic_template import generate_latex_content, fix_latex_special_chars # fix_latex_special_chars might be used by the new generate_pdf logic
 
-# Define the service factory
-pdf_service_factory = create_pdf_generator
+# Instruction 1: Removing this as it's not directly used in working_app.py anymore
+# from resume_latex_generator.templates.classic_template import generate_latex_content, fix_latex_special_chars
+
+# Instruction 1: Removing pdf_service_factory (global variable)
+# pdf_service_factory = create_pdf_generator
 
 
 # Load environment variables
@@ -105,16 +107,20 @@ def create_app():
     # Track application start time
     app.config["START_TIME"] = time.time()
     
-    # Initialize PDF Generator
+    # Instruction 2: Initialize PDF generator in create_app()
+    # This replaces the previous pdf_service initialization
     try:
-        pdf_service = create_pdf_generator(no_auto_size=True)
-        app.config["pdf_service"] = pdf_service
-        env_check_result = pdf_service.check_environment()
-        logger.info(f"PDF Generator Environment Check: {env_check_result}")
+        pdf_gen = create_pdf_generator() # Using create_pdf_generator() as per instruction
+        app.config['pdf_generator'] = pdf_gen # Storing as pdf_generator
+        # Assuming check_environment is still a valid method on the new pdf_gen object
+        # If not, this line might need adjustment or removal depending on create_pdf_generator() object structure
+        # For now, keeping it as it was in the previous initialization block for pdf_service
+        if hasattr(pdf_gen, 'check_environment'): 
+            env_check_result = pdf_gen.check_environment()
+            current_app.logger.info(f"PDF Generator Environment Check: {env_check_result}")
+        current_app.logger.info("PDF Generator OK") # Logging success as per instruction
     except Exception as e:
-        logger.error(f"Failed to initialize PDF Generator: {e}", exc_info=True)
-        # Optionally, you might want to set a flag in app.config or handle this error more gracefully
-        # For now, just logging the error.
+        current_app.logger.error(f"PDF init failed: {e}", exc_info=True) # Logging error as per instruction
     
     # Initialize diagnostic system
     if diagnostic_system:
@@ -294,35 +300,50 @@ def create_app():
                 return app.create_error_response("ProcessError", "User ID is missing for resume", 500)
             logger.info(f"Successfully loaded resume_data and user_id for {resume_id}")
 
-            pdf_out = os.path.join(OUTPUT_FOLDER, f"{resume_id}.pdf")
-            service = current_app.config["pdf_service"]
-            
-            current_app.logger.info(f"Calling service.generate_pdf for {resume_id} to output at {pdf_out}")
-            service.generate_pdf(resume_data, pdf_out)
-            current_app.logger.info(f"PDF generated locally at: {pdf_out}")
+            # Instruction 3: Define output_path and call service.generate_pdf
+            # output_path must match /app/Pipeline/output/enhanced_resume_{resume_id}.pdf
+            # Since WORKDIR is /app, and OUTPUT_FOLDER is Pipeline/output,
+            # os.path.join(OUTPUT_FOLDER, f"enhanced_resume_{resume_id}.pdf") will be relative to /app.
+            # To be explicit about /app, one could use os.path.join("/app", OUTPUT_FOLDER, ...)
+            # However, the user instruction specified the exact path string.
+            # To adhere strictly, and assuming /app is the root for this context:
+            output_path = f"/app/Pipeline/output/enhanced_resume_{resume_id}.pdf" 
+            # Ensure the directory exists for output_path
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+            service = current_app.config["pdf_generator"] # Using 'pdf_generator' as stored in Instruction 2
+            
+            current_app.logger.info(f"Calling service.generate_pdf for {resume_id} to output at {output_path}")
+            service.generate_pdf(resume_data, output_path) # Changed from pdf_out to output_path
+            current_app.logger.info(f"PDF generated locally at: {output_path}")
+
+            # Instruction 3: Keep Supabase upload, URL-signing and cleanup logic exactly as is.
+            # This uses 'output_path' (which was 'pdf_out') for the local file operations.
             supa_storage_client = get_db().storage.from_("resume-pdfs")
+            # The key for Supabase can remain as it was, or align with new filename pattern. 
+            # Keeping it as per previous logic, which includes user_id and resume_id.
             key = f"{user_id}/{resume_id}/enhanced_resume_{resume_id}.pdf"
             
-            current_app.logger.info(f"Uploading {pdf_out} to Supabase at key: {key}")
-            with open(pdf_out, "rb") as F:
+            current_app.logger.info(f"Uploading {output_path} to Supabase at key: {key}")
+            with open(output_path, "rb") as F:
                 supa_storage_client.upload(key, F.read(), file_options={"content-type":"application/pdf","upsert":True})
             url = supa_storage_client.get_public_url(key)
             current_app.logger.info(f"Supabase public URL: {url}")
 
-            if os.path.exists(pdf_out):
+            if os.path.exists(output_path):
                 try:
-                    os.remove(pdf_out)
-                    current_app.logger.info(f"Cleaned up local PDF: {pdf_out}")
+                    os.remove(output_path)
+                    current_app.logger.info(f"Cleaned up local PDF: {output_path}")
                 except Exception as e_clean:
-                    current_app.logger.error(f"Error cleaning up local PDF {pdf_out}: {e_clean}")
+                    current_app.logger.error(f"Error cleaning up local PDF {output_path}: {e_clean}")
 
             return jsonify({"success":True, "resume_id":resume_id, "pdf_url":url}), 200
         
         except Exception as e:
             current_app.logger.exception(f"PDF pipeline error for {resume_id}: {str(e)}")
-            if 'pdf_out' in locals() and os.path.exists(pdf_out):
-                 try: os.remove(pdf_out)
+            # Use 'output_path' for cleanup if defined
+            if 'output_path' in locals() and os.path.exists(output_path):
+                 try: os.remove(output_path)
                  except: pass
             return jsonify({"success":False,"error":f"PDF generation failed: {str(e)}"}), 500
 
