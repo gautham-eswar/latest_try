@@ -117,10 +117,10 @@ def create_app():
         # For now, keeping it as it was in the previous initialization block for pdf_service
         if hasattr(pdf_gen, 'check_environment'): 
             env_check_result = pdf_gen.check_environment()
-            current_app.logger.info(f"PDF Generator Environment Check: {env_check_result}")
-        current_app.logger.info("PDF Generator OK") # Logging success as per instruction
+            app.logger.info(f"PDF Generator Environment Check: {env_check_result}")
+        app.logger.info("PDF Generator OK") # Logging success as per instruction
     except Exception as e:
-        current_app.logger.error(f"PDF init failed: {e}", exc_info=True) # Logging error as per instruction
+        app.logger.error(f"PDF init failed: {e}", exc_info=True) # Logging error as per instruction
     
     # Initialize diagnostic system
     if diagnostic_system:
