@@ -304,26 +304,87 @@ def create_app():
         try:
             # 1️⃣ Generate PDF via your dynamic LaTeX code
             latex_service = pdf_service_factory()
-            # Assuming generate_resume method from your service takes the resume_data
-            gen = latex_service.generate_resume(resume_data) 
-            if not gen["success"]:
-                # Use current_app.logger as per user's block
-                current_app.logger.error(f"PDF gen failed: {gen.get('error')}")
-                return jsonify({"success": False, "error": "PDF generation error"}), 500
+            
+            # Define a temporary path for the generated PDF
+            output_dir = "/tmp/resume_pdfs"
+            os.makedirs(output_dir, exist_ok=True)
+            temp_pdf_path = os.path.join(output_dir, f"temp_resume_{resume_id}_{uuid.uuid4().hex[:8]}.pdf")
+            
+            current_app.logger.info(f"Attempting to generate PDF at: {temp_pdf_path}")
+            
+            # Call the correct method: generate_pdf(self, resume_data, output_path_target_pdf)
+            # It returns the output_path_target_pdf on success, or None/raises error on failure.
+            # We will wrap this in a try-except to catch errors from generate_pdf itself.
+            generated_pdf_output_path = None
+            pdf_generation_error_detail = "Unknown PDF generation error"
+            try:
+                # Ensure resume_data is passed as the first argument after self
+                generated_pdf_output_path = latex_service.generate_pdf(resume_data, temp_pdf_path)
+            except Exception as e_gen:
+                pdf_generation_error_detail = str(e_gen)
+                current_app.logger.error(f"Error during latex_service.generate_pdf: {pdf_generation_error_detail}", exc_info=True)
+                # generated_pdf_output_path remains None
+
+            if not generated_pdf_output_path or not os.path.exists(generated_pdf_output_path):
+                current_app.logger.error(f"PDF gen failed. Method did not return a valid path or file does not exist. Error detail: {pdf_generation_error_detail}")
+                # Attempt to clean up if a file was partially created but is invalid
+                if generated_pdf_output_path and os.path.exists(generated_pdf_output_path):
+                    try: os.remove(generated_pdf_output_path) 
+                    except: pass
+                elif os.path.exists(temp_pdf_path): # Check original temp path too
+                    try: os.remove(temp_pdf_path)
+                    except: pass
+                return jsonify({"success": False, "error": "PDF generation error", "details": pdf_generation_error_detail}), 500
+            
+            current_app.logger.info(f"PDF successfully generated at: {generated_pdf_output_path}")
 
             # 2️⃣ Upload to Supabase
-            user_id = resume_record["user_id"]  # from your earlier query
-            # The key is constructed within upload_to_supabase in the service as per typical design
-            # The call to upload_to_supabase implies it handles key construction or takes necessary parts.
-            # User provided: latex_service.upload_to_supabase(gen["pdf_path"], resume_id)
-            # This implies resume_id is sufficient for the service to construct the full path with user_id.
-            upload = latex_service.upload_to_supabase(gen["pdf_path"], resume_id, user_id) # Passing user_id explicitly if service needs it
-            if not upload["success"]:
-                current_app.logger.error(f"Upload failed: {upload.get('error')}")
-                return jsonify({"success": False, "error": "Upload error"}), 500
+            # Ensure resume_record is fetched and contains user_id
+            user_id = resume_record.get("user_id")
+            if not user_id:
+                current_app.logger.error(f"User ID missing in resume_record for resume {resume_id} during Supabase upload.")
+                # Clean up local PDF before returning
+                if os.path.exists(generated_pdf_output_path):
+                    try: os.remove(generated_pdf_output_path)
+                    except Exception as e_clean: current_app.logger.warning(f"Could not cleanup {generated_pdf_output_path}: {e_clean}")
+                return jsonify({"success": False, "error": "User ID missing for upload"}), 500
+
+            # Assuming upload_to_supabase is a method of latex_service instance
+            # and it takes (local_pdf_path, resume_id, user_id)
+            # The original code passed gen["pdf_path"], resume_id, user_id
+            # We now use generated_pdf_output_path as the local PDF path.
+            current_app.logger.info(f"Uploading {generated_pdf_output_path} for resume {resume_id}, user {user_id}")
+            upload_result = {"success": False} # Default to failure
+            try:
+                # Assuming this method exists and returns a dict like {"success": bool, "pdf_url"?: str, "error"?: str}
+                upload_result = latex_service.upload_to_supabase(generated_pdf_output_path, resume_id, user_id)
+            except AttributeError as ae:
+                current_app.logger.error(f"AttributeError: 'upload_to_supabase' method likely missing from {type(latex_service).__name__}. Error: {ae}", exc_info=True)
+                upload_result = {"success": False, "error": f"Upload service misconfiguration: {ae}"}
+            except Exception as e_upload_service:
+                current_app.logger.error(f"Exception during latex_service.upload_to_supabase: {e_upload_service}", exc_info=True)
+                upload_result = {"success": False, "error": f"Upload failed: {e_upload_service}"}
+
+            if not upload_result.get("success"):
+                current_app.logger.error(f"Upload failed: {upload_result.get('error', 'Unknown upload error')}")
+                 # Clean up local PDF before returning
+                if os.path.exists(generated_pdf_output_path):
+                    try: os.remove(generated_pdf_output_path)
+                    except Exception as e_clean: current_app.logger.warning(f"Could not cleanup {generated_pdf_output_path}: {e_clean}")
+                return jsonify({"success": False, "error": "Upload error", "details": upload_result.get('error')}), 500
+            
+            current_app.logger.info(f"PDF uploaded successfully. Signed URL: {upload_result.get('pdf_url')}")
 
             # 3️⃣ Return the signed URL
-            return jsonify({"success": True, "resume_id": resume_id, "pdf_url": upload["pdf_url"]}), 200
+            # Clean up local PDF file AFTER successful upload
+            if os.path.exists(generated_pdf_output_path):
+                try:
+                    os.remove(generated_pdf_output_path)
+                    current_app.logger.info(f"Successfully cleaned up temporary file: {generated_pdf_output_path}")
+                except Exception as e_clean:
+                    current_app.logger.warning(f"Could not clean up temporary file {generated_pdf_output_path}: {e_clean}")
+            
+            return jsonify({"success": True, "resume_id": resume_id, "pdf_url": upload_result["pdf_url"]}), 200
 
         except Exception as e:
             current_app.logger.exception(f"Unexpected PDF pipeline error for {resume_id}")
