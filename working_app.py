@@ -29,8 +29,15 @@ from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
 
+# Remove old PDF generator imports if they exist (example)
+# - from pdf_generator import ResumePDFGenerator # Assuming this might be an old one
+# - from classic_template_adapter import generate_resume_latex # Assuming this might be an old one
+
+# Ensure new imports are present
 from resume_latex_generator.resume_generator import create_pdf_generator
-# We'll use the dynamic LaTeX generator directly
+from resume_latex_generator.templates.classic_template import generate_latex_content, fix_latex_special_chars # fix_latex_special_chars might be used by the new generate_pdf logic
+
+# Define the service factory
 pdf_service_factory = create_pdf_generator
 
 
@@ -269,191 +276,103 @@ def create_app():
 
     @app.route("/api/download/<resume_id>/pdf", methods=["GET"])
     def download_resume_pdf(resume_id):
-        db = get_db()
+        db_for_route = get_db() # Renamed to avoid conflict if get_db() is also used inside Supabase interaction
         logger.info(f"Attempting to generate PDF for resume_id: {resume_id}")
 
         # Step 1: Load main resume data (resume_data_to_use) and user_id (from resume_record)
-        # This part is assumed to be similar to previous logic, adapted for the new needs.
-        # The user's new block expects 'resume_data' and 'resume_record["user_id"]'.
         try:
-            # Fetching both 'data' and 'user_id' from the 'resumes' table now,
-            # as 'resume_record' is used in the new block.
-            response = db.table("resumes").select("data, user_id").eq("id", resume_id).maybe_single().execute()
-
+            response = db_for_route.table("resumes").select("data, user_id").eq("id", resume_id).maybe_single().execute()
             if not response.data:
                 logger.warning(f"No resume data found in 'resumes' table for resume_id: {resume_id}")
                 return app.create_error_response("NotFound", "Resume data not found", 404)
             
-            resume_record = response.data # This is the dictionary containing 'data' and 'user_id'
-            resume_data = resume_record.get("data") # Get the nested JSON data
+            resume_record = response.data
+            resume_data = resume_record.get("data")
+            user_id = resume_record.get("user_id") # Extracted user_id here
 
             if not resume_data: 
-                logger.error(f"'data' field is empty for resume_id: {resume_id} in 'resumes' table.")
+                logger.error(f"'data' field is empty for resume_id: {resume_id}")
                 return app.create_error_response("ProcessError", "Resume content is empty", 400)
-            
-            if not resume_record.get("user_id"):
-                 logger.warning(f"'user_id' field is missing for resume_id: {resume_id} in 'resumes' table. Upload might use default path.")
-            
-            logger.info(f"Successfully loaded resume_data and resume_record for {resume_id}")
+            if not user_id:
+                logger.error(f"'user_id' is missing for resume_id: {resume_id}")
+                return app.create_error_response("ProcessError", "User ID is missing for resume", 500)
+
+            logger.info(f"Successfully loaded resume_data and user_id for {resume_id}")
 
         except Exception as e_load:
             logger.exception(f"Error loading resume data for {resume_id} from 'resumes' table: {e_load}")
             return app.create_error_response("DatabaseError", "Failed to load resume data", 500)
 
-        # --- USER'S PROVIDED BLOCK STARTS HERE ---
+        # --- USER'S NEW PDF ENDPOINT LOGIC STARTS HERE ---
         try:
-            # 1️⃣ Generate PDF via your dynamic LaTeX code
-            latex_service = pdf_service_factory()
+            service = pdf_service_factory()   # from step 1 (ensure pdf_service_factory is defined globally or passed appropriately)
             
-            # Define a temporary path for the generated PDF
-            output_dir = "/tmp/resume_pdfs"
-            os.makedirs(output_dir, exist_ok=True)
-            temp_pdf_path = os.path.join(output_dir, f"temp_resume_{resume_id}_{uuid.uuid4().hex[:8]}.pdf")
+            # Ensure OUTPUT_FOLDER is defined and accessible, typically a config or global var
+            # os.makedirs(OUTPUT_FOLDER, exist_ok=True) # Ensure output folder exists, though generate_pdf should handle its specific output_path dir
             
-            current_app.logger.info(f"Attempting to generate PDF at: {temp_pdf_path}")
+            # Define a unique name for the PDF before it's uploaded to prevent collisions locally if needed,
+            # though the primary unique naming will be on Supabase.
+            # Using a subfolder within OUTPUT_FOLDER or /tmp for intermediate local storage before upload.
+            # The user's new service.generate_pdf takes full output_path.
+            # Let's create a unique local path for the PDF.
+            temp_pdf_dir = os.path.join(OUTPUT_FOLDER, "temp_pdfs") # Or use /tmp directly
+            os.makedirs(temp_pdf_dir, exist_ok=True)
+            local_pdf_filename = f"{resume_id}_{uuid.uuid4().hex[:8]}.pdf"
+            local_pdf_path = os.path.join(temp_pdf_dir, local_pdf_filename)
+
+            current_app.logger.info(f"Calling service.generate_pdf for {resume_id} to output at {local_pdf_path}")
+            # Generate PDF - service.generate_pdf should handle actual PDF creation at local_pdf_path
+            gen_path = service.generate_pdf(resume_data, local_pdf_path)
+
+            if not gen_path or not os.path.exists(gen_path):
+                current_app.logger.error(f"PDF generation failed. service.generate_pdf returned {gen_path} or file does not exist.")
+                return jsonify({"success":False,"error":"PDF generation failed at service level"}), 500
+
+            current_app.logger.info(f"PDF generated locally at: {gen_path}")
+
+            # Upload to Supabase storage
+            supa_client = get_db() # Get a fresh Supabase client instance
+            supa_bucket = supa_client.storage.from_("resume-pdfs")
             
-            # Call the correct method: generate_pdf(self, resume_data, output_path_target_pdf)
-            # It returns the output_path_target_pdf on success, or None/raises error on failure.
-            # We will wrap this in a try-except to catch errors from generate_pdf itself.
-            generated_pdf_output_path = None
-            pdf_generation_error_detail = "Unknown PDF generation error"
-            try:
-                # Ensure resume_data is passed as the first argument after self
-                generated_pdf_output_path = latex_service.generate_pdf(resume_data, temp_pdf_path)
-            except Exception as e_gen:
-                pdf_generation_error_detail = str(e_gen)
-                current_app.logger.error(f"Error during latex_service.generate_pdf: {pdf_generation_error_detail}", exc_info=True)
-                # generated_pdf_output_path remains None
-
-            if not generated_pdf_output_path or not os.path.exists(generated_pdf_output_path):
-                current_app.logger.error(f"PDF gen failed. Method did not return a valid path or file does not exist. Error detail: {pdf_generation_error_detail}")
-                # Attempt to clean up if a file was partially created but is invalid
-                if generated_pdf_output_path and os.path.exists(generated_pdf_output_path):
-                    try: os.remove(generated_pdf_output_path) 
-                    except: pass
-                elif os.path.exists(temp_pdf_path): # Check original temp path too
-                    try: os.remove(temp_pdf_path)
-                    except: pass
-                return jsonify({"success": False, "error": "PDF generation error", "details": pdf_generation_error_detail}), 500
+            # Define a unique key for Supabase storage
+            # Using a fixed part like "enhanced_resume" and then the resume_id ensures some structure.
+            # Adding a UUID or timestamp can prevent overwrites if multiple versions for the same resume_id are possible.
+            storage_filename = f"enhanced_resume_{resume_id}_{uuid.uuid4().hex[:8]}.pdf"
+            supa_storage_key = f"{user_id}/{resume_id}/{storage_filename}"
             
-            current_app.logger.info(f"PDF successfully generated at: {generated_pdf_output_path}")
-
-            # 2️⃣ Upload to Supabase - Re-integrating direct Supabase client logic
-            db_client_for_upload = get_db() # Ensure db client is available
-            user_id = resume_record.get("user_id")
-            if not user_id:
-                current_app.logger.error(f"User ID missing in resume_record for resume {resume_id} during Supabase upload.")
-                if os.path.exists(generated_pdf_output_path):
-                    try: os.remove(generated_pdf_output_path)
-                    except Exception as e_clean: current_app.logger.warning(f"Could not cleanup {generated_pdf_output_path}: {e_clean}")
-                return jsonify({"success": False, "error": "User ID missing for upload"}), 500
-
-            storage_path_prefix = f"{user_id}/{resume_id}"
-            pdf_filename_on_storage = f"enhanced_resume_{resume_id}_{uuid.uuid4().hex[:8]}.pdf" # Unique filename for storage
-            storage_path = f"{storage_path_prefix}/{pdf_filename_on_storage}"
-            bucket_name = "resume-pdfs"
-            bucket = db_client_for_upload.storage.from_(bucket_name)
-
-            current_app.logger.info(f"Uploading {generated_pdf_output_path} to Supabase at {storage_path}")
-            upload_response_obj = None # To store the response from execute()
-            upload_error_details = "Unknown upload error"
-
-            try:
-                # Using with open for file handling is safer
-                with open(generated_pdf_output_path, 'rb') as f:
-                    # Standard Supabase upload, .execute() is for query builder, not directly on upload for supabase-py v1/v2 style here.
-                    # For supabase-py v2, the structure is typically bucket.upload(...) then check response.
-                    # The user's prior working_app.py had bucket.upload(...).execute(), let's align with that if it was working
-                    # However, common usage is often direct result or an execute on a builder. Reverting to a more common direct upload check.
-                    raw_upload_response = bucket.upload(
-                        path=storage_path,
-                        file=f,
-                        file_options={"content-type": "application/pdf", "upsert": "true"} # Upsert true to overwrite if same name
-                    )
-                # Check response from Supabase. For supabase-py v2, this might be a Response object or raise an APIError.
-                # A common pattern is to check for a status code or error attribute if it doesn't raise.
-                # Given previous logs, let's assume a direct response object for now that might have .error
-                # If raw_upload_response is the executed response:
-                upload_response_obj = raw_upload_response # If it doesn't .execute(), this is the response.
-                                                        # If .execute() was indeed needed and part of a builder, this would change.
-
-                # Check for error based on common Supabase client library patterns (v1 or v2)
-                # supabase-py v2 might raise an APIError or return a Response object with error details
-                # supabase-py v1 might return a dict with an error key or raise
-                if hasattr(upload_response_obj, 'error') and upload_response_obj.error:
-                    upload_error_details = str(upload_response_obj.error)
-                    current_app.logger.error(f"Supabase upload error (direct response): {upload_error_details} for {storage_path}")
-                    raise Exception(f"Supabase upload failed: {upload_error_details}") # Trigger general catch
-                
-                # If it's a requests.Response like object from a successful HTTP call (common in v2 without APIError)
-                if hasattr(upload_response_obj, 'status_code') and upload_response_obj.status_code >= 400:
-                    upload_error_details = upload_response_obj.text if hasattr(upload_response_obj, 'text') else f"HTTP status {upload_response_obj.status_code}"
-                    current_app.logger.error(f"Supabase upload HTTP error: {upload_error_details} for {storage_path}")
-                    raise Exception(f"Supabase upload failed with HTTP status: {upload_error_details}")
-                
-                # If no error attribute and status code is fine, or if it raises APIError on failure (which is caught below)
-                current_app.logger.info(f"Successfully uploaded to {storage_path}")
-
-            except Exception as e_upload:
-                current_app.logger.error(f"Supabase upload failed for {storage_path}: {str(e_upload)}", exc_info=True)
-                if os.path.exists(generated_pdf_output_path):
-                    try: os.remove(generated_pdf_output_path)
-                    except Exception as e_clean: current_app.logger.warning(f"Could not cleanup {generated_pdf_output_path}: {e_clean}")
-                return jsonify({"success": False, "error": "Upload error", "details": str(e_upload)}), 500
-
-            # 3️⃣ Generate a signed URL for the uploaded PDF
-            signed_url = None
-            try:
-                expires_in_seconds = 60 * 60 * 24 # 24 hours
-                # For supabase-py v2, create_signed_url(...).execute() is not typical.
-                # It's usually bucket.create_signed_url(path, expires_in) directly returns the URL or raises.
-                # Let's try the direct call first as it's cleaner for v2.
-                signed_url_data = bucket.create_signed_url(storage_path, expires_in=expires_in_seconds)
-                
-                # The response structure for signed URL varies between supabase-py v1 and v2.
-                # v2 often returns a dict with 'signedURL' or might have it nested in response.data.
-                if isinstance(signed_url_data, dict) and signed_url_data.get('signedURL'):
-                    signed_url = signed_url_data['signedURL']
-                elif isinstance(signed_url_data, str): # some versions might return string directly
-                    signed_url = signed_url_data
-                # Add more checks if necessary based on your specific supabase-py version's return format
-                else:
-                    current_app.logger.warning(f"Could not directly extract signed URL. Response was: {signed_url_data}")
-                    # Fallback to a common older pattern if using .execute() was indeed how it worked before
-                    try:
-                        signed_response_executed = db_client_for_upload.storage.from_(bucket_name).create_signed_url(storage_path, expires_in_seconds).execute()
-                        if hasattr(signed_response_executed, "link"):
-                            signed_url = signed_response_executed.link
-                        elif hasattr(signed_response_executed, "data") and signed_response_executed.data and isinstance(signed_response_executed.data, dict):
-                            signed_url = signed_response_executed.data.get("signedURL") or signed_response_executed.data.get("publicURL")
-                    except Exception as e_fallback_url:
-                        current_app.logger.error(f"Fallback signed URL generation with .execute() also failed: {e_fallback_url}")
-                
-                if not signed_url:
-                    current_app.logger.error(f"Failed to generate signed URL for {storage_path}. Last attempt response: {signed_url_data}")
-                    raise Exception("Failed to obtain signed URL")
-
-            except Exception as e_url_gen:
-                current_app.logger.error(f"Error generating signed URL for {storage_path}: {str(e_url_gen)}", exc_info=True)
-                # No need to clean up remote file here, but local should be gone if upload was successful before this point
-                return jsonify({"success": False, "error": "Signed URL generation error", "details": str(e_url_gen)}), 500
+            current_app.logger.info(f"Uploading {gen_path} to Supabase at key: {supa_storage_key}")
+            with open(gen_path, "rb") as fd:
+                # The upload method might vary slightly based on supabase-py version (e.g., file_options vs options)
+                # Assuming options is the more modern way if file_options was older or vice-versa.
+                # The user provided: {"content-type":"application/pdf","upsert":True}
+                upload_response = supa_bucket.upload(supa_storage_key, fd.read(), file_options={"content-type":"application/pdf","upsert":"true"})
             
-            current_app.logger.info(f"PDF uploaded successfully. Signed URL: {signed_url}")
+            # Basic check, proper error handling for Supabase would involve checking response status or for errors.
+            current_app.logger.info(f"Supabase upload initiated for {supa_storage_key}. Response: {upload_response}")
             
-            # Clean up local PDF file AFTER successful upload and URL generation
-            if os.path.exists(generated_pdf_output_path):
+            # Get public URL (or signed URL if preferred and using that logic)
+            # User specified get_public_url
+            pdf_public_url = supa_bucket.get_public_url(supa_storage_key)
+            current_app.logger.info(f"Supabase public URL: {pdf_public_url}")
+
+            # Clean up local temporary PDF file after successful upload
+            if os.path.exists(gen_path):
                 try:
-                    os.remove(generated_pdf_output_path)
-                    current_app.logger.info(f"Successfully cleaned up temporary file: {generated_pdf_output_path}")
+                    os.remove(gen_path)
+                    current_app.logger.info(f"Cleaned up local PDF: {gen_path}")
                 except Exception as e_clean:
-                    current_app.logger.warning(f"Could not clean up temporary file {generated_pdf_output_path}: {e_clean}")
-            
-            return jsonify({"success": True, "resume_id": resume_id, "pdf_url": signed_url}), 200
+                    current_app.logger.error(f"Error cleaning up local PDF {gen_path}: {e_clean}")
 
+            return jsonify({"success":True,"resume_id":resume_id,"pdf_url":pdf_public_url}), 200
+        
         except Exception as e:
-            current_app.logger.exception(f"Unexpected PDF pipeline error for {resume_id}")
-            return jsonify({"success": False, "error": "Server error"}), 500
-        # --- USER'S PROVIDED BLOCK ENDS HERE ---
+            current_app.logger.exception(f"PDF pipeline error for {resume_id}: {str(e)}")
+            # Clean up local temp PDF if it exists and an error occurred
+            if 'local_pdf_path' in locals() and os.path.exists(local_pdf_path):
+                 try: os.remove(local_pdf_path)
+                 except: pass # best effort
+            return jsonify({"success":False,"error":f"PDF generation failed: {str(e)}"}), 500
+        # --- USER'S NEW PDF ENDPOINT LOGIC ENDS HERE ---
 
     @app.route("/status")
     def status():

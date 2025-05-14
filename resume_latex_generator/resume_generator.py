@@ -605,27 +605,34 @@ def create_pdf_generator():
 class LatexPdfGenerator:
     def __init__(self, template_name='classic', no_auto_size=False):
         self.template_name = template_name
-        self.no_auto_size = no_auto_size
-        self.template_generate_func = generate_latex_content
+        self.no_auto_size = no_auto_size # This will be True based on working_app.py changes
+        # Dynamically load the template generation function from classic_template.py
+        # This aligns with the design of generate_latex_content being the core logic.
+        from .templates.classic_template import generate_latex_content as classic_generate_func
+        self.template_generate_func = classic_generate_func
+        # We also need fix_latex_special_chars if we were to apply it here, 
+        # but it's assumed to be handled within template_generate_func.
+        # from .templates.classic_template import fix_latex_special_chars 
 
     def check_environment(self):
         try:
-            subprocess.run(["pdflatex", "-version"], capture_output=True, check=True)
+            subprocess.run(["pdflatex", "-version"], capture_output=True, check=True, text=True)
             return {"status": "OK", "message": "pdflatex found."}
         except FileNotFoundError:
             return {"status": "Error", "message": "pdflatex not found. Please ensure LaTeX is installed."}
         except subprocess.CalledProcessError as e:
-            return {"status": "Error", "message": f"pdflatex found but error on version check: {e}"}
+            return {"status": "Error", "message": f"pdflatex found but error on version check: {e.stdout} {e.stderr}"}
+        except Exception as e_gen:
+            return {"status": "Error", "message": f"An unexpected error occurred during pdflatex check: {str(e_gen)}"}
 
     def _compile_latex(self, tex_filepath: str, output_dir_for_pdf: str) -> Optional[str]:
-        """
-        Compiles a .tex file into a PDF using pdflatex.
-        Args:
-            tex_filepath: The path to the .tex file to compile.
-            output_dir_for_pdf: The directory where the final PDF should be placed.
-        Returns:
-            Path to the compiled PDF if successful, None otherwise.
-        """
+        # This method is now effectively replaced by the logic in the new generate_pdf, 
+        # but keeping it for structure if other parts of the class (not visible here) might use it.
+        # For the purpose of this refactor, it's largely unused by the new generate_pdf.
+        # However, the user's new generate_pdf has its own compilation logic.
+        # To avoid confusion, I will keep the old _compile_latex and _get_pdf_page_count 
+        # and the new generate_pdf will have its own self-contained compilation logic.
+        # The existing _compile_latex and _get_pdf_page_count will NOT be used by the new generate_pdf body.
         tex_filepath_abs = os.path.abspath(tex_filepath)
         temp_compile_dir = os.path.dirname(tex_filepath_abs)
         filename_no_ext = os.path.splitext(os.path.basename(tex_filepath_abs))[0]
@@ -637,8 +644,8 @@ class LatexPdfGenerator:
             tex_filepath_abs
         ]
         
-        print(f"Compiling LaTeX file: {tex_filepath_abs} into {temp_compile_dir}")
-        
+        print(f"OLD _compile_latex: Compiling LaTeX file: {tex_filepath_abs} into {temp_compile_dir}")
+        # ... (keeping the rest of the old _compile_latex as is for now)
         compilation_succeeded = False
         for attempt in range(2):
             try:
@@ -674,13 +681,10 @@ class LatexPdfGenerator:
         if compilation_succeeded:
             temp_pdf_path = os.path.join(temp_compile_dir, f"{filename_no_ext}.pdf")
             if os.path.exists(temp_pdf_path):
-                # For auto-sizing, the PDF is kept in temp_dir. The move happens later.
-                # If output_dir_for_pdf is the same as temp_compile_dir, no move needed.
                 if os.path.abspath(output_dir_for_pdf) == os.path.abspath(temp_compile_dir):
                     print(f"PDF successfully created in temp dir: {temp_pdf_path}")
                     return temp_pdf_path
                 else:
-                    # This case is for when _compile_latex is called directly to produce final output (e.g. no_auto_size)
                     os.makedirs(output_dir_for_pdf, exist_ok=True)
                     final_pdf_path = os.path.join(output_dir_for_pdf, f"{filename_no_ext}.pdf")
                     try:
@@ -696,12 +700,12 @@ class LatexPdfGenerator:
         return None
 
     def _get_pdf_page_count(self, pdf_path: str) -> Optional[int]:
-        """Get the number of pages in a PDF file."""
-        print(f"Checking page count for: {pdf_path}")
+        # This method will not be used by the new generate_pdf logic
+        print(f"OLD _get_pdf_page_count: Checking page count for: {pdf_path}")
+        # ... (keeping the rest of the old _get_pdf_page_count as is for now)
         if not os.path.exists(pdf_path):
             print(f"PDF file not found at {pdf_path} for page count check.")
             return None
-
         try:
             result = subprocess.run(
                 ["pdfinfo", pdf_path],
@@ -736,104 +740,83 @@ class LatexPdfGenerator:
             except Exception as e:
                 print(f"Error reading log file for page count: {e}")
         
-        print("Could not determine page count. Assuming 2 to encourage auto-sizing if enabled.")
-        return 2
+        print("Could not determine page count from old method.")
+        return 2 # Default from old method
 
-    def generate_pdf(self, resume_data: Dict[str, Any], output_path_target_pdf: str, timeout: Optional[int] = None) -> Optional[str]:
-        final_output_dir = os.path.dirname(output_path_target_pdf)
-        temp_base_name = "resume_temp_for_compile"
+    def generate_pdf(self, resume_data: dict, output_path: str) -> str:
+        """
+        1. Build raw LaTeX using the configured template function.
+        2. Escaping of text is handled *within* the template_generate_func.
+        3. Compile via pdflatex into output_path.
+        """
+        # Use a fixed page height as auto-sizing is controlled by self.no_auto_size (True in this flow)
+        # The template function (generate_latex_content) uses DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES if page_height is None.
+        # Or, if we want to strictly adhere to disabling auto-size, pass a specific height. 
+        # User's new method body implies a fixed height (e.g., 11 inches).
+        page_height_to_use = DEFAULT_INITIAL_PAGE_HEIGHT_INCHES # Using the module-level default, consistent with no_auto_size=True
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tex_filepath_temp = os.path.join(temp_dir, f"{temp_base_name}.tex")
-            current_page_height = DEFAULT_INITIAL_PAGE_HEIGHT_INCHES
-            compiled_pdf_path_in_temp = None # Stores path of PDF in temp_dir
+        latex_source = self.template_generate_func(resume_data, page_height=page_height_to_use)
 
-            if self.no_auto_size:
-                print(f"Auto-sizing disabled. Using page height: {current_page_height:.2f} inches")
-                latex_content = self.template_generate_func(resume_data, page_height=current_page_height)
-                with open(tex_filepath_temp, 'w', encoding='utf-8') as f:
-                    f.write(latex_content)
-                print(f"LaTeX content saved to {tex_filepath_temp}")
-                # Directly compile and expect final PDF in final_output_dir
-                compiled_pdf_path_in_temp = self._compile_latex(tex_filepath_temp, temp_dir) 
-            else:
-                print("Starting auto-sizing process...")
-                attempts_remaining = MAX_AUTO_SIZE_ATTEMPTS
-                success = False
+        # Create a temporary directory for compilation
+        tempdir = tempfile.mkdtemp()
+        tex_filename = "resume.tex" # Fixed name for temp .tex file
+        tex_path = os.path.join(tempdir, tex_filename)
+        
+        final_pdf_name = os.path.basename(output_path)
+        final_output_dir = os.path.dirname(output_path)
+        os.makedirs(final_output_dir, exist_ok=True)
+
+        try:
+            with open(tex_path, "w", encoding="utf-8") as f:
+                f.write(latex_source)
+            print(f"Temporary LaTeX file written to: {tex_path}")
+
+            # Compile LaTeX
+            # Change current working directory to tempdir for pdflatex to find the file easily
+            # and to keep auxiliary files contained.
+            cmd = ["pdflatex", "-interaction=nonstopmode", "-output-directory", tempdir, tex_filename]
+            # Run twice for references etc.
+            for i in range(2):
+                print(f"Running pdflatex command (Pass {i+1}/2): {' '.join(cmd)}")
+                compile_process = subprocess.run(cmd, cwd=tempdir, capture_output=True, text=True)
                 
-                while attempts_remaining > 0:
-                    print(f"Attempt {MAX_AUTO_SIZE_ATTEMPTS - attempts_remaining + 1}/{MAX_AUTO_SIZE_ATTEMPTS}: Page height {current_page_height:.2f} in")
-                    latex_content = self.template_generate_func(resume_data, page_height=current_page_height)
-                    with open(tex_filepath_temp, 'w', encoding='utf-8') as f:
-                        f.write(latex_content)
-                    print(f"LaTeX content saved to {tex_filepath_temp}")
-                    
-                    # Sanitize the .tex file to remove lines that are just \ or \\
-                    print(f"Sanitizing {tex_filepath_temp}...")
-                    try:
-                        with open(tex_filepath_temp, 'r+', encoding='utf-8') as f:
-                            lines = f.readlines()
-                            f.seek(0)
-                            f.truncate()
-                            for ln in lines:
-                                # Regex to match lines that consist *only* of one or more backslashes,
-                                # optionally surrounded by whitespace.
-                                if not re.match(r'^\s*\\\\+\s*$', ln):
-                                    f.write(ln)
-                        print(f"Sanitization complete for {tex_filepath_temp}.")
-                    except Exception as e:
-                        print(f"Error during .tex file sanitization: {e}")
-                        # Decide if you want to raise e or just log and continue
+                # Check for errors after each pass, but only raise critical error after final pass if still failing
+                if compile_process.returncode != 0:
+                    print(f"LaTeX Compilation Failed (Pass {i+1}/2) for {tex_path}.")
+                    print("Stdout:", compile_process.stdout)
+                    print("Stderr:", compile_process.stderr)
+                    if i == 1: # If error on second pass
+                        log_file_path = os.path.join(tempdir, tex_filename.replace(".tex", ".log"))
+                        if os.path.exists(log_file_path):
+                            try:
+                                with open(log_file_path, "r", encoding="utf-8") as log_f:
+                                    print("--- LaTeX Log File ---")
+                                    print(log_f.read(2000)) # Print first 2000 chars of log
+                                    print("--- End LaTeX Log File ---")
+                            except Exception as e_log:
+                                print(f"Error reading log file {log_file_path}: {e_log}")
+                        raise Exception(f"LaTeX compilation failed after 2 passes. Error: {compile_process.stderr[:1000]}")
+                else:
+                    print(f"pdflatex Pass {i+1}/2 successful.")
 
-                    # Compile the .tex file to PDF
-                    compiled_pdf_path = self._compile_latex(tex_filepath_temp, temp_dir)
+            # After successful compilation (2 passes)
+            compiled_pdf_in_tempdir = os.path.join(tempdir, tex_filename.replace(".tex", ".pdf"))
 
-                    if not compiled_pdf_path:
-                        print("LaTeX compilation failed during auto-sizing. Aborting.")
-                        compiled_pdf_path_in_temp = None
-                        break 
-                    
-                    page_count = self._get_pdf_page_count(compiled_pdf_path)
-                    if page_count is None or page_count > 1:
-                        if attempts_remaining > 1:
-                            print(f"Content spans {page_count or '>1'} pages. Increasing page height...")
-                            current_page_height += PAGE_HEIGHT_INCREMENT_INCHES
-                            attempts_remaining -= 1
-                            if os.path.exists(compiled_pdf_path):
-                                os.remove(compiled_pdf_path)
-                        else:
-                            print(f"Max attempts reached. Content still spans {page_count or '>1'} pages.")
-                            compiled_pdf_path_in_temp = compiled_pdf_path
-                            break
-                    else:
-                        print("Success! Content fits on a single page.")
-                        compiled_pdf_path_in_temp = compiled_pdf_path
-                        success = True
-                        break
-                
-                if not compiled_pdf_path_in_temp:
-                    print("Auto-sizing failed to produce a valid PDF in temp directory.")
-                    return None
+            if not os.path.exists(compiled_pdf_in_tempdir):
+                raise Exception(f"Compiled PDF not found at {compiled_pdf_in_tempdir} after 2 successful pdflatex passes.")
 
-            if compiled_pdf_path_in_temp and os.path.exists(compiled_pdf_path_in_temp):
-                try:
-                    os.makedirs(os.path.dirname(output_path_target_pdf), exist_ok=True)
-                    shutil.move(compiled_pdf_path_in_temp, output_path_target_pdf)
-                    print(f"Final PDF successfully moved to: {output_path_target_pdf}")
-                    return output_path_target_pdf
-                except Exception as e:
-                    print(f"Error moving final PDF from {compiled_pdf_path_in_temp} to {output_path_target_pdf}: {e}")
-                    try:
-                        shutil.copy(compiled_pdf_path_in_temp, output_path_target_pdf)
-                        os.remove(compiled_pdf_path_in_temp)
-                        print(f"Final PDF successfully COPIED to: {output_path_target_pdf} (move failed)")
-                        return output_path_target_pdf
-                    except Exception as e_copy:
-                        print(f"Also failed to copy PDF: {e_copy}")
-                        return None
-            else:
-                print(f"No PDF produced or found at expected temporary path: {compiled_pdf_path_in_temp}")
-                return None
+            print(f"LaTeX compiled successfully, PDF at: {compiled_pdf_in_tempdir}")
+
+            # Move the successfully compiled PDF to the final output_path
+            shutil.move(compiled_pdf_in_tempdir, output_path)
+            print(f"PDF moved to: {output_path}")
+
+            return output_path
+        finally:
+            # Clean up the temporary directory
+            if os.path.exists(tempdir):
+                shutil.rmtree(tempdir)
+                print(f"Cleaned up temporary directory: {tempdir}")
 
 # This function is what working_app.py will import and call
 def create_pdf_generator(template_name='classic', no_auto_size=False):
