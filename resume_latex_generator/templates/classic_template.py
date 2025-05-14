@@ -11,9 +11,25 @@ DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES = 11.0
 def sanitize_latex(lines: List[str]) -> List[str]:
     cleaned = []
     for L in lines:
-        # drop any line that is only "\\\\" or whitespace + "\\\\"
-        if L.strip() == r"\\\\":
+        # Skip empty lines
+        if not L.strip():
             continue
+            
+        # Pattern 1: Lines that consist of only multiple backslashes
+        if L.strip() == r"\\\\" or L.strip() == r"\\" or L.strip().startswith(r"\\") and L.strip().count('\\') > 1:
+            continue
+            
+        # Pattern 2: Fix lines ending with multiple backslashes (e.g., "\\ \\")
+        # which often cause "no line here to end" errors
+        if L.rstrip().endswith(r"\\ \\"):
+            L = L.rstrip()[:-4] + r"\\"  # Replace "\\ \\" with a single "\\"
+            
+        # Pattern 3: Fix lines containing consecutive backslashes "\\\\", often improperly escaped
+        # Replace "\\\\" with "\\" when not part of a LaTeX command
+        if r"\\\\" in L and not any(cmd in L for cmd in [r"resumeItem", r"begin", r"end"]):
+            L = L.replace(r"\\\\", r"\\")
+            
+        # Add the cleaned line
         cleaned.append(L)
     return cleaned
 
