@@ -374,10 +374,10 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
 
     lines = ["\\\\section{Leadership \\\\& Involvement}", "  \\\\resumeSubHeadingListStart"] 
     
-    for item in involvement_list: 
+    for item in involvement_list:
         organization = fix_latex_special_chars(item.get("organization"))
         position = fix_latex_special_chars(item.get("position"))
-        
+            
         date_val = item.get("date") 
         dates_str = ""
         if isinstance(date_val, dict):
@@ -392,7 +392,7 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
         lines.append(f"    \\\\resumeSubheading")
         lines.append(f"      {{{position}}}{{{dates_str}}}")
         lines.append(f"      {{{organization}}}{{}}")
-
+            
         responsibilities = item.get("responsibilities")
         if responsibilities and isinstance(responsibilities, list):
             lines.append(r"      \\\\resumeItemListStart")
@@ -563,7 +563,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     education_tex = _generate_education_section(education_data)
     experience_tex = _generate_experience_section(experience_data)
     projects_tex = _generate_projects_section(projects_data)
-    skills_tex = _generate_skills_section(skills_data) 
+    skills_tex = _generate_skills_section(skills_data)
     languages_tex = _generate_languages_section(languages_data)
     certifications_tex = _generate_certifications_section(certifications_data)
     awards_tex = _generate_awards_section(awards_data)
@@ -578,7 +578,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         preamble,
         doc_start,
         header_tex,
-        objective_tex, 
+        objective_tex,
         education_tex,
         experience_tex,
         projects_tex,
@@ -586,7 +586,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         languages_tex,
         certifications_tex,
         awards_tex,
-        involvement_tex, 
+        involvement_tex,
         r"\end{document}"
     ]
     
