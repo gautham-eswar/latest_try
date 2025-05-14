@@ -76,11 +76,11 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         return None
     
     name = fix_latex_special_chars(personal_info.get("name"))
-    email = personal_info.get("email")  # Raw email, will handle special chars in href
+    email = personal_info.get("email")  # Raw email
     phone = fix_latex_special_chars(personal_info.get("phone"))
-    linkedin = fix_latex_special_chars(personal_info.get("linkedin")) # Assuming 'linkedin' key
-    website = fix_latex_special_chars(personal_info.get("website")) # Assuming 'website' key
-    github = fix_latex_special_chars(personal_info.get("github")) # Assuming 'github' key
+    linkedin = personal_info.get("linkedin") # Raw linkedin
+    website = personal_info.get("website") # Raw website
+    github = personal_info.get("github") # Raw github
     location = fix_latex_special_chars(personal_info.get("location"))
 
     lines = []
@@ -90,45 +90,44 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     
     contact_parts = []
     if phone:
-        contact_parts.append(phone)
+        contact_parts.append(phone) # phone is already escaped
     if email:
-        email_display = email.replace("_", r"\\_")
-        safe_email_display = fix_latex_special_chars(email_display)
+        # Apply fix_latex_special_chars directly to the original email for display
+        safe_email_display = fix_latex_special_chars(email) 
         contact_parts.append(f"\\\\href{{mailto:{email}}}{{\\\\\\\\underline{{{safe_email_display}}}}}")
     if linkedin: 
         linkedin_url = linkedin
-        if not linkedin.startswith("http"):
-            linkedin_url = f"https://{linkedin}"
-        safe_linkedin_display = fix_latex_special_chars(linkedin)
+        if not linkedin_url.startswith("http"): # Check original linkedin before creating URL
+            linkedin_url = f"https://{linkedin_url}"
+        safe_linkedin_display = fix_latex_special_chars(linkedin) # Apply to original linkedin for display
         contact_parts.append(f"\\\\href{{{linkedin_url}}}{{\\\\\\\\underline{{{safe_linkedin_display}}}}}")
     if github: 
         github_url = github
-        if not github.startswith("http"):
-            github_url = f"https://{github}"
-        safe_github_display = fix_latex_special_chars(github)
+        if not github_url.startswith("http"): # Check original github
+            github_url = f"https://{github_url}"
+        safe_github_display = fix_latex_special_chars(github) # Apply to original github for display
         contact_parts.append(f"\\\\href{{{github_url}}}{{\\\\\\\\underline{{{safe_github_display}}}}}")
     if website: 
         website_url = website
-        if not website.startswith("http"): 
-             website_url = f"http://{website}"
-        safe_website_display = fix_latex_special_chars(website)
+        if not website_url.startswith("http"): # Check original website
+             website_url = f"http://{website_url}"
+        safe_website_display = fix_latex_special_chars(website) # Apply to original website for display
         contact_parts.append(f"\\\\href{{{website_url}}}{{\\\\\\\\underline{{{safe_website_display}}}}}")
 
     if contact_parts:
-        joined_contacts = ' $|$ '.join(filter(None, contact_parts))
-        if joined_contacts.strip():
+        joined_contacts = ' $|$ '.join(filter(None, contact_parts)) 
+        if joined_contacts.strip(): 
             lines.append(f"    \\\\\\\\small{{{joined_contacts}}}")
     
-    if location:
-        if name:
+    if location: 
+        if name: 
             lines.append(f"    \\\\\\\\small {location}")
-        else:
-             lines.append(r"\\begin{center}")
+        else: 
+             lines.append(r"\\begin{center}") 
              lines.append(f"    \\\\\\\\small {location}")
              lines.append(r"\\end{center}")
 
-
-    if name and not (location and not contact_parts):
+    if name and not (location and not contact_parts and not name): # Adjusted logic for closing center
         lines.append(r"\\end{center}")
 
     return "\\n".join(lines) if lines else None
