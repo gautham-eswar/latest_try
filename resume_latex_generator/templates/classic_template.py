@@ -278,7 +278,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     for category, skills_list in skills_to_process.items():
         if isinstance(skills_list, list) and skills_list: 
             skills_str = ", ".join(fix_latex_special_chars(s) for s in skills_list)
-            category_lines.append(f"     \\\\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}}")
+            category_lines.append(f"     \\\\textbf{{{fix_latex_special_chars(category)}}}{{:{skills_str}}}")
     
     lines.append(" \\\\\\\\ ".join(category_lines)) 
     
@@ -442,92 +442,89 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     current_physical_page_height = page_height if page_height is not None else DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES
 
     if page_height is not None:
-        page_height_setting_for_doc_start = f"\\\\setlength{{\\\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}"
+        page_height_setting_for_doc_start = f"\\setlength{{\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}"
 
     effective_top_margin = 0.5
     desired_bottom_margin = 0.5
     target_text_height = current_physical_page_height - effective_top_margin - desired_bottom_margin
-    text_height_declaration = f"\\\\setlength{{\\\\textheight}}{{{target_text_height:.2f}in}}"
+    text_height_declaration = f"\\setlength{{\\textheight}}{{{target_text_height:.2f}in}}"
 
-    preamble = rf"""
-\\\\documentclass[letterpaper,11pt]{{article}}
+    preamble = r"""
+\documentclass[letterpaper,11pt]{article}
 
-\\\\usepackage{{latexsym}}
-\\\\usepackage[empty]{{fullpage}} 
-\\\\usepackage{{titlesec}}
-\\\\usepackage{{marvosym}}
-\\\\usepackage[usenames,dvipsnames]{{color}}
-\\\\usepackage{{verbatim}}
-\\\\usepackage{{enumitem}}
-\\\\usepackage[hidelinks]{{hyperref}}
-\\\\usepackage{{fancyhdr}}
-\\\\usepackage[english]{{babel}}
-\\\\usepackage{{tabularx}}
-\\\\usepackage{{amsfonts}} 
+\usepackage{latexsym}
+\usepackage[empty]{fullpage} 
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{amsfonts} 
 
-\\\\addtolength{{\\\\oddsidemargin}}{{-0.5in}}
-\\\\addtolength{{\\\\evensidemargin}}{{-0.5in}}
-\\\\addtolength{{\\\\textwidth}}{{1in}}
-\\\\addtolength{{\\\\topmargin}}{{-0.5in}} 
-{text_height_declaration}         
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-0.5in} 
+""" + text_height_declaration + r"""         
 
-\\\\clubpenalty=8000
-\\\\widowpenalty=8000
-\\\\tolerance=1000
-\\\\setlength{{\\\\emergencystretch}}{{1.5em}}
+\clubpenalty=8000
+\widowpenalty=8000
+\tolerance=1000
+\setlength{\emergencystretch}{1.5em}
 
-\\\\urlstyle{{same}}
-\\\\raggedbottom 
-\\\\raggedright
-\\\\setlength{{\\\\tabcolsep}}{{0in}}
+\urlstyle{same}
+\raggedbottom 
+\raggedright
+\setlength{\tabcolsep}{0in}
 
-\\\\titleformat{{\\\\section}}{{
-  \\\\vspace{{-4pt}}\\\\scshape\\\\raggedright\\\\large
-}}{{}}{{0em}}{{}}[\\\\color{{black}}\\\\titlerule \\\\vspace{{-5pt}}]
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
-\\\\pdfgentounicode=1
+\pdfgentounicode=1
 
-\\\\newcommand{{\\\\resumeItem}}[1]{{
-  \\\\item\\\\small{{
-    {{{{#1 \\\\vspace{{-2pt}}}}}}
-  }}
-}}
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
 
-\\\\newcommand{{\\\\resumeSubheading}}[4]{{
-  \\\\vspace{{-2pt}}\\\\item
-    \\\\begin{{tabular*}}{{0.97\\\\textwidth}}[t]{{l@{{{{\\\\extracolsep{{\\\\fill}}}}}}r}}
-      \\\\textbf{{#1}} & #2 \\\\
-      \\\\textit{{\\\\small#3}} & \\\\textit{{\\\\small #4}} \\\\
-    \\\\end{{tabular*}}\\\\vspace{{-7pt}}
-}}
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
 
-\\\\newcommand{{\\\\resumeSubSubheading}}[2]{{
-    \\\\item
-    \\\\begin{{tabular*}}{{0.97\\\\textwidth}}{{l@{{{{\\\\extracolsep{{\\\\fill}}}}}}r}}
-      \\\\textit{{\\\\small#1}} & \\\\textit{{\\\\small #2}} \\\\
-    \\\\end{{tabular*}}\\\\vspace{{-7pt}}
-}}
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-7pt}
+}
 
-\\\\newcommand{{\\\\resumeProjectHeading}}[2]{{
-    \\\\item
-    \\\\begin{{tabular*}}{{0.97\\\\textwidth}}{{l@{{{{\\\\extracolsep{{\\\\fill}}}}}}r}}
-      \\\\small#1 & #2 \\\\
-    \\\\end{{tabular*}}\\\\vspace{{-7pt}}
-}}
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
 
-\\\\newcommand{{\\\\resumeSubItem}}[1]{{{\\\\resumeItem{{#1}}\\\\vspace{{-4pt}}}}}}
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
 
-\\\\renewcommand\\\\labelitemii{{$\\vcenter{{\\\\hbox{{\\\\tiny$\\bullet$}}}}$}}
-
-\\\\newcommand{{\\\\resumeSubHeadingListStart}}{{\\\\begin{{itemize}}[leftmargin=0.15in, label={{}}]}}
-\\\\newcommand{{\\\\resumeSubHeadingListEnd}}{{\\\\end{{itemize}}}}
-\\\\newcommand{{\\\\resumeItemListStart}}{{\\\\begin{{itemize}}}}
-\\\\newcommand{{\\\\resumeItemListEnd}}{{\\\\end{{itemize}}\\\\vspace{{-5pt}}}}
-""" 
-
-    doc_start = f"""\\\\begin{{document}}
-{page_height_setting_for_doc_start}
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 """
+
+    doc_start = r"\begin{document}" + f"\n{page_height_setting_for_doc_start}"
 
     personal_info_data = data.get("Personal Information") or data.get("contact")
     name_from_data = data.get("name") 
@@ -576,137 +573,9 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         certifications_tex,
         awards_tex,
         involvement_tex, 
-        r"""
-\\\\end{document}
-"""
+        r"\end{document}"
     ]
     
     full_latex_doc = "\n".join(filter(None, content_parts))
     
     return full_latex_doc
-
-# --- END: Pasted from user's original gautham-eswar/Latex/templates/classic_template.py ---
-
-# The following constants and functions from the existing latest_try classic_template.py are now OBSOLETE
-# and should be removed or commented out as generate_latex_content above now handles everything.
-# _TEMPLATE_DIR = os.path.dirname(os.path.abspath(__file__))
-# _BASE_TEMPLATE_PATH = os.path.join(_TEMPLATE_DIR, "classic_template_base.tex")
-
-# The old generate_latex_content that used _BASE_TEMPLATE_PATH is now fully replaced.
-# The main __main__ block for testing is also from the user's provided file, so that's fine.
-
-# --- Minimal test for the template if run directly (not typical use) ---
-# This __main__ block is from the user-provided file and can be kept for standalone testing of this script.
-if __name__ == '__main__':
-    sample_resume_data = {
-        "Personal Information": {
-            "name": "Ruo-Yi Evelyn Liang",
-            "email": "ruoyi_liang@berkeley.edu",
-            "phone": "(510) 282-2716",
-            "linkedin": "linkedin.com/in/Evelyn_Liang", 
-            "location": "Berkeley, CA",
-            "github": "github.com/evelyn"
-        },
-        "Summary/Objective": "Data Science Meets Product Strategy—Turning Analytics into Action. & a test of _ and % and $ and # and { and } and \\\\\\\\ and ~ and ^",
-        "Education": [
-            {
-                "university": "University of California, Berkeley",
-                "location": "Berkeley, CA",
-                "degree": "Master of Analytics",
-                "specialization": "IEOR, College of Engineering",
-                "start_date": "Aug 2025",
-                "end_date": "Present",
-                "gpa": "3.7/4.0",
-                "additional_info": "Courses: Machine Learning, Optimization, Design of Databases."
-            },
-            {
-                "university": "National Taiwan University (NTU)",
-                "degree": "Bachelor of Business Administration",
-                "start_date": "June 2024", 
-                "gpa": "3.8/4.0",
-                "relevant_coursework": ["Data Analysis", "Project Management"]
-            }
-        ],
-        "Experience": [ 
-            {
-                "company": "Shopee Pte. Ltd.",
-                "title": "Data Analysis Intern", 
-                "location": "Taipei, Taiwan",
-                "dates": {"start_date": "June 2023", "end_date": "Dec 2023"},
-                "responsibilities/achievements": [ 
-                    "Monitored performance & saved 5% costs.",
-                    "Increased 2% sales via A/B testing."
-                ]
-            }
-        ],
-        "Projects": [
-            {
-                "title": "Capstone - Google Case Competition",
-                "description": "Achieved a 16% profit boost.",
-                "technologies_used": "Linear Programming", 
-                "date": "Spring 2023"
-            }
-        ],
-        "Skills": { 
-            "Technical Skills": {
-                "Programming languages": ["Python", "SQL", "R", "C# & C++"],
-                "Data Analysis": ["Pandas", "NumPy", "TensorFlow"],
-                "Database": ["MySQL", "MongoDB"]
-            },
-            "Soft Skills": ["Communication", "Teamwork"]
-        },
-        "Languages": [ 
-            {"name": "Mandarin", "proficiency": "Native"},
-            {"name": "English", "proficiency": "Fluent"}
-        ],
-        "Certifications/Awards": [], 
-        "certifications": [
-            {"certification": "TensorFlow Developer Certificate", "institution": "Google", "date": "2022"}
-        ],
-        "awards": [
-            {"title": "Dean's List", "issuer": "NTU", "date": "2021", "description": "Top 5% of students."}
-        ],
-        "involvement": [ 
-            {
-                "organization": "Analytics Club", "position": "President",
-                "date": {"start_date": "Jan 2022", "end_date": "Dec 2022"},
-                "responsibilities": ["Led weekly meetings", "Organized workshops"]
-            }
-        ],
-        "Misc": { 
-            "Leadership": {
-                "Event General Coordinator": {
-                    "dates": {"start_date": "Apr 2023", "end_date": "May 2023"},
-                    "responsibilities/achievements": ["Led a team of 100+", "Coordinated with 12 sponsors"]
-                }
-            }
-        }
-    }
-
-    print("--- Generating LaTeX from sample data (page_height = None) ---")
-    latex_output_default = generate_latex_content(sample_resume_data)
-    with open("classic_template_test_default.tex", "w", encoding='utf-8') as f:
-        f.write(latex_output_default)
-    print("Saved to classic_template_test_default.tex")
-
-    print("\n--- Generating LaTeX from sample data (page_height = 13.0 inches) ---")
-    latex_output_custom_h = generate_latex_content(sample_resume_data, page_height=13.0)
-    with open("classic_template_test_custom_h.tex", "w", encoding='utf-8') as f:
-        f.write(latex_output_custom_h)
-    print("Saved to classic_template_test_custom_h.tex")
-    
-    print("\n--- Testing fix_latex_special_chars ---")
-    test_str = "Text with \\\\ backslash, {curly braces}, & ampersand, % percent, $ dollar, # hash, _ underscore, ~ tilde, ^ caret."
-    print(f"Original: {test_str}")
-    print(f"Escaped:  {fix_latex_special_chars(test_str)}")
-    
-    minimal_data = {
-        "Personal Information": {"name": "Test User", "email": "test@example.com"},
-        "Education": [{"university": "Test Uni", "degree": "BS CS"}]
-    }
-    print("\n--- Generating LaTeX from minimal data ---")
-    latex_minimal = generate_latex_content(minimal_data)
-    with open("classic_template_test_minimal.tex", "w", encoding='utf-8') as f:
-        f.write(latex_minimal)
-    print("Saved to classic_template_test_minimal.tex")
-    
