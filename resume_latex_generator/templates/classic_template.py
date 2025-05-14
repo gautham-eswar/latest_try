@@ -10,27 +10,36 @@ DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES = 11.0
 
 def sanitize_latex(lines: List[str]) -> List[str]:
     cleaned = []
-    for L in lines:
+    three_literal_backslashes = "\\\\\" # Standard string for three backslashes
+
+    for L_idx, L_content in enumerate(lines):
+        L = L_content # Work with a mutable copy for modifications
         # Skip empty lines
         if not L.strip():
+            # print(f"Sanitize [L{L_idx+1}]: Skipping empty line.")
             continue
             
-        # Pattern 1: Lines that consist of only multiple backslashes
-        # (e.g., \\ or \\\\) should be skipped as they can cause errors or unwanted space.
-        if L.strip() == r"\\" or L.strip() == r"\\\\".strip(): # check for single or double \\
+        # Pattern 1: Lines that consist *only* of multiple (2+) consecutive backslashes after stripping.
+        # A single backslash on a line (e.g., " \\ ") is a valid LaTeX newline and should be preserved.
+        stripped_L = L.strip()
+        # Catches "\\\\", "\\\\\\\\", etc. (even numbers of backslashes >= 4)
+        if stripped_L.startswith(r"\\") and stripped_L.count(r"\\") * 2 == len(stripped_L) and len(stripped_L) >= 4:
+            # print(f"Sanitize [L{L_idx+1}]: Skipping line with only multiple (>=4) backslashes: '{L}'")
             continue
-            
-        # Pattern 2: Fix lines ending with multiple backslashes (e.g., "\\ \\")
-        # which often cause "no line here to end" errors. This converts it to a single line break.
+        # Specifically skip lines that are exactly three literal backslashes.
+        if stripped_L == three_literal_backslashes:
+            # print(f"Sanitize [L{L_idx+1}]: Skipping line with exactly three backslashes: '{L}'")
+            continue
+
+        # Pattern 2: Fix lines ending with multiple backslashes like "\\ \\" (often causes "no line here to end").
+        # This converts it to a single LaTeX line break "\\".
         if L.rstrip().endswith(r"\\ \\"):
+            # print(f"Sanitize [L{L_idx+1}]: Fixing trailing '\\ \\' in '{L}'")
             L = L.rstrip()[:-4] + r"\\"  # Replace "\\ \\" with a single "\\"
             
-        # Removed Pattern 3: The rule that replaced "\\\\" with "\\" globally (conditionally)
-        # was problematic as it could incorrectly modify already escaped characters like \\{ or \\_,
-        # turning them into \{ or \_, which are unterminated LaTeX commands.
-        # fix_latex_special_chars is now responsible for correct initial escaping.
+        # Removed Pattern 3: The rule that replaced "\\\\" with "\\" globally was problematic.
             
-        # Add the cleaned line
+        # print(f"Sanitize [L{L_idx+1}]: Keeping line: '{L}'")
         cleaned.append(L)
     return cleaned
 
