@@ -7,11 +7,20 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 import copy
 import shutil
+from werkzeug.utils import secure_filename
 
 from Pipeline.latex_resume.templates.resume_generator import generate_latex_content, clear_api_cache_diagnostic
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Directory for proactively generated PDFs, relative to this file's location (Pipeline directory)
+# Adjust if a different central output location is preferred.
+PROACTIVE_PDF_OUTPUT_PARENT_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / "output"
+PROACTIVE_PDF_OUTPUT_FOLDER = PROACTIVE_PDF_OUTPUT_PARENT_DIR / "proactive_pdfs"
+
+# Ensure the proactive PDF output directory exists
+PROACTIVE_PDF_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # Constants for page sizing
 DEFAULT_START_HEIGHT = 11.0  # Standard letter size
@@ -349,6 +358,58 @@ def generate_resume_pdf(
         logger.error(f"Error in end-to-end PDF generation: {e}")
         return "", False
 
+def proactively_generate_pdf(resume_id: str, enhanced_resume_data: Dict[str, Any]) -> Optional[str]:
+    """
+    Proactively generates a PDF from enhanced resume data and saves it locally.
+
+    This function is intended to be called after resume data has been enhanced,
+    as part of the main processing pipeline.
+
+    Args:
+        resume_id: The unique identifier for the resume.
+        enhanced_resume_data: The enhanced resume data as a dictionary.
+
+    Returns:
+        The local path to the generated PDF if successful, otherwise None.
+        The caller is responsible for uploading this PDF to persistent storage (e.g., Supabase Storage).
+    """
+    logger.info(f"Proactively generating PDF for resume_id: {resume_id}")
+
+    if not enhanced_resume_data:
+        logger.warning(f"No enhanced_resume_data provided for resume_id: {resume_id}. Skipping proactive PDF generation.")
+        return None
+
+    # Define the output path for the PDF
+    # Ensure the PROACTIVE_PDF_OUTPUT_FOLDER exists (it should be created at module load, but double-check)
+    try:
+        PROACTIVE_PDF_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Could not create proactive PDF output folder {PROACTIVE_PDF_OUTPUT_FOLDER}: {e}")
+        return None
+        
+    output_pdf_filename = f"{secure_filename(resume_id)}.pdf" # Use a secure filename
+    local_pdf_path = PROACTIVE_PDF_OUTPUT_FOLDER / output_pdf_filename
+
+    logger.info(f"Target local path for proactive PDF: {local_pdf_path}")
+
+    try:
+        pdf_path_generated, success = generate_resume_pdf(enhanced_resume_data, str(local_pdf_path))
+
+        if success and pdf_path_generated and Path(pdf_path_generated).exists():
+            logger.info(f"Proactive PDF generated successfully for resume_id: {resume_id} at {pdf_path_generated}")
+            logger.info(f"Next step for pipeline: Upload {pdf_path_generated} to Supabase Storage.")
+            return str(pdf_path_generated)
+        elif pdf_path_generated and Path(pdf_path_generated).exists(): # Generated, but maybe multi-page
+            logger.warning(f"Proactive PDF generated for resume_id: {resume_id} at {pdf_path_generated}, but it might be multi-page (success flag was False).")
+            logger.info(f"Next step for pipeline: Upload {pdf_path_generated} to Supabase Storage (evaluate if multi-page is acceptable).")
+            return str(pdf_path_generated)
+        else:
+            logger.error(f"Proactive PDF generation failed for resume_id: {resume_id}. 'generate_resume_pdf' did not return a valid path or success.")
+            return None
+    except Exception as e:
+        logger.error(f"Exception during proactive PDF generation for resume_id {resume_id}: {e}", exc_info=True)
+        return None
+
 # --- Example Usage (for direct testing of this module) ---
 if __name__ == "__main__":
     # Create a dummy JSON data for testing
@@ -401,3 +462,15 @@ if __name__ == "__main__":
         print(f"Forced fallback PDF generation successful: {final_pdf_path_fallback}")
     else:
         print(f"Forced fallback PDF generation failed.")
+
+    # Test proactive generation
+    print(f"\n--- Testing proactive PDF generation --> {PROACTIVE_PDF_OUTPUT_FOLDER} ---")
+    if sample_json_data: # Ensure sample_json_data is defined from the existing example
+        test_resume_id = "proactive_test_123"
+        # Simulate having enhanced data
+        proactively_generated_path = proactively_generate_pdf(test_resume_id, sample_json_data)
+        if proactively_generated_path:
+            print(f"Proactive PDF for {test_resume_id} generated at: {proactively_generated_path}")
+            print(f"Next, you would upload this file to Supabase Storage.")
+        else:
+            print(f"Proactive PDF generation for {test_resume_id} failed.")
