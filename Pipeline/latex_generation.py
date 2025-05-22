@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Constants for page sizing
 DEFAULT_START_HEIGHT = 11.0  # Standard letter size
 DEFAULT_MIN_HEIGHT_INCHES = 11.0  # Default minimum page height (inches)
-MAX_HEIGHT_INCHES = 16.0  # Maximum page height (inches) before falling back to multi-page output
+MAX_HEIGHT_INCHES = 15.0  # Maximum page height (inches) before falling back to multi-page output
 MAX_ITERATIONS_PER_HEIGHT = 2 # Max recompilations for a given height if bibtex is needed.
 HEIGHT_INCREMENT_INCHES = 0.5  # Increment for trying different page heights
 
@@ -74,125 +74,177 @@ def generate_pdf_from_latex(resume_data: Dict[str, Any], output_path: Optional[s
         pdf_file_name = "resume.pdf"
         tex_file_path = temp_dir_path / tex_file_name
         
-        for current_height in heights_to_try:
-            logger.info(f"Attempting PDF generation with height: {current_height:.1f} inches")
-            
-            latex_content = generate_latex_content(resume_data, target_paper_height_value_str=f"{current_height:.2f}")
-            with open(tex_file_path, 'w', encoding='utf-8') as f:
-                f.write(latex_content)
-            
-            # Save .tex for inspection if output_path is provided (even if compilation fails for this height)
-            if output_path:
-                try:
-                    base_name = Path(output_path).stem
-                    tex_output_dir = Path(output_path).parent
-                    inspection_tex_path = tex_output_dir / f"{base_name}_{current_height:.1f}in.tex"
-                    # shutil.copy(tex_file_path, inspection_tex_path)
-                    # logger.info(f"Saved .tex for inspection: {inspection_tex_path}")
-                except Exception as e:
-                    logger.warning(f"Could not save inspection .tex file: {e}")
+        font_size_reduced_attempted = False # Flag to track if we've tried reducing font size
 
-            os.chdir(temp_dir_path) # Change to temp dir for latexmk
-            
-            compilation_successful_this_iteration = False
-            for _ in range(MAX_ITERATIONS_PER_HEIGHT): #通常は1回、bibtexなどを使う場合は2回以上必要
-                cmd = [
-                    "pdflatex",  # Use pdflatex directly instead of latexmk for better error diagnostics
-                    "-interaction=nonstopmode",
-                    tex_file_name
-                ]
-                try:
-                    process = subprocess.run(cmd, capture_output=True, text=True, check=False)
-                    
-                    # Print detailed output for debugging
-                    print("\n--- PDFLATEX OUTPUT - START ---")
-                    print(f"Command: {' '.join(cmd)}")
-                    print(f"Return code: {process.returncode}")
-                    
-                    # Look for critical errors in the output
-                    print("\n--- RELEVANT ERROR MESSAGES ---")
-                    for line in process.stdout.splitlines():
-                        if "Error:" in line or "Fatal error" in line or "Emergency stop" in line:
-                            print(line)
-                    
-                    # Always save log file for debugging
-                    log_file = temp_dir_path / "resume.log"
-                    if log_file.exists():
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                            log_content = f.read()
-                            print("\n--- LAST 50 LINES OF LATEX LOG ---")
-                            log_lines = log_content.splitlines()
-                            print('\n'.join(log_lines[-50:]))
-                    
-                    print("--- PDFLATEX OUTPUT - END ---\n")
-                    
-                    if process.returncode == 0:
-                        compilation_successful_this_iteration = True
-                        break # Successful compilation
-                    else:
-                        logger.warning(f"LaTeX compilation failed for height {current_height:.1f} inches. Return code: {process.returncode}")
-                except subprocess.TimeoutExpired:
-                    logger.error(f"LaTeX compilation timed out for height {current_height:.1f} inches.")
-                except Exception as e:
-                    logger.error(f"An unexpected error occurred during LaTeX compilation: {e}")
-            
-            os.chdir(original_cwd) # Change back to original dir
+        for attempt_count in range(2): # Max 2 attempts: 1 normal, 1 with reduced font size
+            if attempt_count == 1 and not success: # If first attempt failed (not single page)
+                logger.info("First attempt failed to produce a single page. Attempting with reduced font size (10.5pt).")
+                font_size_reduced_attempted = True
+            elif attempt_count == 1 and success: # First attempt succeeded
+                break # No need for a second attempt
 
-            if compilation_successful_this_iteration:
-                pdf_file_in_temp = temp_dir_path / pdf_file_name
-                if pdf_file_in_temp.exists():
-                    num_pages = get_pdf_page_count(str(pdf_file_in_temp))
-                    logger.info(f"Generated PDF has {num_pages} page(s) for height {current_height:.1f} inches.")
-                    if num_pages == 1:
-                        logger.info(f"Single-page PDF successfully generated with height: {current_height:.1f} inches.")
-                        if output_path:
-                            try:
-                                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-                                shutil.copy(pdf_file_in_temp, output_path)
-                                final_pdf_path_str = output_path
-                                logger.info(f"PDF saved to: {output_path}")
-                            except Exception as e:
-                                logger.error(f"Error copying PDF to output path: {e}")
-                        else: # If no output_path, use the temp path (mainly for testing)
-                            final_pdf_path_str = str(pdf_file_in_temp)
-                        success = True
-                        break # Exit height loop as we found a working height
-                    elif num_pages > 1:
-                        logger.info(f"Multi-page PDF ({num_pages} pages) generated with height {current_height:.1f} inches.")
-                        # If we've reached the maximum allowed height, accept the multi-page PDF
-                        if current_height >= MAX_HEIGHT_INCHES - 1e-6:  # float tolerance
-                            logger.info("Reached maximum allowed page height. Accepting multi-page output.")
+            current_best_pdf_path_this_attempt = None
+            current_best_page_count_this_attempt = float('inf')
+
+            for current_height in heights_to_try:
+                logger.info(f"Attempting PDF generation with height: {current_height:.1f} inches. Reduced font: {font_size_reduced_attempted}")
+                
+                latex_content = generate_latex_content(
+                    resume_data, 
+                    target_paper_height_value_str=f"{current_height:.2f}",
+                    reduce_font_size=font_size_reduced_attempted
+                )
+                with open(tex_file_path, 'w', encoding='utf-8') as f:
+                    f.write(latex_content)
+                
+                # Save .tex for inspection if output_path is provided
+                if output_path:
+                    try:
+                        base_name = Path(output_path).stem
+                        tex_output_dir = Path(output_path).parent
+                        font_suffix = "_10.5pt" if font_size_reduced_attempted else "_11pt"
+                        inspection_tex_path = tex_output_dir / f"{base_name}_{current_height:.1f}in{font_suffix}.tex"
+                        # shutil.copy(tex_file_path, inspection_tex_path) # Keep this commented for now
+                        # logger.info(f"Saved .tex for inspection: {inspection_tex_path}")
+                    except Exception as e:
+                        logger.warning(f"Could not save inspection .tex file: {e}")
+
+                os.chdir(temp_dir_path) # Change to temp dir for latexmk
+                
+                compilation_successful_this_iteration = False
+                for _ in range(MAX_ITERATIONS_PER_HEIGHT): 
+                    cmd = [
+                        "pdflatex",
+                        "-interaction=nonstopmode",
+                        tex_file_name
+                    ]
+                    try:
+                        process = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                        
+                        # Print detailed output for debugging
+                        print("\n--- PDFLATEX OUTPUT - START ---")
+                        print(f"Command: {' '.join(cmd)}")
+                        print(f"Return code: {process.returncode}")
+                        
+                        # Look for critical errors in the output
+                        print("\n--- RELEVANT ERROR MESSAGES ---")
+                        for line in process.stdout.splitlines():
+                            if "Error:" in line or "Fatal error" in line or "Emergency stop" in line:
+                                print(line)
+                        
+                        # Always save log file for debugging
+                        log_file = temp_dir_path / "resume.log"
+                        if log_file.exists():
+                            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                                log_content = f.read()
+                                print("\n--- LAST 50 LINES OF LATEX LOG ---")
+                                log_lines = log_content.splitlines()
+                                print('\n'.join(log_lines[-50:]))
+                        
+                        print("--- PDFLATEX OUTPUT - END ---\n")
+                        
+                        if process.returncode == 0:
+                            compilation_successful_this_iteration = True
+                            break 
+                        else:
+                            logger.warning(f"LaTeX compilation failed for height {current_height:.1f} inches (Reduced font: {font_size_reduced_attempted}). RC: {process.returncode}")
+                            # Save log on failure
+                            log_file_path = temp_dir_path / "resume.log"
+                            if output_path and log_file_path.exists():
+                                try:
+                                    base_name = Path(output_path).stem
+                                    log_output_dir = Path(output_path).parent
+                                    font_suffix = "_10.5pt" if font_size_reduced_attempted else "_11pt"
+                                    failed_log_path = log_output_dir / f"{base_name}_{current_height:.1f}in{font_suffix}_FAILED.log"
+                                    shutil.copy(log_file_path, failed_log_path)
+                                    logger.info(f"Saved FAILED log: {failed_log_path}")
+                                except Exception as e_log:
+                                    logger.warning(f"Could not save FAILED log: {e_log}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error during LaTeX compilation (Height: {current_height:.1f}, Reduced: {font_size_reduced_attempted}): {e}")
+                
+                os.chdir(original_cwd) 
+
+                if compilation_successful_this_iteration:
+                    pdf_file_in_temp = temp_dir_path / pdf_file_name
+                    if pdf_file_in_temp.exists():
+                        num_pages = get_pdf_page_count(str(pdf_file_in_temp))
+                        logger.info(f"Generated PDF has {num_pages} page(s) for height {current_height:.1f} inches (Reduced font: {font_size_reduced_attempted}).")
+                        
+                        # Track the best PDF (fewest pages) for this attempt (normal or reduced font)
+                        if num_pages < current_best_page_count_this_attempt:
+                            current_best_page_count_this_attempt = num_pages
+                            # Save this PDF to a temporary location within the loop if it's the best so far for this font size attempt
+                            # This is important because we might overwrite it in the next height iteration
+                            temp_best_pdf_for_font_attempt = temp_dir_path / f"best_so_far_font_attempt_{attempt_count}.pdf"
+                            shutil.copy(pdf_file_in_temp, temp_best_pdf_for_font_attempt)
+                            current_best_pdf_path_this_attempt = str(temp_best_pdf_for_font_attempt)
+
+
+                        if num_pages == 1:
+                            logger.info(f"Single-page PDF successfully generated with height: {current_height:.1f} inches (Reduced font: {font_size_reduced_attempted}).")
                             if output_path:
                                 Path(output_path).parent.mkdir(parents=True, exist_ok=True)
                                 shutil.copy(pdf_file_in_temp, output_path)
                                 final_pdf_path_str = output_path
                                 logger.info(f"PDF saved to: {output_path}")
                             else:
-                                final_pdf_path_str = str(pdf_file_in_temp)
+                                final_pdf_path_str = str(pdf_file_in_temp) # Should be copied to a persistent temp if needed outside
                             success = True
-                            break  # Exit height loop - we accept multi-page
-                        else:
-                            logger.info("Trying next larger page height to see if content can fit on a single page...")
-                    else: # num_pages is 0 or None
-                        logger.warning(f"PDF page count was {num_pages} for height {current_height:.1f} inches. Treating as failure for this height.") 
+                            break # Exit height loop for this font size attempt
+                        elif num_pages > 1 and current_height >= MAX_HEIGHT_INCHES - 1e-6: 
+                            logger.info(f"Reached max height ({current_height:.1f}in) with {num_pages} pages (Reduced font: {font_size_reduced_attempted}). This is a candidate for final output if single page not achieved.")
+                            # Don't break yet, let the outer loop decide if this is the final one
+                    else:
+                        logger.warning(f"PDF file not found after supposed success (Height: {current_height:.1f}, Reduced: {font_size_reduced_attempted}).")
                 else:
-                    logger.warning(f"PDF file {pdf_file_name} not found in {temp_dir_path} after supposed successful compilation at height {current_height:.1f} inches.")
-            else:
-                logger.warning(f"LaTeX compilation failed for height {current_height:.1f} inches. Not checking page count.")
+                    logger.warning(f"Compilation failed (Height: {current_height:.1f}, Reduced: {font_size_reduced_attempted}).")
+            
+            # After trying all heights for the current font size attempt:
+            if success: # Single page was found
+                break # Exit the main attempt_count loop
 
-        if not success:
-            logger.error("PDF generation failed to produce a single-page document after trying all specified heights.")
-            # If an output_path was specified, try to save the .tex file from the last attempt for debugging
+            # If no single-page PDF was found in this attempt (either normal or reduced font size)
+            # And if we have a multi-page PDF from this attempt (e.g., from MAX_HEIGHT)
+            # this becomes the current candidate for the final output if the other attempt also fails or if this is the reduced font attempt.
+            if not success and current_best_pdf_path_this_attempt and current_best_page_count_this_attempt > 1:
+                 logger.info(f"Font attempt {attempt_count+1} (Reduced: {font_size_reduced_attempted}) did not yield a single page. Best was {current_best_page_count_this_attempt} pages.")
+                 # If this is the reduced font attempt OR if it's the first attempt and no better solution is found
+                 # then this multi-page PDF is our fallback.
+                 if font_size_reduced_attempted or (attempt_count == 0 and not final_pdf_path_str): # Prioritize reduced font if both are multi-page
+                    if output_path and current_best_pdf_path_this_attempt:
+                        logger.info(f"Setting multi-page PDF from this attempt ({current_best_pdf_path_this_attempt}) as fallback.")
+                        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy(current_best_pdf_path_this_attempt, output_path)
+                        final_pdf_path_str = output_path
+                        # success remains False if it's multi-page, but we have a path
+                        success = False # Explicitly false for multi-page, even if it's "accepted"
+                        logger.info(f"Multi-page PDF ({current_best_page_count_this_attempt} pages) saved to: {output_path}")
+                    elif not output_path and current_best_pdf_path_this_attempt:
+                        # If no output_path, the caller needs to handle this temp file
+                        final_pdf_path_str = current_best_pdf_path_this_attempt
+                        success = False
+                        logger.info(f"Multi-page PDF ({current_best_page_count_this_attempt} pages) available at temp path: {final_pdf_path_str}")
+
+
+        if not success and not final_pdf_path_str: # If loop finishes and no PDF was ever successfully made and saved
+            logger.error("PDF generation failed to produce any document after trying all specified heights and font sizes.")
+            # Save last attempted .tex for debugging if output_path is specified
             if output_path and tex_file_path.exists():
                  try:
                     base_name = Path(output_path).stem
                     tex_output_dir = Path(output_path).parent
-                    debug_tex_path = tex_output_dir / f"{base_name}_FAILED_ALL_HEIGHTS.tex"
+                    font_suffix = "_10.5pt" if font_size_reduced_attempted else "_11pt" # Suffix from last attempt
+                    debug_tex_path = tex_output_dir / f"{base_name}_FAILED_ALL_ATTEMPTS{font_suffix}.tex"
                     shutil.copy(tex_file_path, debug_tex_path)
                     logger.info(f"Saved last attempted .tex for debugging: {debug_tex_path}")
                  except Exception as e:
                     logger.warning(f"Could not save last attempted .tex file for debugging: {e}")
-    
+        elif not success and final_pdf_path_str:
+             logger.info(f"PDF generation resulted in a multi-page document saved at: {final_pdf_path_str}")
+             # success is already False, path is set. This is an "accepted multi-page" scenario.
+
+
     return final_pdf_path_str, success
 
 def get_pdf_page_count(pdf_path):

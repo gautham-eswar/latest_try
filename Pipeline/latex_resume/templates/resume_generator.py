@@ -535,13 +535,14 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
     return "\n".join(final_latex_parts)
 
 
-def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = None, target_paper_height_value_str: Optional[str] = None) -> str:
+def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = None, target_paper_height_value_str: Optional[str] = None, reduce_font_size: bool = False) -> str:
     """
     Generates the full LaTeX document string for a classic resume.
     Args:
         data: The parsed JSON resume data.
         template_path: Optional path to a custom LaTeX template (currently unused).
         target_paper_height_value_str: Optional string representing the target paper height in inches for this specific generation.
+        reduce_font_size: Whether to reduce the font size of the document.
     Returns:
         A string containing the complete LaTeX document.
     """
@@ -590,9 +591,12 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     # Call the (currently no-op) highlighting function
     tech_skills, metrics = extract_highlights_from_resume(current_data_source)
 
+    # Determine font size
+    font_size_pt = "10.5pt" if reduce_font_size else "11pt"
+
     # Construct the LaTeX document string
     preamble_parts = [
-        "\\documentclass[letterpaper,11pt]{article}",
+        f"\\documentclass[letterpaper,{font_size_pt}]{{article}}",
         "\\usepackage[T1]{fontenc}",
         "\\usepackage{latexsym}",
         "\\usepackage{titlesec}",
@@ -606,7 +610,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         "\\usepackage{tabularx}",
         "\\usepackage{amsfonts}",
         "\\usepackage{textcomp}", # Required for \textdegree
-        "\\usepackage[left=0.4in, right=0.4in, top=0.4in, bottom=0.4in, footskip=25pt]{geometry}",
+        "\\usepackage[left=0.4in, right=0.4in, top=0.4in, bottom=0.35in, footskip=25pt]{geometry}",
         "\\pagestyle{fancy}",
         "\\fancyhf{}",
         "\\fancyfoot{}",
