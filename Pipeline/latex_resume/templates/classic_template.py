@@ -473,120 +473,115 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         A string containing the complete LaTeX document.
     """
     
-    page_height_setting_for_doc_start = "" # For \pdfpageheight
+    # Determine page height for LaTeX geometry package
+    page_height_setting_tex = ""
+    text_height_adjustment = ""
     
-    # Determine the physical page height for this compilation run
-    current_physical_page_height = page_height if page_height is not None else DEFAULT_TEMPLATE_PAGE_HEIGHT_INCHES
-
     if page_height is not None:
-        # This sets the physical media height at the start of the document
-        page_height_setting_for_doc_start = f"\\setlength{{\\pdfpageheight}}{{{current_physical_page_height:.2f}in}}"
-
-    # Calculate target text height based on the current physical page height
-    # Assuming 0.5in for top margin (due to \addtolength{\topmargin}{-.5in}) and 0.5in for bottom margin
-    effective_top_margin = 0.5
-    desired_bottom_margin = 0.5
-    target_text_height = current_physical_page_height - effective_top_margin - desired_bottom_margin
-    text_height_declaration = f"\\setlength{{\\textheight}}{{{target_text_height:.2f}in}}"
+        # Set the page height and calculate appropriate text height
+        page_height_setting_tex = f"\\setlength{{\\pdfpageheight}}{{{page_height:.2f}in}}"
+        
+        # Restore dynamic text height adjustment
+        if page_height > 15.0:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{5.0in}}"
+        elif page_height > 14.0:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{4.5in}}"
+        elif page_height > 13.0:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{4.0in}}"
+        elif page_height > 12.0:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{3.0in}}"
+        elif page_height > 11.0:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{2.0in}}"
+        else:
+            text_height_adjustment = f"\\addtolength{{\\textheight}}{{1.0in}}"
+    else: 
+        text_height_adjustment = f"\\addtolength{{\\textheight}}{{1.0in}}"
 
     # LaTeX Preamble
-    # The text_height_declaration is now part of this main preamble string
-    preamble = rf"""
-\documentclass[letterpaper,11pt]{{article}}
+    preamble_parts = [
+        r"\documentclass[letterpaper,11pt]{article}",
+        r"\usepackage[T1]{fontenc}",
+        r"\usepackage{latexsym}",
+        r"\usepackage[empty]{fullpage}", 
+        r"\usepackage{titlesec}",
+        r"\usepackage{marvosym}",
+        r"\usepackage[usenames,dvipsnames]{color}",
+        r"\usepackage{verbatim}",
+        r"\usepackage{enumitem}",
+        r"\usepackage[hidelinks]{hyperref}",
+        r"\usepackage{fancyhdr}",
+        r"\usepackage[english]{babel}",
+        r"\usepackage{tabularx}",
+        r"\usepackage{amsfonts}",
+        r"\usepackage{textcomp}",
+        r"\pagestyle{fancy}",
+        # Moved from extend block to be with other direct settings if they were there
+        # Ensuring these are definitely present now:
+        r"\fancyhf{}", 
+        r"\fancyfoot{}",
+        r"\renewcommand{\headrulewidth}{0pt}",
+        r"\renewcommand{\footrulewidth}{0pt}",
+        r"\addtolength{\oddsidemargin}{-0.6in}",
+        r"\addtolength{\evensidemargin}{-0.6in}",
+        r"\addtolength{\textwidth}{1.2in}",
+        r"\addtolength{\topmargin}{-0.7in}",
+    ]
 
-\usepackage{{latexsym}}
-\usepackage[empty]{{fullpage}} % This sets margins to be minimal.
-\usepackage{{titlesec}}
-\usepackage{{marvosym}}
-\usepackage[usenames,dvipsnames]{{color}}
-\usepackage{{verbatim}}
-\usepackage{{enumitem}}
-\usepackage[hidelinks]{{hyperref}}
-\usepackage{{fancyhdr}}
-\usepackage[english]{{babel}}
-\usepackage{{tabularx}}
-\usepackage{{amsfonts}} % For \Huge, \scshape etc. sometimes needs amsfonts or similar
+    # Add text height adjustment
+    preamble_parts.append(text_height_adjustment)
 
-% Adjust margins and SET text height precisely
-\addtolength{{\oddsidemargin}}{{-0.5in}}
-\addtolength{{\evensidemargin}}{{-0.5in}}
-\addtolength{{\textwidth}}{{1in}}
-\addtolength{{\topmargin}}{{-0.5in}} % Moves the top of the text area up
-{text_height_declaration}         % SET the text height based on physical page height and margins
+    # Continue with the rest of the preamble commands
+    preamble_parts.extend([
+        r"\urlstyle{same}",
+        r"\raggedbottom",
+        r"\raggedright",
+        r"\setlength{\tabcolsep}{0in}",
+        r"\titleformat{\section}{",
+        r"  \scshape\raggedright\large",
+        r"}{}{0em}{}[\color{black}\titlerule]",
+        r"\titlespacing{\section}{0pt}{5pt}{2pt}",
+        r"\pdfgentounicode=1",
+        r"\newcommand{\resumeItem}[1]{\item{#1}}",
+        r"\newcommand{\resumeSubheading}[4]{\",
+        r\"  \\item\",
+        r\"    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}\",
+        r\"      \\textbf{#1} & #2 \\\\\",
+        r\"      \\textit{#3} & \\textit{#4} \\\\\",
+        r\"    \\end{tabular*}\",
+        r\"\\newcommand{\\resumeSubSubheading}[2]{\",
+        r\"    \\item\",
+        r\"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}\",
+        r\"      \\textit{#1} & \\textit{#2} \\\\\",
+        r\"    \\end{tabular*}\",
+        r\"\\newcommand{\\resumeProjectHeading}[2]{\",
+        r\"    \\item\",
+        r\"    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}\",
+        r\"      #1 & #2 \\\\\",
+        r\"    \\end{tabular*}\",
+        r\"\\newcommand{\\resumeSubItem}[1]{\\resumeItem{#1}\\vspace{-4pt}}\",
+        r\"\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}\",
+        r\"\\newcommand{\\resumeSubheadingSingleLine}[2]{\",
+        r\"  \\item\",
+        r\"    \\begin{tabular*}{0.97\\textwidth}[t]{l@{\\extracolsep{\\fill}}r}\",
+        r\"      \\textbf{#1} & #2 \\\\\",
+        r\"    \\end{tabular*}\",
+        r\"}",
+        r"\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}, itemsep=1pt, parsep=0pt, topsep=0pt]}",
+        r"\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}",
+        r"\newcommand{\\resumeItemListStart}{\\begin{itemize}[itemsep=1pt, parsep=0pt, topsep=0pt]\\sloppy}",
+        r"\newcommand{\\resumeItemListEnd}{\\end{itemize}}"
+    ])
 
-% Page breaking penalties (from previous successful attempt to fill page)
-\clubpenalty=8000
-\widowpenalty=8000
-\tolerance=1000
-\setlength{{\emergencystretch}}{{1.5em}}
-
-\urlstyle{{same}}
-\raggedbottom 
-\raggedright
-\setlength{{\tabcolsep}}{{0in}}
-
-% Sections formatting (from sample)
-\titleformat{{\section}}{{
-  \vspace{{-4pt}}\scshape\raggedright\large
-}}{{}}{{0em}}{{}}[\color{{black}}\titlerule \vspace{{-5pt}}]
-
-% Ensure that generated pdf is machine readable/ATS parsable
-\pdfgentounicode=1
-
-%-------------------------
-% Custom commands (from sample)
-\newcommand{{\resumeItem}}[1]{{
-  \item\small{{
-    {{#1 \vspace{{-2pt}}}}
-  }}
-}}
-
-\newcommand{{\resumeSubheading}}[4]{{
-  \vspace{{-2pt}}\item
-    \begin{{tabular*}}{{0.97\textwidth}}[t]{{l@{{\extracolsep{{\fill}}}}r}}
-      \textbf{{#1}} & #2 \\
-      \textit{{\small#3}} & \textit{{\small #4}} \\
-    \end{{tabular*}}\vspace{{-7pt}}
-}}
-
-\newcommand{{\resumeSubSubheading}}[2]{{
-    \item
-    \begin{{tabular*}}{{0.97\textwidth}}{{l@{{\extracolsep{{\fill}}}}r}}
-      \textit{{\small#1}} & \textit{{\small #2}} \\
-    \end{{tabular*}}\vspace{{-7pt}}
-}}
-
-\newcommand{{\resumeProjectHeading}}[2]{{
-    \item
-    \begin{{tabular*}}{{0.97\textwidth}}{{l@{{\extracolsep{{\fill}}}}r}}
-      \small#1 & #2 \\
-    \end{{tabular*}}\vspace{{-7pt}}
-}}
-
-\newcommand{{\resumeSubItem}}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}
-
-\renewcommand\labelitemii{{$\vcenter{{\hbox{{\tiny$\bullet$}}}}$}}
-
-\newcommand{{\resumeSubHeadingListStart}}{{\begin{{itemize}}[leftmargin=0.15in, label={{}}]}}
-\newcommand{{\resumeSubHeadingListEnd}}{{\end{{itemize}}}}
-\newcommand{{\resumeItemListStart}}{{\begin{itemize}}}}
-\newcommand{{\resumeItemListEnd}}{{\end{{itemize}}\vspace{{-5pt}}}}
-""" 
+    preamble = "\n".join(preamble_parts) # This line correctly joins all parts
 
     # Document body start
+    # Apply page height setting if provided. This should be early in the document.
     doc_start = f"""\\begin{{document}}
-{page_height_setting_for_doc_start}
+{page_height_setting_tex}
 """
 
-    # Extract data based on schema (and handle Evelyn.json variations where noted)
-    # The schema uses 'contact', Evelyn.json uses 'Personal Information'.
-    # The schema uses 'objective' or 'summary', Evelyn.json uses 'Summary/Objective'.
-    # The schema uses 'work_experience', Evelyn.json uses 'Experience'.
-    # The schema uses 'skills' (dict), Evelyn.json uses 'Skills' (dict with sub-dicts).
-    # The schema uses 'languages', Evelyn.json uses 'Languages'.
-    # The schema uses 'certifications', Evelyn.json uses 'Certifications/Awards' (potentially mixed).
-    # The schema uses 'awards', (see above).
-    # The schema uses 'involvement' or 'leadership', Evelyn.json has 'Misc' -> 'Leadership'.
+    # Extract data based on keys from Pipeline/prompts/parse_resume.txt as primary,
+    # with fallbacks for other potential schema variations.
 
     personal_info_data = data.get("Personal Information") or data.get("contact")
     name_from_data = data.get("name") # Top level name from schema.
@@ -600,20 +595,18 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     skills_data = data.get("Skills") or data.get("skills")
     languages_data = data.get("Languages") or data.get("languages")
     
-    # For certs/awards, Evelyn.json has "Certifications/Awards".
-    # Schema has separate "certifications" and "awards".
-    # We'll prefer direct keys first.
-    certifications_data = data.get("certifications")
-    awards_data = data.get("awards")
-    certs_and_awards_mixed = data.get("Certifications/Awards")
+    # Parser provides "Certifications/Awards" as a single field.
+    # Template will try to use this primarily, then specific fields if they exist.
+    certs_and_awards_data = data.get("Certifications/Awards") 
+    certifications_data = data.get("certifications") # Fallback or specific schema
+    awards_data = data.get("awards") # Fallback or specific schema
 
-    # If specific keys are empty but mixed one exists, we might need to split them.
-    # For now, this template won't try to split a mixed list. It will use dedicated lists if present.
-    # If only the mixed list is present and non-empty, we might decide to pass it to one
-    # or the other, or a combined section. Given the prompt, let's assume separate lists are preferred.
+    # New sections based on parser output
+    publications_data = data.get("Publications") or data.get("publications")
+    volunteer_exp_data = data.get("Volunteer Experience") or data.get("volunteer_experience")
 
-    involvement_data = data.get("involvement") or data.get("leadership") # Schema direct keys
-    misc_data = data.get("Misc") # For Evelyn.json specific "Misc" -> "Leadership"
+    involvement_data = data.get("involvement") or data.get("leadership") # Schema direct keys for general involvement
+    misc_data = data.get("Misc") # For any other miscellaneous content
 
 
     # Generate LaTeX for each section
@@ -622,24 +615,53 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     education_tex = _generate_education_section(education_data)
     experience_tex = _generate_experience_section(experience_data)
     projects_tex = _generate_projects_section(projects_data)
-    skills_tex = _generate_skills_section(skills_data) # Handles complex skills structure
+    skills_tex = _generate_skills_section(skills_data) 
     languages_tex = _generate_languages_section(languages_data)
-    certifications_tex = _generate_certifications_section(certifications_data)
-    awards_tex = _generate_awards_section(awards_data)
+
+    # Handle Certifications and Awards
+    # If the combined field from the parser exists, use it. Otherwise, try specific fields.
+    # For now, we'll pass the combined data to both, and they can internally filter or handle.
+    # A more robust solution might involve a single function or smarter filtering here.
+    certifications_tex = None
+    awards_tex = None
+    if certs_and_awards_data:
+        # Option 1: Pass combined data to both, let them filter (might be duplicative or need internal logic)
+        # For simplicity, let's assume _generate_certifications_section can handle mixed and filter.
+        # Or, we create a new _generate_combined_certs_awards_section.
+        # Given "Make no other changes" to the generator functions themselves for now,
+        # we'll prioritize the combined field for certifications and make awards conditional.
+        certifications_tex = _generate_certifications_section(certs_and_awards_data) 
+        # If awards are also in certs_and_awards_data, _generate_awards_section might re-process.
+        # This part needs careful thought on how to split if they are truly mixed in one list.
+        # For now, if specific awards_data is not present, this will be None.
+        awards_tex = _generate_awards_section(awards_data) # This will be None if awards_data is None
+    else:
+        certifications_tex = _generate_certifications_section(certifications_data)
+        awards_tex = _generate_awards_section(awards_data)
+
+    publications_tex = _generate_publications_section(publications_data)
+    volunteer_exp_tex = _generate_volunteer_experience_section(volunteer_exp_data)
     
     involvement_tex = None
-    if involvement_data: # Prioritize schema's direct key
+    if involvement_data: # Prioritize schema's direct key for general involvement
         involvement_tex = _generate_involvement_section(involvement_data)
-    elif misc_data: # Fallback to Evelyn.json's Misc.Leadership structure
-        involvement_tex = _generate_misc_leadership_section(misc_data)
-
+    # Note: Volunteer Experience is now separate. Misc is a catch-all.
+    # If 'Misc' from parser contains specific structures like 'Leadership', 
+    # _generate_misc_leadership_section was designed for that.
+    # We need to decide if 'Misc' should still feed into a leadership-like section
+    # or a more generic misc section if 'Volunteer Experience' is separate.
+    # For now, keep existing misc logic if general involvement_data is not found.
+    elif misc_data and not volunteer_exp_data: # Only use misc_data for leadership if volunteer is not covering it
+        involvement_tex = _generate_misc_leadership_section(misc_data) 
+    elif misc_data: # Generic misc section if volunteer experience is handled
+        involvement_tex = _generate_generic_misc_section(misc_data) # New stub needed for generic misc
 
     # Assemble the document
     content_parts = [
         preamble,
         doc_start,
         header_tex,
-        objective_tex, # Or summary
+        objective_tex, 
         education_tex,
         experience_tex,
         projects_tex,
@@ -647,7 +669,9 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         languages_tex,
         certifications_tex,
         awards_tex,
-        involvement_tex, # Covers leadership/misc as well
+        publications_tex,
+        volunteer_exp_tex,
+        involvement_tex, # Covers general involvement or misc leadership/other misc
         r"""
 \end{document}
 """
@@ -658,6 +682,139 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     full_latex_doc = "\n".join(filter(None, content_parts))
     
     return full_latex_doc
+
+# Placeholder for Publications section
+def _generate_publications_section(publications_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    if not publications_list:
+        return None
+    lines = ["\\section{Publications}", "  \\resumeSubHeadingListStart"]
+    for pub in publications_list:
+        title = fix_latex_special_chars(pub.get("title"))
+        authors = fix_latex_special_chars(pub.get("authors"))
+        journal = fix_latex_special_chars(pub.get("journal/conference"))
+        date = fix_latex_special_chars(pub.get("date"))
+        url = fix_latex_special_chars(pub.get("url"))
+        
+        lines.append(f"    \\resumeSubheading{{{title}}}{{{date}}}")
+        lines.append(f"      {{{authors}}}{{{journal}}}")
+        if url:
+            lines.append(f"      {{\\href{{{url}}}{{\\underline{{{url}}}}}}}{{}}") # Display URL
+    lines.append("  \\resumeSubHeadingListEnd")
+    lines.append("")
+    return "\n".join(lines)
+
+# Placeholder for Volunteer Experience section
+def _generate_volunteer_experience_section(volunteer_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    if not volunteer_list:
+        return None
+    lines = ["\\section{Volunteer Experience}", "  \\resumeSubHeadingListStart"]
+    for vol in volunteer_list:
+        organization = fix_latex_special_chars(vol.get("organization"))
+        role = fix_latex_special_chars(vol.get("role"))
+        location = fix_latex_special_chars(vol.get("location"))
+        dates = fix_latex_special_chars(vol.get("dates"))
+        description = vol.get("description")
+        
+        # Debug info about description - will only show when running as main
+        if __name__ == '__main__':
+            print(f"DEBUG - Volunteer description type: {type(description)}")
+            print(f"DEBUG - Volunteer description value: {description}")
+        
+        lines.append(f"    \\resumeSubheading{{{role} at {organization}}}{{{dates}}}")
+        if location:
+            lines.append(f"      {{{location}}}{{}}")
+        
+        # Handle description based on its type
+        if description:
+            if isinstance(description, list):
+                lines.append(r"      \resumeItemListStart")
+                for item in description:
+                    lines.append(f"        \\resumeItem{{{fix_latex_special_chars(item)}}}")
+                lines.append(r"      \resumeItemListEnd")
+            else:
+                lines.append(f"      {{\\small {fix_latex_special_chars(description)}}}{{}}") # Display as small text if single string
+
+    lines.append("  \\resumeSubHeadingListEnd")
+    lines.append("")
+    return "\n".join(lines)
+
+# Placeholder for a generic Misc section (if not leadership)
+def _generate_generic_misc_section(misc_data: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not misc_data:
+        return None
+    
+    # This is a very basic handler for a 'Misc' section that might contain various sub-items.
+    # The parser prompt indicates 'Misc (other sections that don't fit above)'.
+    # It could be a dictionary of lists or strings.
+    lines = ["\\section{Miscellaneous}"]
+    
+    if isinstance(misc_data, dict):
+        for key, value in misc_data.items():
+            section_title = fix_latex_special_chars(key.replace("_", " ").title())
+            lines.append(f"  \\subsection*{{{section_title}}}") # Unnumbered subsection
+            if isinstance(value, list):
+                lines.append(r"  \resumeItemListStart")
+                for item in value:
+                    lines.append(f"    \\resumeItem{{{fix_latex_special_chars(item)}}}")
+                lines.append(r"  \resumeItemListEnd")
+            elif isinstance(value, str):
+                lines.append(f"  {fix_latex_special_chars(value)}")
+            else:
+                lines.append(f"  {fix_latex_special_chars(str(value))}") # Fallback for other types
+            lines.append("") # spacing after subsection
+    elif isinstance(misc_data, list):
+        lines.append(r"  \resumeItemListStart")
+        for item in misc_data:
+            lines.append(f"    \\resumeItem{{{fix_latex_special_chars(item)}}}")
+        lines.append(r"  \resumeItemListEnd")
+    elif isinstance(misc_data, str):
+        lines.append(f"  {fix_latex_special_chars(misc_data)}")
+    else:
+        return None # Don't generate section if format is unknown
+        
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Specifically handles the Evelyn.json Misc.Leadership structure."""
+    if not misc_data or not isinstance(misc_data, dict):
+        return None
+    
+    leadership_data = misc_data.get("Leadership")
+    if not leadership_data or not isinstance(leadership_data, dict):
+        return None
+
+    lines = ["\\section{Leadership \\& Activities}", "  \\resumeSubHeadingListStart"] # Escape ampersand in section title
+    
+    for event_name, details in leadership_data.items():
+        name = fix_latex_special_chars(event_name)
+        
+        dates_dict = details.get("dates", {})
+        start_date = fix_latex_special_chars(dates_dict.get("start_date"))
+        end_date = fix_latex_special_chars(dates_dict.get("end_date"))
+        dates_str = f"{start_date} -- {end_date}" if start_date or end_date else ""
+        if end_date and end_date.lower() == 'present':
+             dates_str = f"{start_date} -- Present"
+        elif not end_date and start_date:
+             dates_str = start_date
+        
+        # Using resumeSubheading: Event Name on left, Dates on right.
+        # No clear "position" or "organization" like in the schema, so event name is primary.
+        lines.append(f"    \\resumeSubheading")
+        lines.append(f"      {{\\textbf{{{name}}}}}{{{dates_str}}}") # Event name bolded
+        lines.append(f"      {{}}{{}}") # Empty second line of subheading
+        
+        responsibilities = details.get("responsibilities/achievements") # From Evelyn.json
+        if responsibilities and isinstance(responsibilities, list):
+            lines.append(r"      \resumeItemListStart")
+            for resp in responsibilities:
+                lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+            lines.append(r"      \resumeItemListEnd")
+            
+    lines.append("  \\resumeSubHeadingListEnd")
+    lines.append("")
+    return "\n".join(lines)
 
 # --- Minimal test for the template if run directly (not typical use) ---
 if __name__ == '__main__':
@@ -735,6 +892,39 @@ if __name__ == '__main__':
                 "organization": "Analytics Club", "position": "President",
                 "date": {"start_date": "Jan 2022", "end_date": "Dec 2022"},
                 "responsibilities": ["Led weekly meetings", "Organized workshops"]
+            }
+        ],
+        "Publications": [
+            {
+                "title": "My Awesome Paper on LLMs",
+                "authors": "Test User, Co Author",
+                "journal/conference": "Journal of Fictional Computer Science",
+                "date": "2023",
+                "url": "http://example.com/my_awesome_paper.pdf"
+            },
+            {
+                "title": "Another Interesting Study",
+                "authors": "Test User",
+                "journal/conference": "Proceedings of Imaginary Conferences",
+                "date": "2024"
+            }
+        ],
+        "Volunteer Experience": [
+            {
+                "organization": "Community Code Camp",
+                "role": "Mentor",
+                "location": "Online",
+                "dates": "Spring 2023",
+                "description": [
+                    "Helped students learn basic Python.",
+                    "Organized a mini-hackathon."
+                ]
+            },
+            {
+                "organization": "Open Source Initiative",
+                "role": "Documentation Contributor",
+                "dates": "2022 - Present",
+                "description": "Contributed to documentation for several open-source projects."
             }
         ],
         "Misc": { # Evelyn.json's structure for leadership

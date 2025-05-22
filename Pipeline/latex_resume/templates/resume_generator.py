@@ -110,35 +110,36 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     lines = []
     if name:
         lines.append(r"\begin{center}")
-        lines.append(f"    \\textbf{{\LARGE \\scshape {name}}} \\\\ \\vspace{{2pt}}")
+        lines.append(f"    \\textbf{{\\Huge \\scshape {name}}} \\ \\vspace{{1pt}}")
+        lines.append(f"    \\\\[6pt]")
     
     contact_parts = []
     if phone:
         contact_parts.append(phone)
     if email:
         email_display = email.replace("_", r"\_")
-        contact_parts.append(f"\\href{{mailto:{email}}}{{{{{email_display}}}}}")
+        contact_parts.append(f"\\href{{mailto:{email}}}{{{email_display}}}")
     
     if raw_linkedin:
         linkedin_display = fix_latex_special_chars(raw_linkedin)
         linkedin_url = raw_linkedin # Use raw value for URL
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{{{linkedin_url}}}}}{{{{{linkedin_display}}}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{{linkedin_display}}}")
     
     if raw_github:
         github_display = fix_latex_special_chars(raw_github)
         github_url = raw_github # Use raw value for URL
         if not github_url.startswith("http"):
             github_url = f"https://{github_url}"
-        contact_parts.append(f"\\href{{{{{github_url}}}}}{{{{{github_display}}}}}")
+        contact_parts.append(f"\\href{{{github_url}}}{{{github_display}}}")
         
     if raw_website:
         website_display = fix_latex_special_chars(raw_website)
         website_url = raw_website # Use raw value for URL
         if not website_url.startswith("http"): # Basic check for protocol
              website_url = f"http://{website_url}"
-        contact_parts.append(f"\\href{{{{{website_url}}}}}{{{{{website_display}}}}}")
+        contact_parts.append(f"\\href{{{website_url}}}{{{website_display}}}")
 
     # Add location to contact_parts if it exists
     if location:
@@ -221,13 +222,13 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
     final_latex_parts = [r"\section{{Education}}", r"  \resumeSubHeadingListStart"] + content_lines + [r"  \resumeSubHeadingListEnd", ""]
     return "\n".join(final_latex_parts)
 
-def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]], identified_skills: List[str], identified_metrics: List[str]) -> Optional[str]:
+def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]], tech_skills: List[str], metrics: List[str]) -> Optional[str]:
     """
     Generates the LaTeX content for the experience section.
     Args:
         experience_list: A list of dictionaries containing experience information.
-        identified_skills: A list of skills to highlight.
-        identified_metrics: A list of metrics to highlight.
+        tech_skills: A list of technical skills to highlight.
+        metrics: A list of metrics to highlight.
     Returns:
         A string containing the LaTeX content for the experience section.
     """
@@ -267,14 +268,14 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
                 content_lines.append("      \\resumeItemListStart")
                 for resp in responsibilities:
                     # Format bullet with skills and metrics highlighting
-                    formatted_resp = format_bullet_with_highlights(resp, identified_skills, identified_metrics)
+                    formatted_resp = format_bullet_with_highlights(resp, tech_skills, metrics)
                     content_lines.append(f"        \\resumeItem{{{formatted_resp}}}")
                 content_lines.append("      \\resumeItemListEnd")
 
     content_lines.append("  \\resumeSubHeadingListEnd")
     return "\n".join(content_lines)
 
-def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], identified_skills: List[str], identified_metrics: List[str]) -> Optional[str]:
+def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tech_skills: List[str], metrics: List[str]) -> Optional[str]:
     if not project_list: return None
     content_lines = []
     for proj in project_list:
@@ -320,10 +321,10 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], ide
             if isinstance(description_raw, list):
                 valid_descs = [d for d in description_raw if isinstance(d, str) and d.strip()]
                 for desc_item_raw in valid_descs:
-                    formatted_desc = format_bullet_with_highlights(desc_item_raw, identified_skills, identified_metrics)
+                    formatted_desc = format_bullet_with_highlights(desc_item_raw, tech_skills, metrics)
                     content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             elif isinstance(description_raw, str) and description_raw.strip():
-                formatted_desc = format_bullet_with_highlights(description_raw, identified_skills, identified_metrics)
+                formatted_desc = format_bullet_with_highlights(description_raw, tech_skills, metrics)
                 content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             content_lines.append(r"          \resumeItemListEnd")
             
@@ -332,7 +333,7 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], ide
     return "\n".join(final_latex_parts)
 
 
-def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], highlighted_skills: List[str]) -> Optional[str]:
+def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills: List[str]) -> Optional[str]:
     print("--- PRINT DIAGNOSTIC (_generate_skills_section): Received skills_dict ---", flush=True)
     try:
         print(json.dumps(skills_dict, indent=2), flush=True)
@@ -388,11 +389,7 @@ def _generate_certifications_section(cert_list: Optional[List[Dict[str, Any]]]) 
         if not name: continue # Skip if no name
         institution = fix_latex_special_chars(cert.get("institution"))
         date = fix_latex_special_chars(cert.get("date"))
-        content_lines.extend([
-            r"    \resumeSubheading",
-            f"      {{{{{name}}}}} {{{{{date}}}}}",
-            f"      {{{{{institution}}}}}"
-        ])
+        content_lines.append(f"    \\resumeSubheading{{{{ {name} }}}}{{{{ {date} }}}}{{{{ {institution} }}}}{{{{}}}}")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Certifications}}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
@@ -408,11 +405,9 @@ def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> Opt
         issuer = fix_latex_special_chars(award.get("issuer"))
         date = fix_latex_special_chars(award.get("date"))
         description = fix_latex_special_chars(award.get("description"))
-        content_lines.extend([
-            r"    \resumeSubheading",
-            f"      {{{{{title}}}}} {{{{{date}}}}}",
-            f"      {{{{{issuer}}}}}"
-        ])
+        # Using string concatenation to avoid f-string linter issue for \resumeSubheading
+        line = "    \\resumeSubheading{{{{" + title + "}}}}{{{{" + date + "}}}}{{{{" + issuer + "}}}}{{{{}}}}"
+        content_lines.append(line)
         if description:
             content_lines.extend([
                 r"      \resumeItemListStart",
@@ -439,25 +434,26 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
         if isinstance(date_val, dict): # If it's a dictionary, process start/end
             start = fix_latex_special_chars(date_val.get("start_date"))
             end = fix_latex_special_chars(date_val.get("end_date"))
-            dates_str = f"{{start}} -- {{end}}" if start or end else ""
+            dates_str = f"{start} -- {end}" if start or end else ""
             if end and end.lower() == 'present': 
-                dates_str = f"{{start}} -- Present"
+                dates_str = f"{start} -- Present"
             elif not end and start: 
                 dates_str = start
         elif isinstance(date_val, str): # If it's a string, use it directly
             dates_str = fix_latex_special_chars(date_val)
         # If date_val is None or some other type, dates_str remains ""
             
-        content_lines.extend([
-            r"    \resumeSubheading",
-            f"      {{{{{position}}}}} {{{{{dates_str}}}}}",
-            f"      {{{{{organization}}}}}"
-        ])
+        # Corrected resumeSubheading: Use {{}} for the missing 4th argument (location)
+        # Organization is now the 3rd arg (like degree/title), position is 1st (like company/uni)
+        # Using string concatenation for subheading_command to avoid f-string linter issues:
+        subheading_command = "    \\resumeSubheading{{{{" + position + "}}}}{{{{" + dates_str + "}}}}{{{{" + organization + "}}}}{{{{}}}}"
+        content_lines.append(subheading_command)
+
         responsibilities = item.get("responsibilities")
         if responsibilities and isinstance(responsibilities, list):
             content_lines.append(r"      \resumeItemListStart")
             for resp in responsibilities:
-                if resp: content_lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+                if resp: content_lines.append(f"        \\resumeItem{{{ fix_latex_special_chars(resp) }}}")
             content_lines.append(r"      \resumeItemListEnd")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Leadership \& Involvement}}", r"  \resumeSubHeadingListStart"]
@@ -557,7 +553,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     _initialize_openai_client()
 
     # Call the (currently no-op) highlighting function
-    highlighted_bullets_experience, highlighted_bullets_projects, highlighted_skills = extract_highlights_from_resume(current_data_source, None)
+    tech_skills, metrics = extract_highlights_from_resume(current_data_source)
 
     # Construct the LaTeX document string
     preamble_parts = [
@@ -649,13 +645,13 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         doc_body_parts.append(_generate_education_section(education_list))
 
     if experience_list:
-        doc_body_parts.append(_generate_experience_section(experience_list, highlighted_bullets_experience, []))
+        doc_body_parts.append(_generate_experience_section(experience_list, tech_skills, metrics))
 
     if projects_list:
-        doc_body_parts.append(_generate_projects_section(projects_list, highlighted_bullets_projects, []))
+        doc_body_parts.append(_generate_projects_section(projects_list, tech_skills, metrics))
 
     if skills_data:
-        doc_body_parts.append(_generate_skills_section(skills_data, highlighted_skills))
+        doc_body_parts.append(_generate_skills_section(skills_data, tech_skills))
 
     if languages_list:
         doc_body_parts.append(_generate_languages_section(languages_list))
@@ -674,32 +670,136 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     valid_doc_body_parts = [part for part in doc_body_parts if part is not None]
     return "\n".join(preamble_parts + valid_doc_body_parts)
 
-def extract_highlights_from_resume(resume_data: Dict[str, Any], identified_skills: Optional[List[str]]) -> tuple[List[str], List[str], List[str]]:
+def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[str], List[str]]:
     """
-    Extracts technical skills and metrics from resume bullet points using OpenAI API.
-    Temporarily modified to do nothing and return empty lists for diagnostic purposes.
-    Args:
-        resume_data: The parsed resume JSON data.
-        identified_skills: A list of skills to highlight.
-
-    Returns:
-        A tuple containing three lists: (technical_skills, metrics, highlighted_bullets).
-        Returns ([], [], []) if highlighting is skipped or an error occurs.
+    Extract technical skills and metrics from resume bullet points using OpenAI.
+    Returns two lists: (technical_skills, metrics). Returns empty lists if API unavailable.
     """
-    logger.info("AI HINT: extract_highlights_from_resume is currently in DIAGNOSTIC MODE - returning empty lists.")
-    return [], [], [] # DIAGNOSTIC: Force no-op
+    if not _initialize_openai_client() or not OPENAI_CLIENT:
+        return [], []
 
-    # Original code commented out for diagnosis:
-    # if not _initialize_openai_client() or not OPENAI_CLIENT:
-    #     return [], [], []
-    # ... (rest of the original function)
+    all_bullets: List[str] = []
 
-def _format_text_segment(text_segment_raw: str, all_identified_skills: List[str]) -> str:
+    # Gather bullets from Experience and Projects sections
+    for section_key in ["Experience", "work_experience", "Projects", "projects"]:
+        section_data = resume_data.get(section_key)
+        if not section_data or not isinstance(section_data, list):
+            continue
+        for item in section_data:
+            if not isinstance(item, dict):
+                continue
+            bullet_field = None
+            if section_key.lower().startswith("experience") or section_key.startswith("work"):
+                bullet_field = item.get("responsibilities") or item.get("responsibilities/achievements")
+            else:
+                bullet_field = item.get("description")
+
+            if isinstance(bullet_field, list):
+                all_bullets.extend([b for b in bullet_field if isinstance(b, str) and b.strip()])
+            elif isinstance(bullet_field, str) and bullet_field.strip():
+                all_bullets.append(bullet_field.strip())
+
+    if not all_bullets:
+        logger.info("AI HINT: No bullet points found for highlighting.")
+        return [], []
+
+    # Use cache to avoid repeated API calls
+    cache_key = hashlib.md5("|".join(sorted(all_bullets)).encode("utf-8")).hexdigest()
+    if cache_key in API_CACHE:
+        cached = API_CACHE[cache_key]
+        return cached.get("technical_skills", []), cached.get("metrics", [])
+
+    prompt = f"""
+You are a specialized resume parser focusing on identifying two distinct categories from resume bullet points:
+
+1. TECHNICAL_SKILLS: Hard technical skills, tools, technologies, programming languages, methodologies, frameworks, platforms, systems, and specialized knowledge domains. Include only specific, concrete technical terms.
+
+2. METRICS: Quantitative achievements, percentages, numerical impacts, monetary values, time savings, efficiency improvements, and other quantifiable results. Include the full metric phrase (e.g., "increased efficiency by 40%", "$1.2M in savings", "reduced processing time by 20 hours").
+
+Analyze the following resume bullet points and return ONLY a JSON object with two arrays:
+{{
+  "technical_skills": ["skill1", "skill2", ...],
+  "metrics": ["metric phrase 1", "metric phrase 2", ...]
+}}
+
+TECHNICAL_SKILLS should be individual terms (e.g., "Python", "SQL", "TensorFlow"), while METRICS should be complete achievement phrases.
+DO NOT include soft skills, generic business terms, or non-technical concepts in the technical_skills list.
+ONLY include phrases with specific numerical values or percentages in the metrics list.
+
+Resume bullet points:
++{json.dumps(all_bullets, indent=2)}
+"""
+
+    try:
+        response = OPENAI_CLIENT.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+        content = response.choices[0].message.content
+        if not content:
+            return [], []
+        parsed = json.loads(content)
+        tech_skills = parsed.get("technical_skills", [])
+        metrics = parsed.get("metrics", [])
+        if not isinstance(tech_skills, list):
+            tech_skills = []
+        if not isinstance(metrics, list):
+            metrics = []
+        API_CACHE[cache_key] = {"technical_skills": tech_skills, "metrics": metrics}
+        return tech_skills, metrics
+    except Exception as e:
+        logger.info(f"AI HINT: OpenAI call failed: {e}. Skipping highlighting, using fallback.")
+        # Fallback: derive technical skills from skills section if available
+        fallback_skills = set() # Use a set to avoid duplicates initially
+        skills_root = resume_data.get("Skills") or resume_data.get("skills")
+
+        def extract_from_skill_list(skill_list: List[Any]):
+            for skill_item in skill_list:
+                if isinstance(skill_item, str):
+                    # Split skills like "Python (Numpy, Pandas, Matplotlib)"
+                    # and also handle simple skills
+                    parts = re.split(r'[\\s,(/&]+', skill_item) # Split by spaces, commas, slashes, ampersands, parentheses
+                    for part in parts:
+                        cleaned_part = re.sub(r'[^\w\s+#-]', '', part).strip() # Clean common non-alpha chars, keep # + -
+                        if cleaned_part and len(cleaned_part) >= 3: # Apply 3-char filter here
+                            fallback_skills.add(cleaned_part)
+                elif isinstance(skill_item, dict): # Handle cases like {"name": "Python", "level": "Advanced"}
+                    name = skill_item.get("name")
+                    if name and isinstance(name, str) and len(name) >=3:
+                         fallback_skills.add(name)
+
+
+        if isinstance(skills_root, dict):
+            # Handles structures like:
+            # "Skills": { "Technical Skills": ["Python", "Java"], "Tools": ["Git"] }
+            # "Skills": { "Technical Skills": { "Programming": ["Python"], "Databases": ["SQL"] } }
+            # "Skills": ["Python", "Java"] (though less common for root to be a list)
+            for key, value in skills_root.items():
+                if isinstance(value, list):
+                    extract_from_skill_list(value)
+                elif isinstance(value, dict): # e.g. "Technical Skills": { "Languages": ["Python"], ... }
+                    for sub_key, sub_value in value.items():
+                        if isinstance(sub_value, list):
+                            extract_from_skill_list(sub_value)
+                        elif isinstance(sub_value, str) and len(sub_value) >=3: # Single skill string as value
+                             fallback_skills.add(sub_value)
+                elif isinstance(value, str) and len(value) >=3: # skill string directly under a category
+                    fallback_skills.add(value)
+
+        elif isinstance(skills_root, list): # "Skills": ["Python", "Java"]
+            extract_from_skill_list(skills_root)
+            
+        logger.info(f"AI HINT: Fallback skills extracted: {list(fallback_skills)}")
+        return list(fallback_skills), []
+
+def _format_text_segment(text_segment_raw: str, all_skills: List[str]) -> str:
     """
     Formats a raw text segment by bolding specified skills within it and escaping all text for LaTeX.
     Args:
         text_segment_raw: The raw text string (e.g., a metric phrase or a part of a bullet).
-        all_identified_skills: A list of all unique skill strings identified by OpenAI.
+        all_skills: A list of all unique skill strings identified by OpenAI.
     Returns:
         A LaTeX-ready string with specified skills bolded and all parts correctly escaped.
     """
@@ -709,7 +809,7 @@ def _format_text_segment(text_segment_raw: str, all_identified_skills: List[str]
     # Find all occurrences of skills to bold within this specific segment
     # Order skills by length (descending) to handle cases like "Python" vs "Python 3" if both were skills.
     skill_highlights_in_segment = []
-    for skill in sorted(all_identified_skills, key=len, reverse=True):
+    for skill in sorted(all_skills, key=len, reverse=True):
         for match in re.finditer(re.escape(skill), text_segment_raw):
             # Ensure this skill doesn't overlap with an already found longer skill match
             # This basic check helps but true non-overlapping requires more complex logic if skills can overlap
@@ -741,7 +841,7 @@ def _format_text_segment(text_segment_raw: str, all_identified_skills: List[str]
     for hl in final_skill_highlights:
         if hl['start'] > last_processed_end:
             parts.append(fix_latex_special_chars(text_segment_raw[last_processed_end:hl['start']]))
-        parts.append(f"\\textbf{{\\textit{{{fix_latex_special_chars(hl['text'])}}}}}")
+        parts.append(f"\\textbf{{{fix_latex_special_chars(hl['text'])}}}")
         last_processed_end = hl['end']
     
     if last_processed_end < len(text_segment_raw):
@@ -811,7 +911,7 @@ def format_bullet_with_highlights(bullet_text_raw: str, all_skills: List[str], a
         elif hl_to_apply['type'] == 'skill':
             # This is a skill that was not part of any chosen metric
             # Its text itself just needs to be escaped and bolded/italicized
-            result_parts.append(f"\\textbf{{\\textit{{{fix_latex_special_chars(hl_to_apply['text'])}}}}}")
+            result_parts.append(f"\\textbf{{{fix_latex_special_chars(hl_to_apply['text'])}}}")
             
         current_pos = hl_to_apply['end']
         

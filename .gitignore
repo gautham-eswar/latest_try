@@ -59,4 +59,12 @@ test_results/
 plots/
 
 # Local environment files
-.env.local 
+.env.local
+
+# Resume output files
+output_resumes/
+*.tex
+*.pdf
+*.aux
+*.log
+*.out 
