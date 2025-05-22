@@ -10,7 +10,7 @@ from postgrest import APIError as PostgrestAPIError  # Import Supabase error typ
 from supabase import Client
 from werkzeug.utils import secure_filename
 
-from Pipeline.latex_generation import generate_latex_resume
+from Pipeline.latex_generation import generate_latex_resume, generate_resume_pdf
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
@@ -225,9 +225,40 @@ def download_resume(app, resume_id, format_type):
 
     elif format_type == "pdf":
         try:
-            logger.info(f"Generating PDF (via LaTeX) for resume ID: {resume_id}")
-            latex_content = generate_latex_resume(resume_data_to_use)
-            # ... (PDF generation logic remains the same - still placeholder) ...
+            logger.info(f"Generating PDF for resume ID: {resume_id}")
+            
+            # Use temp file for PDF output
+            import tempfile
+            output_pdf = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+            output_pdf.close()
+            
+            # Use our adaptive PDF generation logic
+            pdf_path, success = generate_resume_pdf(resume_data_to_use, output_pdf.name)
+            
+            if success and os.path.exists(pdf_path):
+                logger.info(f"Successfully generated PDF for resume ID: {resume_id}")
+                
+                # Serve the PDF file
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_content = pdf_file.read()
+                
+                # Clean up temp file after reading
+                try:
+                    os.unlink(pdf_path)
+                except:
+                    pass  # Ignore deletion errors
+                
+                response = Response(
+                    pdf_content,
+                    mimetype="application/pdf",
+                    headers={
+                        "Content-Disposition": f"attachment; filename={resume_id}.pdf"
+                    },
+                )
+                return response
+            else:
+                raise Exception("PDF generation failed or file not found")
+                
         except Exception as e:
             logger.error(
                 f"Error generating PDF for resume {resume_id}: {str(e)}",
