@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Constants for page sizing
 DEFAULT_START_HEIGHT = 11.0  # Standard letter size
-MIN_HEIGHT_INCHES = 11.0
-MAX_HEIGHT_INCHES = 20.0  # Maximum page height (inches) before falling back to multi-page output
+DEFAULT_MIN_HEIGHT_INCHES = 11.0  # Default minimum page height (inches)
+MAX_HEIGHT_INCHES = 16.0  # Maximum page height (inches) before falling back to multi-page output
 MAX_ITERATIONS_PER_HEIGHT = 2 # Max recompilations for a given height if bibtex is needed.
-HEIGHT_INCREMENT = 0.5
+HEIGHT_INCREMENT_INCHES = 0.5  # Increment for trying different page heights
 
 # Helper for floating point range
 def frange(start, stop, step):
@@ -65,7 +65,7 @@ def generate_pdf_from_latex(resume_data: Dict[str, Any], output_path: Optional[s
     final_pdf_path_str = ""
     success = False
 
-    heights_to_try = list(frange(MIN_HEIGHT_INCHES, MAX_HEIGHT_INCHES + HEIGHT_INCREMENT, HEIGHT_INCREMENT))
+    heights_to_try = list(frange(DEFAULT_MIN_HEIGHT_INCHES, MAX_HEIGHT_INCHES + HEIGHT_INCREMENT_INCHES, HEIGHT_INCREMENT_INCHES))
     
     # Create a temporary directory for LaTeX processing
     with tempfile.TemporaryDirectory() as temp_dir_name:
@@ -76,9 +76,8 @@ def generate_pdf_from_latex(resume_data: Dict[str, Any], output_path: Optional[s
         
         for current_height in heights_to_try:
             logger.info(f"Attempting PDF generation with height: {current_height:.1f} inches")
-            page_height_setting_tex = f"\\addtolength{{\\textheight}}{{{(current_height - MIN_HEIGHT_INCHES) * 72.27:.1f}pt}}"
             
-            latex_content = generate_latex_content(resume_data, page_height_setting_tex=page_height_setting_tex)
+            latex_content = generate_latex_content(resume_data, target_paper_height_value_str=f"{current_height:.2f}")
             with open(tex_file_path, 'w', encoding='utf-8') as f:
                 f.write(latex_content)
             
@@ -268,15 +267,24 @@ def get_pdf_page_count(pdf_path):
     logger.warning("Defaulting to 2 pages to trigger page height increase")
     return 2
 
-def generate_resume_pdf(resume_data: Dict[str, Any], output_path: Optional[str] = None) -> Tuple[str, bool]:
+def generate_resume_pdf(
+    json_data: dict, 
+    output_pdf_path: str,
+    min_height_inches: float = DEFAULT_MIN_HEIGHT_INCHES,
+    max_height_inches: float = MAX_HEIGHT_INCHES,
+    target_paper_height_value_str: Optional[str] = None
+) -> Tuple[str, bool]:
     """
     End-to-end function to generate a PDF resume from resume data.
     
     This is the main entry point that should be called from other parts of the application.
     
     Args:
-        resume_data: The parsed resume data as a dictionary
-        output_path: Optional path to save the PDF
+        json_data: The parsed resume data as a dictionary
+        output_pdf_path: Optional path to save the PDF
+        min_height_inches: Minimum height in inches to start trying
+        max_height_inches: Maximum height in inches to stop trying
+        target_paper_height_value_str: Optional target paper height value string
         
     Returns:
         Tuple of (pdf_path, success)
@@ -284,7 +292,60 @@ def generate_resume_pdf(resume_data: Dict[str, Any], output_path: Optional[str] 
     logger.info("Starting end-to-end resume PDF generation")
     
     try:
-        return generate_pdf_from_latex(resume_data, output_path)
+        return generate_pdf_from_latex(json_data, output_pdf_path)
     except Exception as e:
         logger.error(f"Error in end-to-end PDF generation: {e}")
         return "", False
+
+# --- Example Usage (for direct testing of this module) ---
+if __name__ == "__main__":
+    # Create a dummy JSON data for testing
+    sample_json_data = {
+        "Personal Information": {"name": "John Doe", "email": "john.doe@example.com"},
+        "Experience": [
+            {
+                "company": "Tech Corp",
+                "title": "Software Engineer",
+                "dates": "2020-Present",
+                "responsibilities/achievements": ["Developed new features."] * 30 # Make it long
+            }
+        ] * 3 # More sections to force multi-page
+    }
+
+    # Test with default adaptive sizing
+    output_pdf_default = "test_resume_default_adaptive.pdf"
+    print(f"\n--- Testing adaptive PDF generation (default settings) --> {output_pdf_default} ---")
+    # Call the main wrapper function generate_resume_pdf, not generate_pdf_from_latex directly for testing adaptive
+    final_pdf_path, success = generate_resume_pdf(sample_json_data, output_pdf_default) 
+    if success:
+        print(f"Adaptive PDF generation successful: {final_pdf_path}")
+    else:
+        print(f"Adaptive PDF generation failed. Check logs and .tex files in output_resumes/")
+
+    # Test with a fixed height (simulating if single page was desired at specific height)
+    # To do this, we directly call generate_latex_content then pdflatex
+    fixed_height_tex = "test_resume_fixed_H12.tex"
+    fixed_height_pdf = "test_resume_fixed_H12.pdf"
+    print(f"\n--- Testing fixed height PDF generation (12 inches) --> {fixed_height_pdf} ---")
+    latex_fixed = generate_latex_content(sample_json_data, target_paper_height_value_str="12.00")
+    with open(fixed_height_tex, "w", encoding="utf-8") as f:
+        f.write(latex_fixed)
+    # Compile it (simplified, no error checking like in main function)
+    import subprocess
+    subprocess.run(["pdflatex", "-interaction=nonstopmode", fixed_height_tex], check=False)
+    print(f"Fixed height TeX saved to {fixed_height_tex}, PDF attempted: {fixed_height_pdf}")
+    
+    # Test fallback to multi-page (by setting max_height very low)
+    output_pdf_fallback = "test_resume_forced_fallback.pdf"
+    print(f"\n--- Testing forced fallback to multi-page PDF --> {output_pdf_fallback} ---")
+    # Call the main wrapper function generate_resume_pdf for testing fallback
+    final_pdf_path_fallback, success_fallback = generate_resume_pdf( 
+        sample_json_data, 
+        output_pdf_fallback,
+        min_height_inches=10.0, # Start low
+        max_height_inches=10.5  # Max low to force fallback
+    )
+    if success_fallback:
+        print(f"Forced fallback PDF generation successful: {final_pdf_path_fallback}")
+    else:
+        print(f"Forced fallback PDF generation failed.")

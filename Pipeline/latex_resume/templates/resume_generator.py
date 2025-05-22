@@ -200,24 +200,42 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
 
         if uni and degree_str:
             content_lines.append(f"    \\resumeSubheading{{{uni}}}{{{dates_str}}}{{{degree_str}}}{{{loc_str}}}")
-            gpa = edu.get("gpa")
-            honors = fix_latex_special_chars(edu.get("honors"))
-            details_parts = []
-            if gpa: details_parts.append(f"GPA: {fix_latex_special_chars(gpa)}")
-            if honors: details_parts.append(f"Honors: {honors}")
-            extra_info = ", ".join(details_parts)
-            additional_info = edu.get("additional_info")
-            relevant_coursework = edu.get("relevant_coursework")
-            if extra_info or additional_info or relevant_coursework:
+            
+            gpa_raw = edu.get("gpa")
+            honors_raw = edu.get("honors")
+            
+            gpa_str = ""
+            if gpa_raw:
+                gpa_str = f"GPA: {fix_latex_special_chars(gpa_raw)}"
+            
+            honors_str = ""
+            if honors_raw:
+                honors_str = fix_latex_special_chars(honors_raw)
+
+            if gpa_str or honors_str:
+                # Using concatenation for safety, if one is empty, it's fine for LaTeX.
+                line = "    \\resumeSubSubheading{{{{" + gpa_str + "}}}}{{{{" + honors_str + "}}}}"
+                content_lines.append(line)
+
+            additional_info_raw = edu.get("additional_info")
+            relevant_coursework_raw = edu.get("relevant_coursework")
+            
+            item_list_content = []
+            if additional_info_raw:
+                item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info_raw)}}}")
+            
+            if relevant_coursework_raw and isinstance(relevant_coursework_raw, list):
+                courses_str = ", ".join(fix_latex_special_chars(c) for c in relevant_coursework_raw if c)
+                if courses_str:
+                    item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {courses_str}}}")
+            elif relevant_coursework_raw and isinstance(relevant_coursework_raw, str) and relevant_coursework_raw.strip():
+                 item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {fix_latex_special_chars(relevant_coursework_raw)}}}")
+
+            if item_list_content:
                 content_lines.append(r"      \resumeItemListStart")
-                if extra_info:
-                    content_lines.append(f"        \\resumeItem{{{extra_info}}}")
-                if additional_info:
-                    content_lines.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info)}}}")
-                if relevant_coursework and isinstance(relevant_coursework, list):
-                    courses_str = ", ".join(fix_latex_special_chars(c) for c in relevant_coursework)
-                    content_lines.append(f"        \\resumeItem{{Relevant Coursework: {courses_str}}}")
+                content_lines.extend(item_list_content)
                 content_lines.append(r"      \resumeItemListEnd")
+                
     if not content_lines: return None
     final_latex_parts = [r"\section{{Education}}", r"  \resumeSubHeadingListStart"] + content_lines + [r"  \resumeSubHeadingListEnd", ""]
     return "\n".join(final_latex_parts)
@@ -235,9 +253,9 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
     if not experience_list:
         return None
 
-    logger.info("--- PRINT DIAGNOSTIC (_generate_experience_section): Received experience_list ---")
-    logger.info(json.dumps(experience_list, indent=2))
-    logger.info("--- END PRINT DIAGNOSTIC (_generate_experience_section) ---")
+    print("--- PRINT DIAGNOSTIC (_generate_experience_section): Received experience_list ---", flush=True)
+    print(json.dumps(experience_list, indent=2), flush=True)
+    print("--- END PRINT DIAGNOSTIC (_generate_experience_section) ---", flush=True)
 
     section_title = "Experience"
     content_lines = [f"\\section{{{section_title}}}"]
@@ -246,7 +264,7 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
     for experience in experience_list:
         # Safely extract required fields (with fallbacks to empty strings)
         company = fix_latex_special_chars(experience.get("company", ""))
-        title = fix_latex_special_chars(experience.get("title", ""))
+        position = fix_latex_special_chars(experience.get("position") or experience.get("title", ""))
         
         # Get dates
         dates = experience.get("dates", {})
@@ -254,14 +272,19 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
             start_date = fix_latex_special_chars(dates.get("start_date", ""))
             end_date = fix_latex_special_chars(dates.get("end_date", ""))
             dates_str = f"{start_date} -- {end_date}" if start_date and end_date else ""
+            if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present"
+            elif not end_date and start_date: dates_str = start_date
         else:
             dates_str = fix_latex_special_chars(str(dates))
 
         # Get location
-        loc_str = fix_latex_special_chars(experience.get("location", ""))
+        raw_loc = experience.get("location")
+        loc_str = _parse_location_dict(raw_loc)
         
-        if company and title:  # Only include if we have at least company and title
-            content_lines.append(f"    \\resumeSubheading{{{company}}}{{{dates_str}}}{{{title}}}{{{loc_str}}}")
+        if company and position: 
+            # Using string concatenation to avoid f-string linter issues
+            line = "    \\resumeSubheading{{{{" + position + "}}}}{{{{" + dates_str + "}}}}{{{{" + company + "}}}}{{{{" + loc_str + "}}}}"
+            content_lines.append(line)
             
             responsibilities = experience.get("responsibilities/achievements") or experience.get("responsibilities") or experience.get("achievements") or []
             if responsibilities:
@@ -273,10 +296,18 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
                 content_lines.append("      \\resumeItemListEnd")
 
     content_lines.append("  \\resumeSubHeadingListEnd")
+    print("--- PRINT DIAGNOSTIC (_generate_experience_section): Received tech_skills ---", flush=True)
+    print(tech_skills, flush=True)
+    print("--- END PRINT DIAGNOSTIC (_generate_experience_section tech_skills) ---", flush=True)
+
     return "\n".join(content_lines)
 
 def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tech_skills: List[str], metrics: List[str]) -> Optional[str]:
     if not project_list: return None
+    print("--- PRINT DIAGNOSTIC (_generate_projects_section): Received tech_skills ---", flush=True)
+    print(tech_skills, flush=True)
+    print("--- END PRINT DIAGNOSTIC (_generate_projects_section tech_skills) ---", flush=True)
+
     content_lines = []
     for proj in project_list:
         title = fix_latex_special_chars(proj.get("title"))
@@ -341,6 +372,10 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
         print("PRINT DIAGNOSTIC (_generate_skills_section): Could not serialize skills_dict.", flush=True)
         print(str(skills_dict), flush=True)
     print("--- END PRINT DIAGNOSTIC (_generate_skills_section) ---", flush=True)
+
+    print("--- PRINT DIAGNOSTIC (_generate_skills_section): Received tech_skills ---", flush=True)
+    print(tech_skills, flush=True)
+    print("--- END PRINT DIAGNOSTIC (_generate_skills_section tech_skills) ---", flush=True)
 
     if not skills_dict: return None
     
@@ -500,13 +535,13 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
     return "\n".join(final_latex_parts)
 
 
-def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = None, page_height_setting_tex: str = "") -> str:
+def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = None, target_paper_height_value_str: Optional[str] = None) -> str:
     """
     Generates the full LaTeX document string for a classic resume.
     Args:
         data: The parsed JSON resume data.
         template_path: Optional path to a custom LaTeX template (currently unused).
-        page_height_setting_tex: Optional LaTeX command to further adjust page height (e.g., \\addtolength{\\textheight}{1.0in}).
+        target_paper_height_value_str: Optional string representing the target paper height in inches for this specific generation.
     Returns:
         A string containing the complete LaTeX document.
     """
@@ -560,7 +595,6 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         "\\documentclass[letterpaper,11pt]{article}",
         "\\usepackage[T1]{fontenc}",
         "\\usepackage{latexsym}",
-        "\\usepackage[empty]{fullpage}",
         "\\usepackage{titlesec}",
         "\\usepackage{marvosym}",
         "\\usepackage[usenames,dvipsnames]{color}",
@@ -572,17 +606,12 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         "\\usepackage{tabularx}",
         "\\usepackage{amsfonts}",
         "\\usepackage{textcomp}", # Required for \textdegree
+        "\\usepackage[left=0.4in, right=0.4in, top=0.4in, bottom=0.4in, footskip=25pt]{geometry}",
         "\\pagestyle{fancy}",
         "\\fancyhf{}",
         "\\fancyfoot{}",
-        "\\setlength{\\footskip}{5pt}",
         "\\renewcommand{\\headrulewidth}{0pt}",
         "\\renewcommand{\\footrulewidth}{0pt}",
-        "\\addtolength{\\oddsidemargin}{-0.6in}",
-        "\\addtolength{\\evensidemargin}{-0.6in}",
-        "\\addtolength{\\textwidth}{1.2in}",
-        "\\addtolength{\\topmargin}{-0.7in}",
-        page_height_setting_tex if page_height_setting_tex else "", 
         "\\urlstyle{same}",
         "\\raggedbottom",
         "\\raggedright",
@@ -590,39 +619,53 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         "\\titleformat{\\section}{\\scshape\\raggedright\\large}{}{0pt}{}[\\titlerule]",
         "\\titlespacing{\\section}{0pt}{5pt}{2pt}",
         "\\pdfgentounicode=1", # For better unicode support in PDF
-        "\\newcommand{\\resumeItem}[1]{\\item{#1}}",
-        "\\newcommand{\\resumeSubheading}[4]{",
-        "  \\item",
-        "    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}",
-        "      \\textbf{{#1}} & #2 \\\\",
-        "      \\textit{{#3}} & \\textit{{#4}} \\\\",
-        "    \\end{tabular*}",
-        "}",
-        "\\newcommand{\\resumeSubSubheading}[2]{",
-        "    \\item",
-        "    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}",
-        "      \\textit{{#1}} & \\textit{{#2}} \\\\",
-        "    \\end{tabular*}",
-        "}",
-        "\\newcommand{\\resumeProjectHeading}[2]{",
-        "    \\item",
-        "    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}",
-        "      #1 & #2 \\\\",
-        "    \\end{tabular*}",
-        "}",
-        "\\newcommand{\\resumeSubItem}[1]{{\\resumeItem{{#1}}\\vspace{{-4pt}}}}",
-        "\\renewcommand\\labelitemii{$\\vcenter{\\hbox{\\tiny$\\bullet$}}$}",
-        "\\newcommand{\\resumeSubheadingSingleLine}[2]{",
-        "  \\item",
-        "    \\begin{tabular*}{0.97\\textwidth}{l@{\\extracolsep{\\fill}}r}",
-        "      \\textbf{{#1}} & #2 \\\\",
-        "    \\end{tabular*}",
-        "}",
-        "\\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=0.15in, label={}, itemsep=1pt, parsep=0pt, topsep=0pt]}",
-        "\\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}}",
-        "\\newcommand{\\resumeItemListStart}{\\begin{itemize}[itemsep=1pt, parsep=0pt, topsep=0pt]\\sloppy}",
-        "\\newcommand{\\resumeItemListEnd}{\\end{itemize}}"
     ]
+
+    if target_paper_height_value_str:
+        preamble_parts.append(f"\\geometry{{paperheight={target_paper_height_value_str}in}}")
+    
+    # Resume specific \newcommand definitions
+    preamble_parts.extend([
+        r"\newcommand{\resumeItem}[1]{\item{#1}}",
+        r"\newcommand{\resumeSubheading}[4]{",
+        r"  \item",
+        r"    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}",
+        r"      \textbf{#1} & #2 \\",
+        r"      \textit{\small#3} & \textit{\small #4} \\",
+        r"    \end{tabular*}\vspace{0pt}",
+        r"}",
+        r"\newcommand{\resumeSubSubheading}[2]{",
+        r"    \item",
+        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
+        r"      \textit{\small#1} & \textit{\small #2} \\",
+        r"    \end{tabular*}\vspace{0pt}",
+        r"}",
+        r"\newcommand{\resumeProjectHeading}[2]{",
+        r"    \item",
+        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
+        r"      #1 & #2 \\",
+        r"    \end{tabular*}\vspace{2pt}",
+        r"}",
+        r"\newcommand{\resumeSubItem}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}",
+        r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
+        r"\newcommand{\resumeSubheadingSingleLine}[2]{",
+        r"  \item",
+        r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
+        r"      \textbf{{#1}} & #2 \\",
+        r"    \end{tabular*}",
+        r"}",
+        r"\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, itemsep=1pt, parsep=0pt, topsep=0pt]}",
+        r"\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}",
+        r"\newcommand{\resumeItemListStart}{\begin{itemize}[itemsep=2pt, parsep=0pt, topsep=2pt]\sloppy}",
+        r"\newcommand{\resumeItemListEnd}{\end{itemize}}"
+    ])
+
+    # --- DIAGNOSTIC PRINT OF PREAMBLE ---
+    print("--- AI DEBUG: Final Preamble Parts Being Used ---", flush=True)
+    for i, part in enumerate(preamble_parts):
+        print(f"Preamble Part [{i}]: {part}", flush=True)
+    print("--- AI DEBUG: End of Preamble Parts ---", flush=True)
+    # --- END DIAGNOSTIC --- 
 
     doc_body_parts = ["\\begin{document}"]
     
@@ -676,6 +719,7 @@ def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[st
     Returns two lists: (technical_skills, metrics). Returns empty lists if API unavailable.
     """
     if not _initialize_openai_client() or not OPENAI_CLIENT:
+        print("AI HINT DEBUG: OpenAI client not initialized or API key issue. Returning empty for highlights.", flush=True)
         return [], []
 
     all_bullets: List[str] = []
@@ -701,7 +745,12 @@ def extract_highlights_from_resume(resume_data: Dict[str, Any]) -> tuple[List[st
 
     if not all_bullets:
         logger.info("AI HINT: No bullet points found for highlighting.")
+        print("AI HINT DEBUG: No bullet points gathered. Returning empty for highlights.", flush=True)
         return [], []
+
+    print(f"AI HINT DEBUG: Sending these bullets to OpenAI ({len(all_bullets)} total):", flush=True)
+    for i, bullet in enumerate(all_bullets):
+        print(f"  Bullet {i+1}: {bullet}", flush=True)
 
     # Use cache to avoid repeated API calls
     cache_key = hashlib.md5("|".join(sorted(all_bullets)).encode("utf-8")).hexdigest()
@@ -738,19 +787,35 @@ Resume bullet points:
             response_format={"type": "json_object"}
         )
         content = response.choices[0].message.content
+        print(f"AI HINT DEBUG: Raw OpenAI JSON response:\n{content}", flush=True)
+
         if not content:
+            print("AI HINT DEBUG: OpenAI returned empty content. Returning empty for highlights.", flush=True)
             return [], []
         parsed = json.loads(content)
         tech_skills = parsed.get("technical_skills", [])
         metrics = parsed.get("metrics", [])
         if not isinstance(tech_skills, list):
+            print(f"AI HINT DEBUG: 'technical_skills' from OpenAI was not a list (type: {type(tech_skills)}). Forcing to empty list.", flush=True)
             tech_skills = []
         if not isinstance(metrics, list):
+            print(f"AI HINT DEBUG: 'metrics' from OpenAI was not a list (type: {type(metrics)}). Forcing to empty list.", flush=True)
             metrics = []
+        
+        # Filter out very short skills to avoid erroneous highlighting of common letters/bigrams
+        MIN_SKILL_LEN = 3
+        original_skill_count = len(tech_skills)
+        tech_skills = [skill for skill in tech_skills if len(skill) >= MIN_SKILL_LEN]
+        if len(tech_skills) != original_skill_count:
+            print(f"AI HINT DEBUG: Filtered OpenAI skills from {original_skill_count} to {len(tech_skills)} (min length {MIN_SKILL_LEN}).", flush=True)
+            
         API_CACHE[cache_key] = {"technical_skills": tech_skills, "metrics": metrics}
+        print(f"AI HINT DEBUG: Parsed technical_skills from OpenAI (post-filter): {tech_skills}", flush=True)
+        print(f"AI HINT DEBUG: Parsed metrics from OpenAI: {metrics}", flush=True)
         return tech_skills, metrics
     except Exception as e:
         logger.info(f"AI HINT: OpenAI call failed: {e}. Skipping highlighting, using fallback.")
+        print(f"AI HINT DEBUG: OpenAI call failed: {e}. Using fallback.", flush=True)
         # Fallback: derive technical skills from skills section if available
         fallback_skills = set() # Use a set to avoid duplicates initially
         skills_root = resume_data.get("Skills") or resume_data.get("skills")
@@ -810,7 +875,7 @@ def _format_text_segment(text_segment_raw: str, all_skills: List[str]) -> str:
     # Order skills by length (descending) to handle cases like "Python" vs "Python 3" if both were skills.
     skill_highlights_in_segment = []
     for skill in sorted(all_skills, key=len, reverse=True):
-        for match in re.finditer(re.escape(skill), text_segment_raw):
+        for match in re.finditer(re.escape(skill), text_segment_raw, flags=re.IGNORECASE):
             # Ensure this skill doesn't overlap with an already found longer skill match
             # This basic check helps but true non-overlapping requires more complex logic if skills can overlap
             # For now, assuming skills identified by OpenAI are distinct enough or longest match rule is sufficient.
@@ -824,7 +889,7 @@ def _format_text_segment(text_segment_raw: str, all_skills: List[str]) -> str:
                 skill_highlights_in_segment = [sh for sh in skill_highlights_in_segment 
                                                if not (sh['start'] >= match.start() and sh['end'] <= match.end() and 
                                                        (sh['start'] != match.start() or sh['end'] != match.end()))]
-                skill_highlights_in_segment.append({'start': match.start(), 'end': match.end(), 'text': skill})
+                skill_highlights_in_segment.append({'start': match.start(), 'end': match.end(), 'text': match.group(0)})
     
     # Sort by start position to reconstruct the string
     skill_highlights_in_segment.sort(key=lambda x: x['start'])
@@ -861,7 +926,11 @@ def format_bullet_with_highlights(bullet_text_raw: str, all_skills: List[str], a
         A LaTeX-formatted string for the bullet point.
     """
     if not bullet_text_raw.strip():
-        return "" # Should not happen if bullets are pre-stripped
+        return ""
+
+    print(f"AI HINT DEBUG (format_bullet_with_highlights): Processing bullet: '{bullet_text_raw}'", flush=True)
+    print(f"AI HINT DEBUG (format_bullet_with_highlights): Using all_skills: {all_skills}", flush=True)
+    print(f"AI HINT DEBUG (format_bullet_with_highlights): Using all_metrics: {all_metrics}", flush=True)
 
     # Identify all top-level highlight segments (metrics and skills not inside other captured metrics)
     # Each element: {'start': int, 'end': int, 'text': str_raw, 'type': 'metric'|'skill'}
@@ -869,13 +938,13 @@ def format_bullet_with_highlights(bullet_text_raw: str, all_skills: List[str], a
     
     # 1. Find all metric occurrences
     for metric_raw in sorted(all_metrics, key=len, reverse=True): # Longest first
-        for match in re.finditer(re.escape(metric_raw), bullet_text_raw):
-            highlights.append({'start': match.start(), 'end': match.end(), 'text': metric_raw, 'type': 'metric'})
+        for match in re.finditer(re.escape(metric_raw), bullet_text_raw, flags=re.IGNORECASE):
+            highlights.append({'start': match.start(), 'end': match.end(), 'text': match.group(0), 'type': 'metric'})
             
     # 2. Find all skill occurrences
     for skill_raw in sorted(all_skills, key=len, reverse=True): # Longest first
-        for match in re.finditer(re.escape(skill_raw), bullet_text_raw):
-            highlights.append({'start': match.start(), 'end': match.end(), 'text': skill_raw, 'type': 'skill'})
+        for match in re.finditer(re.escape(skill_raw), bullet_text_raw, flags=re.IGNORECASE):
+            highlights.append({'start': match.start(), 'end': match.end(), 'text': match.group(0), 'type': 'skill'})
             
     # Sort all found highlights: by start index, then by length (longest first), then by type (metric preferred over skill for exact same span)
     highlights.sort(key=lambda x: (x['start'], -(x['end'] - x['start']), 0 if x['type'] == 'metric' else 1))
@@ -893,7 +962,8 @@ def format_bullet_with_highlights(bullet_text_raw: str, all_skills: List[str], a
                 
     # Sort the chosen highlights by start position for sequential processing
     final_non_overlapping_highlights.sort(key=lambda x: x['start'])
-    
+    print(f"AI HINT DEBUG (format_bullet_with_highlights): Final non-overlapping highlights: {final_non_overlapping_highlights}", flush=True)
+
     # Build the final string
     result_parts = []
     current_pos = 0
@@ -1019,7 +1089,7 @@ if __name__ == '__main__':
     print("Saved to classic_template_test_default.tex")
 
     print("\n--- Generating LaTeX from sample data (page_height = 13.0 inches) ---")
-    latex_output_custom_h = generate_latex_content(sample_resume_data, page_height_setting_tex="\\setlength{{\\pdfpageheight}}{{{{13.0in}}}}")
+    latex_output_custom_h = generate_latex_content(sample_resume_data, target_paper_height_value_str="13.0")
     # print(latex_output_custom_h)
     with open("classic_template_test_custom_h.tex", "w", encoding='utf-8') as f:
         f.write(latex_output_custom_h)
