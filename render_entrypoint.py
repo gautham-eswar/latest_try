@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    format='%(name)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
@@ -44,13 +44,8 @@ def main():
             from working_app import create_app
             logger.info("Using working_app.py")
         except ImportError as e:
-            logger.warning(f"Could not import working_app: {str(e)}")
-            try:
-                from app import create_app
-                logger.info("Using app.py")
-            except ImportError as e2:
-                logger.critical(f"Could not import app: {str(e2)}")
-                raise ImportError("Failed to import application module")
+            logger.critical(f"Could not import app: {str(e)}")
+            raise ImportError("Failed to import application module")
         
         # Create the application
         app = create_app()
