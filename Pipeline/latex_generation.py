@@ -10,6 +10,7 @@ import shutil
 from werkzeug.utils import secure_filename
 
 from Pipeline.latex_resume.templates.resume_generator import generate_latex_content, clear_api_cache_diagnostic
+from Services.storage import upload_pdf_to_supabase # Added for PDF upload
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -358,56 +359,80 @@ def generate_resume_pdf(
         logger.error(f"Error in end-to-end PDF generation: {e}")
         return "", False
 
-def proactively_generate_pdf(resume_id: str, enhanced_resume_data: Dict[str, Any]) -> Optional[str]:
+def proactively_generate_pdf(user_id: str, enhanced_resume_id: str, enhanced_resume_content: Dict[str, Any]) -> Optional[str]:
     """
-    Proactively generates a PDF from enhanced resume data and saves it locally.
-
-    This function is intended to be called after resume data has been enhanced,
-    as part of the main processing pipeline.
+    Proactively generates a PDF from enhanced resume content, saves it locally,
+    uploads it to Supabase Storage, and then cleans up the local file.
 
     Args:
-        resume_id: The unique identifier for the resume.
-        enhanced_resume_data: The enhanced resume data as a dictionary.
+        user_id: The ID of the user.
+        enhanced_resume_id: The ID of the enhanced resume.
+        enhanced_resume_content: The enhanced resume content (JSON data) as a dictionary.
 
     Returns:
-        The local path to the generated PDF if successful, otherwise None.
-        The caller is responsible for uploading this PDF to persistent storage (e.g., Supabase Storage).
+        The Supabase storage path if PDF generation and upload are successful, otherwise None.
     """
-    logger.info(f"Proactively generating PDF for resume_id: {resume_id}")
+    logger.info(f"Proactively generating and uploading PDF for enhanced_resume_id: {enhanced_resume_id}, user_id: {user_id}")
 
-    if not enhanced_resume_data:
-        logger.warning(f"No enhanced_resume_data provided for resume_id: {resume_id}. Skipping proactive PDF generation.")
+    if not enhanced_resume_content:
+        logger.warning(f"No enhanced_resume_content provided for enhanced_resume_id: {enhanced_resume_id}. Skipping PDF generation.")
         return None
 
-    # Define the output path for the PDF
-    # Ensure the PROACTIVE_PDF_OUTPUT_FOLDER exists (it should be created at module load, but double-check)
+    # Ensure the PROACTIVE_PDF_OUTPUT_FOLDER exists
     try:
         PROACTIVE_PDF_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         logger.error(f"Could not create proactive PDF output folder {PROACTIVE_PDF_OUTPUT_FOLDER}: {e}")
         return None
         
-    output_pdf_filename = f"{secure_filename(resume_id)}.pdf" # Use a secure filename
-    local_pdf_path = PROACTIVE_PDF_OUTPUT_FOLDER / output_pdf_filename
+    # Use a secure filename based on enhanced_resume_id for the temporary local PDF
+    output_pdf_filename = f"{secure_filename(enhanced_resume_id)}_proactive.pdf"
+    local_pdf_path = str(PROACTIVE_PDF_OUTPUT_FOLDER / output_pdf_filename) # Ensure it's a string
 
-    logger.info(f"Target local path for proactive PDF: {local_pdf_path}")
+    logger.info(f"Target temporary local path for proactive PDF: {local_pdf_path}")
 
     try:
-        pdf_path_generated, success = generate_resume_pdf(enhanced_resume_data, str(local_pdf_path))
+        pdf_path_generated, success = generate_resume_pdf(enhanced_resume_content, local_pdf_path)
 
-        if success and pdf_path_generated and Path(pdf_path_generated).exists():
-            logger.info(f"Proactive PDF generated successfully for resume_id: {resume_id} at {pdf_path_generated}")
-            logger.info(f"Next step for pipeline: Upload {pdf_path_generated} to Supabase Storage.")
-            return str(pdf_path_generated)
-        elif pdf_path_generated and Path(pdf_path_generated).exists(): # Generated, but maybe multi-page
-            logger.warning(f"Proactive PDF generated for resume_id: {resume_id} at {pdf_path_generated}, but it might be multi-page (success flag was False).")
-            logger.info(f"Next step for pipeline: Upload {pdf_path_generated} to Supabase Storage (evaluate if multi-page is acceptable).")
-            return str(pdf_path_generated)
+        if pdf_path_generated and Path(pdf_path_generated).exists():
+            if success:
+                logger.info(f"Local PDF generated successfully (single-page) for enhanced_resume_id: {enhanced_resume_id} at {pdf_path_generated}")
+            else:
+                logger.warning(f"Local PDF generated (multi-page) for enhanced_resume_id: {enhanced_resume_id} at {pdf_path_generated}. Proceeding with upload.")
+
+            # Upload to Supabase
+            supabase_storage_path = upload_pdf_to_supabase(pdf_path_generated, user_id, enhanced_resume_id)
+
+            if supabase_storage_path:
+                logger.info(f"Successfully uploaded PDF for enhanced_resume_id: {enhanced_resume_id} to Supabase at: {supabase_storage_path}")
+                # Clean up local file after successful upload
+                try:
+                    os.remove(pdf_path_generated)
+                    logger.info(f"Successfully deleted local PDF: {pdf_path_generated}")
+                except OSError as e_remove:
+                    logger.warning(f"Failed to delete local PDF {pdf_path_generated}: {e_remove}")
+                return supabase_storage_path
+            else:
+                logger.error(f"Failed to upload PDF to Supabase for enhanced_resume_id: {enhanced_resume_id}. Local file was: {pdf_path_generated}")
+                # Optionally, still attempt to delete the local file to prevent clutter
+                try:
+                    os.remove(pdf_path_generated)
+                    logger.info(f"Deleted local PDF {pdf_path_generated} after failed upload attempt.")
+                except OSError as e_remove:
+                    logger.warning(f"Failed to delete local PDF {pdf_path_generated} after failed upload: {e_remove}")
+                return None
         else:
-            logger.error(f"Proactive PDF generation failed for resume_id: {resume_id}. 'generate_resume_pdf' did not return a valid path or success.")
+            logger.error(f"Proactive PDF generation failed for enhanced_resume_id: {enhanced_resume_id}. 'generate_resume_pdf' did not return a valid path or the file does not exist.")
             return None
     except Exception as e:
-        logger.error(f"Exception during proactive PDF generation for resume_id {resume_id}: {e}", exc_info=True)
+        logger.error(f"Exception during proactive PDF generation/upload for enhanced_resume_id {enhanced_resume_id}: {e}", exc_info=True)
+        # Clean up local file if it exists and an error occurred during processing
+        if Path(local_pdf_path).exists():
+            try:
+                os.remove(local_pdf_path)
+                logger.info(f"Cleaned up local PDF {local_pdf_path} due to an exception during processing.")
+            except OSError as e_remove:
+                logger.warning(f"Failed to clean up local PDF {local_pdf_path} after exception: {e_remove}")
         return None
 
 # --- Example Usage (for direct testing of this module) ---
@@ -464,13 +489,24 @@ if __name__ == "__main__":
         print(f"Forced fallback PDF generation failed.")
 
     # Test proactive generation
-    print(f"\n--- Testing proactive PDF generation --> {PROACTIVE_PDF_OUTPUT_FOLDER} ---")
-    if sample_json_data: # Ensure sample_json_data is defined from the existing example
-        test_resume_id = "proactive_test_123"
-        # Simulate having enhanced data
-        proactively_generated_path = proactively_generate_pdf(test_resume_id, sample_json_data)
-        if proactively_generated_path:
-            print(f"Proactive PDF for {test_resume_id} generated at: {proactively_generated_path}")
-            print(f"Next, you would upload this file to Supabase Storage.")
+    print(f"\n--- Testing proactive PDF generation and upload --> {PROACTIVE_PDF_OUTPUT_FOLDER} ---")
+    if sample_json_data: 
+        test_user_id_proactive = "user_proactive_test"
+        test_enhanced_resume_id_proactive = "enhanced_proactive_test_456"
+        
+        # This test part will only fully work if Supabase is configured and accessible via get_db()
+        # in the Services.storage module. Otherwise, it will likely log errors for the upload part.
+        logger.info("Note: Proactive PDF upload test requires configured Supabase connection.")
+        
+        supabase_path = proactively_generate_pdf(
+            user_id=test_user_id_proactive,
+            enhanced_resume_id=test_enhanced_resume_id_proactive,
+            enhanced_resume_content=sample_json_data
+        )
+        if supabase_path:
+            print(f"Proactive PDF for {test_enhanced_resume_id_proactive} processed. Supabase path: {supabase_path}")
+            # For a full test, you'd verify the file exists in Supabase Storage.
+            # And that the local file in PROACTIVE_PDF_OUTPUT_FOLDER (if not deleted) is gone or handled.
         else:
-            print(f"Proactive PDF generation for {test_resume_id} failed.")
+            print(f"Proactive PDF processing for {test_enhanced_resume_id_proactive} failed or did not return a Supabase path.")
+            print(f"Check logs for details. A local PDF might exist in {PROACTIVE_PDF_OUTPUT_FOLDER} if generation succeeded but upload failed and cleanup was skipped.")

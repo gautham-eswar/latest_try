@@ -18,6 +18,7 @@ from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
 from Pipeline.embeddings import SemanticMatcher
 from Pipeline.enhancer import ResumeEnhancer
+from Pipeline.latex_generation import proactively_generate_pdf # Added for proactive PDF generation
 
 
 logging.basicConfig(
@@ -124,10 +125,33 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         "enhanced_resume_id": enhanced_resume_id
     })
     
+    # --- Proactive PDF Generation and Upload ---
+    logger.info(f"Job {job_id}: Starting proactive PDF generation and upload for enhanced_resume_id: {enhanced_resume_id}")
+    # 'enhanced_resume_parsed' holds the actual content needed for PDF generation.
+    # 'user_id' and 'enhanced_resume_id' are available in this scope.
+    
+    supabase_pdf_path = proactively_generate_pdf(
+        user_id=user_id,
+        enhanced_resume_id=enhanced_resume_id,
+        enhanced_resume_content=enhanced_resume_parsed # This is the direct output from enhancer
+    )
+
+    if supabase_pdf_path:
+        logger.info(f"Job {job_id}: Proactive PDF successfully generated and uploaded to Supabase Storage: {supabase_pdf_path}")
+        # Optionally, update the optimization_jobs table again with the PDF path
+        try:
+            update_optimization_job(job_id, {
+                "proactive_pdf_storage_path": supabase_pdf_path
+            })
+            logger.info(f"Job {job_id}: Updated optimization_jobs table with PDF storage path: {supabase_pdf_path}")
+        except Exception as e_update_pdf_path:
+            logger.error(f"Job {job_id}: Failed to update optimization_jobs table with PDF path {supabase_pdf_path}. Error: {e_update_pdf_path}", exc_info=True)
+    else:
+        logger.warning(f"Job {job_id}: Proactive PDF generation/upload failed for enhanced_resume_id: {enhanced_resume_id}")
 
 
     # --- Return Success Response ---
-    logger.info(f"Job {job_id}: Optimization completed successfully.")
+    logger.info(f"Job {job_id}: Optimization completed successfully (including proactive PDF attempt).")
     return jsonify(
         {
             "status": "success",

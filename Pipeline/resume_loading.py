@@ -82,106 +82,117 @@ def download_resume(app, resume_id, format_type):
     resume_data_to_use = None
     data_source = "unknown"
 
-    # --- Determine which data to load (enhanced first, fallback to original from DB) ---
+    # --- Determine which data to load ---
     if isinstance(db, FallbackDatabase):
         logger.warning(
-            f"Using FallbackDatabase for loading download data for {resume_id}."
+            f"Using FallbackDatabase for loading download data for resume_id: {resume_id}."
         )
-        # Try loading local enhanced, then local original as fallback
-        enhanced_file = os.path.join(
-            app.config["OUTPUT_FOLDER"], f"{resume_id}_enhanced.json"
+        # Try loading local "enhanced" version first (e.g., {resume_id}_enhanced.json)
+        # Then local "original" version (e.g., {resume_id}.json)
+        # This naming convention for fallback is kept for simplicity.
+        enhanced_fallback_filename = f"{resume_id}_enhanced.json"
+        original_fallback_filename = f"{resume_id}.json"
+
+        enhanced_file_path = os.path.join(
+            app.config.get("OUTPUT_FOLDER", OUTPUT_FOLDER), enhanced_fallback_filename
+        ) # Use app.config if available, else default
+        original_file_path = os.path.join(
+            app.config.get("UPLOAD_FOLDER", UPLOAD_FOLDER), original_fallback_filename
         )
-        original_file = os.path.join(
-            app.config["UPLOAD_FOLDER"], f"{resume_id}.json"
-        )
-        if os.path.exists(enhanced_file):
+
+        if os.path.exists(enhanced_file_path):
             try:
-                with open(enhanced_file, "r", encoding="utf-8") as f:
-                    # The enhanced file now contains both enhanced_data and analysis_data
+                with open(enhanced_file_path, "r", encoding="utf-8") as f:
                     saved_data = json.load(f)
-                    resume_data_to_use = saved_data.get("enhanced_data")
-                    data_source = "enhanced (local fallback)"
+                    # Fallback "enhanced" files might have a different structure
+                    resume_data_to_use = saved_data.get("enhanced_data", saved_data) 
+                    data_source = f"enhanced (local fallback: {enhanced_fallback_filename})"
                     logger.info(
-                        f"Loaded enhanced data from local fallback: {enhanced_file}"
+                        f"Loaded data from local enhanced fallback file: {enhanced_file_path}"
                     )
             except Exception as e:
                 logger.error(
-                    f"Error loading local enhanced file {enhanced_file}: {e}"
+                    f"Error loading local enhanced fallback file {enhanced_file_path}: {e}"
                 )
-        elif os.path.exists(original_file):
+        elif os.path.exists(original_file_path):
             try:
-                with open(original_file, "r", encoding="utf-8") as f:
-                    resume_data_to_use = json.load(f)
-                    data_source = "original (local fallback)"
+                with open(original_file_path, "r", encoding="utf-8") as f:
+                    resume_data_to_use = json.load(f) # Original fallback assumed to be direct JSON
+                    data_source = f"original (local fallback: {original_fallback_filename})"
                     logger.info(
-                        f"Loaded original data from local fallback: {original_file}"
+                        f"Loaded data from local original fallback file: {original_file_path}"
                     )
             except Exception as e:
                 logger.error(
-                    f"Error loading local original file {original_file}: {e}"
+                    f"Error loading local original fallback file {original_file_path}: {e}"
                 )
         # If neither local file found with fallback DB, resume_data_to_use remains None
 
     else:
-        # Try loading from Supabase 'enhanced_resumes' first
+        # Supabase path
+        actual_resume_id_being_served = None # The ID of the record actually served
         try:
-            logger.info(
-                f"Attempting to load enhanced data for {resume_id} from Supabase..."
-            )
-            response_enh = (
-                db.table("enhanced_resumes")
-                .select("enhanced_data")
-                .eq("resume_id", resume_id)
+            # 1. Try to fetch the latest enhanced version using input resume_id as original_resume_id
+            logger.info(f"Attempting to load latest enhanced version for original_id: {resume_id} from 'resumes' table.")
+            response_enhanced = (
+                db.table("resumes")
+                .select("data, id, created_at")  # Assuming created_at for ordering
+                .eq("original_resume_id", resume_id)
+                .not_.is_("enhancement_id", "null") # Ensure it's an enhanced version
+                .order("created_at", desc=True)
                 .limit(1)
                 .execute()
             )
-            if response_enh.data:
-                resume_data_to_use = response_enh.data[0]["enhanced_data"]
-                data_source = "enhanced (Supabase)"
-                logger.info(f"Loaded enhanced data for {resume_id} from Supabase.")
+
+            if response_enhanced.data:
+                resume_data_to_use = response_enhanced.data[0]["data"]
+                actual_resume_id_being_served = response_enhanced.data[0]["id"]
+                data_source = f"enhanced (Supabase, original_id: {resume_id}, actual_id: {actual_resume_id_being_served})"
+                logger.info(f"Loaded latest enhanced version. Original ID: {resume_id}, Actual ID served: {actual_resume_id_being_served}")
             else:
-                # If not found, try loading from original 'resumes_new' table
-                logger.info(
-                    f"Enhanced data not found for {resume_id}, trying original from Supabase (table: resumes_new)..."
-                )
-                response_orig = (
-                    db.table("resumes_new")
-                    .select("parsed_data")
+                # 2. If not found, try to fetch by input resume_id as the direct ID
+                logger.info(f"No enhanced version found for original_id: {resume_id}. Attempting to load by direct id: {resume_id} from 'resumes' table.")
+                response_direct = (
+                    db.table("resumes")
+                    .select("data, id")
                     .eq("id", resume_id)
                     .limit(1)
                     .execute()
                 )
-                if response_orig.data:
-                    resume_data_to_use = response_orig.data[0]["parsed_data"]
-                    data_source = "original (Supabase)"
-                    logger.info(
-                        f"Loaded original data for {resume_id} from Supabase."
-                    )
+                if response_direct.data:
+                    resume_data_to_use = response_direct.data[0]["data"]
+                    actual_resume_id_being_served = response_direct.data[0]["id"]
+                    # Check if this "direct" hit was actually an enhanced resume itself
+                    # (e.g., user directly provided an ID of an enhanced record)
+                    # This is implicitly handled as we don't need to distinguish its 'type' beyond it being a valid resume.
+                    data_source = f"direct (Supabase, id: {actual_resume_id_being_served})"
+                    logger.info(f"Loaded resume by direct ID: {actual_resume_id_being_served}")
                 else:
-                    logger.warning(
-                        f"No data found for {resume_id} in enhanced_resumes or resumes_new tables."
-                    )
+                    logger.warning(f"No resume data found for ID {resume_id} in 'resumes' table using any method.")
                     # resume_data_to_use remains None
+
         except PostgrestAPIError as db_e:
             logger.error(
-                f"Error loading data for {resume_id} from Supabase (Code: {db_e.code}): {db_e.message}",
+                f"Supabase API Error loading data for ID {resume_id} (Code: {getattr(db_e, 'code', 'N/A')}): {getattr(db_e, 'message', str(db_e))}",
                 exc_info=True,
             )
-            logger.error(f"DB Error Details: {db_e.details} | Hint: {db_e.hint}")
-            # Allow fallback to local files if DB error occurs?
-            # For now, treat DB error as data not found
-            resume_data_to_use = None
-            logger.warning("Proceeding as if data not found due to DB error.")
-        except Exception as db_e:
+            # More detailed error logging if available
+            if hasattr(db_e, 'details'): logger.error(f"DB Error Details: {db_e.details}")
+            if hasattr(db_e, 'hint'): logger.error(f"DB Error Hint: {db_e.hint}")
+            # resume_data_to_use remains None
+            logger.warning("Proceeding as if data not found due to Supabase API error.")
+        except Exception as e: # Catch other potential errors like network issues, unexpected response structure
             logger.error(
-                f"Unexpected error loading resume {resume_id} from Supabase: {db_e}",
+                f"Unexpected error loading resume {resume_id} from Supabase: {e}",
                 exc_info=True,
             )
-            raise  # Re-raise unexpected errors
+            # resume_data_to_use remains None
+            logger.warning("Proceeding as if data not found due to unexpected error.")
+
 
     # Check if we successfully loaded data from any source
     if resume_data_to_use is None:
-        logger.error(f"Could not find or load any resume data for ID: {resume_id}")
+        logger.error(f"Could not find or load any resume data for ID: {resume_id} (from Supabase or fallback).")
         return app.create_error_response(
             "NotFound", f"No resume data found for ID {resume_id}", 404
         )
