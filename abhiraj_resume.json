@@ -1,0 +1,141 @@
+{
+"Certifications/Awards": [],
+"Education":
+[
+{
+"additional_info": "Coursework – Optimization Analytics, Machine Learning I & II, Risk Modelling, Healthcare Analytics, Economics of Supply Chain",
+"degree": "Master of Analytics",
+"end_date": "Present",
+"gpa": "4.00/4.00",
+"honors": "",
+"location": "Berkeley, CA",
+"specialization": "Industrial Engineering and Operations Research",
+"start_date": "May 2025",
+"university": "University of California, Berkeley"
+},
+{
+"additional_info": "Coursework - Computational Linear Algebra, Probability, Applied Statistics, Intro to Financial Engineering",
+"degree": "Bachelor of Technology",
+"end_date": "Present",
+"gpa": "3.71/4.00",
+"honors": "",
+"location": "Bangalore, India",
+"specialization": "Mechanical Engineering",
+"start_date": "July 2022",
+"university": "Manipal Institute of Technology"
+}
+],
+"Experience":
+[
+{
+"company": "KPMG India",
+"dates":
+{
+"end_date": "Jun 2024",
+"start_date": "Oct 2023"
+},
+"employment_type": "Full-time",
+"location": "Bangalore, India",
+"responsibilities/achievements":
+[
+"Resolved billing errors, anomalous performance evaluations, and erroneous TDS deductions using MS Excel-based data profiling, preventing financial risk and revenue loss of $120k.",
+"Developed ETL pipelines using Python to analyze vendor performance and automate recommendations, enabling data-driven procurement and achieving potential cost savings of $1.5 million.",
+"Optimized client sourcing strategy in real estate, reducing dependency on spot purchases and enabling bulk negotiations and rate contracts, driving $600K in potential savings.",
+"Collaborated with cross-functional teams to develop Power BI dashboards, integrating Risk and Control Metrics for Order-to-Cash, Marketing, and Inventory processes, to deliver actionable data-driven business recommendations."
+],
+"title": "Associate Risk Consultant"
+},
+{
+"company": "KPMG India",
+"dates":
+{
+"end_date": "Oct 2023",
+"start_date": "Jan 2022"
+},
+"employment_type": "Full-time",
+"location": "Bangalore, India",
+"responsibilities/achievements":
+[
+"Audited 150+ distributors in a nationwide network, reconciling ERP sales data with reported figures, and automated 2 of 6 major audit processes using Excel Macros and SQL, reducing execution time by 40% per distributor.",
+"Identified gaps in procurement workflows for high-value CAPEX and OPEX purchases, streamlining approval hierarchies and reducing cycle time for vendor onboarding and contract execution.",
+"Investigated inventory and material management inefficiencies, detecting overstocking and procurement delays.",
+"Created an automated Power Automate model to categorize customer complaint emails and re-route them to process owners."
+],
+"title": "Risk Analyst"
+},
+{
+"company": "Oil and Natural Gas Corporation",
+"dates":
+{
+"end_date": "Aug 2021",
+"start_date": "Jun 2021"
+},
+"employment_type": "Internship",
+"location": "Delhi, India",
+"responsibilities/achievements":
+[
+"Cleaned and pre-processed 5 years' worth of sensor data from diesel engines in RStudio for predictive modeling.",
+"Used regression analysis to identify key indicators of engine inefficiency across 5 critical engine performance parameters.",
+"Proposed and tested predictive maintenance models using Random Forests and Decision Trees, achieving a 25% boost in operational efficiency and automating fault detection with 81% accuracy."
+],
+"title": "Predictive Maintenance Intern"
+}
+],
+"Languages": [],
+"Misc": "",
+"Personal Information":
+{
+"email": "abhiraj_singh@berkeley.edu",
+"location": "Berkeley, CA",
+"name": "ABHIRAJ SINGH",
+"phone": "352-359-2258",
+"website/LinkedIn": "linkedin.com/in/abhirajs29"
+},
+"Projects":
+[
+{
+"description": "Developed a predictive model using time series forecasting and Monte Carlo simulations to predict advertiser demand & budgets. Optimized staffing and revenue by designing a priority-based queuing algorithm and integrating it with an SLSQP optimization model, reducing wait times, improving agent assignments, and maximizing profitability.",
+"title": "Google Case Competition"
+},
+{
+"description": "Optimized hedge selection, minimizing premium costs while maintaining a $10M exposure threshold. Implemented Monte Carlo simulations to model price fluctuations, reducing unnecessary trades and improving cost efficiency.",
+"title": "Wells Fargo Investment Banking Hackathon"
+},
+{
+"description": "Designed and implemented a relational database with 15+ entities, normalized to BCNF for consistency and scalability. Executed complex MySQL queries to extract insights on rental trends, customer segmentation, and inventory optimization. Migrated analytical workflows to Databricks, utilizing Apache Spark for parallel processing of large datasets.",
+"title": "PedalRental Database Analysis and Optimization"
+},
+{
+"description": "Analyzed over 3,000 shots made by LA Lakers players from the 2008-09 NBA season to find patterns and trends. Visualized a detailed half basketball court in R, representing shooting locations and shot distribution of 18 players. Utilized shot distributions and key player performance metrics such as eFG%, TFG%, and TS% to provide improved strategies.",
+"title": "Collaboration on Basketball Performance Analysis"
+}
+],
+"Skills":
+{
+"Soft Skills":
+[
+"Ability to learn and adapt quickly",
+"Effective time management skills",
+"Attention to detail",
+"Ability to work effectively in a team",
+"Structured problem-solving",
+"Active listening",
+"Strong written and verbal communication",
+"Innovative thinking"
+],
+"Technical Skills":
+[
+"Python (Numpy, Pandas, Matplotlib, Scikit-learn, Gurobipy, Tensorflow)",
+"R (tidyverse, ggplot2, caret, stringr, shiny)",
+"R-Studio",
+"MySQL",
+"Tableau",
+"Power Automate",
+"Power BI",
+"Microsoft Office",
+"Databricks",
+"MongoDB"
+]
+},
+"Summary/Objective": "Supply chain data analyst with a strong foundation in mathematics and statistics, leveraging 2.5 years of consulting experience across multiple domains to deliver actionable insights and data-driven decision-making."
+} 

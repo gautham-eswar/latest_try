@@ -1,0 +1,79 @@
+Software Engineer - Backend
+TechInnovate Inc.
+
+About Us:
+TechInnovate Inc. is a leading technology company specializing in cloud-based solutions for enterprise customers. We are looking for a talented Backend Software Engineer to join our growing team.
+
+Job Description:
+We are seeking an experienced Backend Software Engineer with strong Python skills to design, develop, and maintain our core API services. The ideal candidate will have expertise in building scalable, high-performance web applications using modern frameworks.
+
+Responsibilities:
+- Design, develop, and maintain RESTful APIs and microservices
+- Write clean, efficient, and well-documented code
+- Collaborate with frontend developers to integrate user-facing elements
+- Implement security and data protection measures
+- Optimize applications for maximum speed and scalability
+- Create and maintain technical documentation
+- Participate in code reviews and team knowledge sharing
+
+Requirements:
+- 3+ years of experience in backend development
+- Strong proficiency in Python
+- Experience with Flask or Django frameworks
+- Familiarity with SQL and NoSQL databases
+- Knowledge of containerization tools like Docker
+- Understanding of CI/CD pipelines
+- Experience with AWS or other cloud platforms
+- Excellent problem-solving and communication skills
+
+Nice to Have:
+- Experience with TypeScript/JavaScript
+- Knowledge of frontend frameworks (React, Vue.js)
+- Experience with automated testing and TDD
+- Contributions to open-source projects
+
+Benefits:
+- Competitive salary and stock options
+- Health, dental, and vision insurance
+- Flexible work hours and remote work options
+- Professional development opportunities
+- Collaborative and innovative work environment 
+TechInnovate Inc.
+
+About Us:
+TechInnovate Inc. is a leading technology company specializing in cloud-based solutions for enterprise customers. We are looking for a talented Backend Software Engineer to join our growing team.
+
+Job Description:
+We are seeking an experienced Backend Software Engineer with strong Python skills to design, develop, and maintain our core API services. The ideal candidate will have expertise in building scalable, high-performance web applications using modern frameworks.
+
+Responsibilities:
+- Design, develop, and maintain RESTful APIs and microservices
+- Write clean, efficient, and well-documented code
+- Collaborate with frontend developers to integrate user-facing elements
+- Implement security and data protection measures
+- Optimize applications for maximum speed and scalability
+- Create and maintain technical documentation
+- Participate in code reviews and team knowledge sharing
+
+Requirements:
+- 3+ years of experience in backend development
+- Strong proficiency in Python
+- Experience with Flask or Django frameworks
+- Familiarity with SQL and NoSQL databases
+- Knowledge of containerization tools like Docker
+- Understanding of CI/CD pipelines
+- Experience with AWS or other cloud platforms
+- Excellent problem-solving and communication skills
+
+Nice to Have:
+- Experience with TypeScript/JavaScript
+- Knowledge of frontend frameworks (React, Vue.js)
+- Experience with automated testing and TDD
+- Contributions to open-source projects
+
+Benefits:
+- Competitive salary and stock options
+- Health, dental, and vision insurance
+- Flexible work hours and remote work options
+- Professional development opportunities
+- Collaborative and innovative work environment 

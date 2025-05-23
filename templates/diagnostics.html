@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .status-healthy { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-error { color: #dc3545; }
+        .card { margin-bottom: 1rem; }
+        .system-info dt { width: 40%; }
+        .system-info dd { width: 60%; margin-bottom: 0.5rem; }
+        .refresh-countdown { font-size: 0.9rem; color: #6c757d; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <header class="mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1>System Diagnostics</h1>
+                <div>
+                    <p class="mb-0">Last updated: <span id="update-time">{{ timestamp }}</span></p>
+                    <p class="mb-0">Uptime: {{ uptime }}</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- System Status Overview -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Overall Status</h5>
+                        <p class="display-4 status-{{ system_status }}">
+                            {% if system_status == 'healthy' %}✓{% elif system_status == 'warning' %}⚠️{% else %}✗{% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Uptime</h5>
+                        <p class="display-6">{{ uptime }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Active Connections</h5>
+                        <p class="display-6">{{ active_connections }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Version</h5>
+                        <p class="display-6">{{ version }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Component Status -->
+        <h2 class="mb-3">Component Status</h2>
+        <div class="row mb-4">
+            {% for name, component in components.items() %}
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">{{ name|title }}</h5>
+                        <span class="badge bg-{{ component.status }} text-white">{{ component.status }}</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">{{ component.message }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- System Information -->
+        <h2 class="mb-3">System Information</h2>
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Platform</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row system-info">
+                            <dt class="col-sm-4">Operating System:</dt>
+                            <dd class="col-sm-8">{{ system_info.platform }}</dd>
+                            <dt class="col-sm-4">Python Version:</dt>
+                            <dd class="col-sm-8">{{ system_info.python_version }}</dd>
+                            <dt class="col-sm-4">CPU Cores:</dt>
+                            <dd class="col-sm-8">{{ system_info.cpu_count }}</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Memory Usage</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <p class="mb-1">Total: {{ system_info.memory.total }}</p>
+                            <p class="mb-1">Available: {{ system_info.memory.available }}</p>
+                            <div class="progress">
+                                <div class="progress-bar 
+                                    {% if system_info.memory.percent|float < 60 %}
+                                        bg-success
+                                    {% elif system_info.memory.percent|float < 85 %}
+                                        bg-warning
+                                    {% else %}
+                                        bg-danger
+                                    {% endif %}" 
+                                    role="progressbar" 
+                                    style="width: {{ system_info.memory.percent }}%" 
+                                    aria-valuenow="{{ system_info.memory.percent|float }}" 
+                                    aria-valuemin="0" 
+                                    aria-valuemax="100">{{ system_info.memory.percent }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Transactions -->
+        <h2 class="mb-3">Recent Transactions</h2>
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Method</th>
+                                <th>Path</th>
+                                <th>Status</th>
+                                <th>Duration (ms)</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in transactions %}
+                            <tr>
+                                <td>{{ tx.id }}</td>
+                                <td>{{ tx.method }}</td>
+                                <td>{{ tx.path }}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if tx.status_code < 300 %}bg-success
+                                        {% elif tx.status_code < 400 %}bg-warning
+                                        {% else %}bg-danger
+                                        {% endif %}">
+                                        {{ tx.status_code }}
+                                    </span>
+                                </td>
+                                <td>{{ tx.duration_ms }}</td>
+                                <td>{{ tx.timestamp }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Environment Variables -->
+        <h2 class="mb-3">Environment Variables</h2>
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <p class="mb-0"><strong>Note:</strong> Sensitive information is masked.</p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Variable</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key, value in env_vars.items() %}
+                            <tr>
+                                <td>{{ key }}</td>
+                                <td>{{ value }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pipeline Status & Testing -->
+        <h2 class="mb-3">Pipeline Status</h2>
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Overall Pipeline Status</h5>
+                                <span class="badge bg-{{ pipeline_status.status }} text-white">{{ pipeline_status.status|title }}</span>
+                            </div>
+                            <div class="card-body">
+                                <p class="mb-1">{{ pipeline_status.message }}</p>
+                                <p class="mb-1">Success Rate: <strong>{{ pipeline_status.success_rate|round(1) }}%</strong></p>
+                                <p class="mb-1">Total Jobs: {{ pipeline_status.total_jobs }} ({{ pipeline_status.successful_jobs }} successful)</p>
+                                {% if pipeline_status.last_run %}
+                                <p class="mb-0">Last Run: {{ pipeline_status.last_run }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Pipeline Actions</h5>
+                            </div>
+                            <div class="card-body">
+                                <button id="test-pipeline-btn" class="btn btn-primary mb-2" onclick="testPipeline()">
+                                    Run Pipeline Test
+                                </button>
+                                <div id="test-result" class="mt-2" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <span id="test-message">Running pipeline test...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h5 class="mb-3">Pipeline Stage Status</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Stage</th>
+                                <th>Status</th>
+                                <th>Success Rate</th>
+                                <th>Avg Processing Time</th>
+                                <th>Total Runs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stage in pipeline_stages %}
+                            <tr>
+                                <td>
+                                    <i class="bi {{ stage.icon }}"></i> {{ stage.name }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ stage.status }} text-white">{{ stage.status|title }}</span>
+                                </td>
+                                <td>{{ stage.success_rate|round(1) }}%</td>
+                                <td>{{ stage.avg_time|round(2) }}s</td>
+                                <td>{{ stage.count }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if pipeline_history %}
+                <h5 class="mb-3 mt-4">Recent Pipeline Jobs</h5>
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Resume ID</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in pipeline_history %}
+                            <tr>
+                                <td>{{ job.id }}</td>
+                                <td>{{ job.resume_id }}</td>
+                                <td>
+                                    <span class="badge bg-{{ job.status }} text-white">{{ job.status|title }}</span>
+                                </td>
+                                <td>{{ job.duration|round(2) }}s</td>
+                                <td>{{ job.start_time }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Footer & Actions -->
+        <div class="d-flex justify-content-between mb-4">
+            <div>
+                <button class="btn btn-primary" onclick="location.reload()">Refresh</button>
+                <a href="/diagnostic/status" class="btn btn-secondary">Simple Status View</a>
+                <a href="/" class="btn btn-link">Back to API</a>
+            </div>
+            <div class="refresh-countdown">
+                Auto-refresh in <span id="countdown">30</span>s
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update relative timestamps
+        function updateTimestamps() {
+            document.getElementById('update-time').textContent = new Date().toISOString();
+        }
+        
+        // Auto-refresh countdown
+        let seconds = 30;
+        const countdownEl = document.getElementById('countdown');
+        setInterval(() => {
+            seconds--;
+            countdownEl.textContent = seconds;
+            if (seconds <= 0) {
+                location.reload();
+            }
+        }, 1000);
+        
+        // Update timestamps every minute
+        setInterval(updateTimestamps, 60000);
+    </script>
+    
+    <script>
+        // Test Pipeline Function
+        function testPipeline() {
+            const testBtn = document.getElementById('test-pipeline-btn');
+            const testResult = document.getElementById('test-result');
+            const testMessage = document.getElementById('test-message');
+            
+            // Disable button while testing
+            testBtn.disabled = true;
+            testResult.style.display = 'block';
+            testMessage.textContent = 'Running pipeline test...';
+            
+            // Call test-pipeline endpoint
+            fetch('/diagnostic/test-pipeline')
+                .then(response => response.json())
+                .then(data => {
+                    const statusClass = data.status === 'success' ? 'alert-success' : 'alert-danger';
+                    testResult.innerHTML = `<div class="alert ${statusClass}">
+                        <p class="mb-1"><strong>${data.message}</strong></p>
+                        <p class="mb-0">Job ID: ${data.job_id} - Status: ${data.overall_status}</p>
+                    </div>`;
+                    
+                    // Re-enable button
+                    testBtn.disabled = false;
+                    
+                    // Refresh after successful test
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                })
+                .catch(error => {
+                    testResult.innerHTML = `<div class="alert alert-danger">
+                        <p class="mb-0"><strong>Error:</strong> ${error.message}</p>
+                    </div>`;
+                    testBtn.disabled = false;
+                });
+        }
+    </script>
+</body>
+</html> 
+ 

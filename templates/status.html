@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Status</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .status-healthy { color: #28a745; }
+        .status-warning { color: #ffc107; }
+        .status-error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">System Status</h5>
+                    <div class="text-end mt-3 mb-3">
+                        <p class="fw-light">Last updated: {{ current_time }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-3">
+                        <div class="display-4 mb-2 status-{{ database_status.status if database_status.status in ['healthy', 'warning', 'error'] else 'error' }}">
+                            {% if database_status.status == 'healthy' %}✓{% elif database_status.status == 'warning' %}⚠️{% else %}✗{% endif %}
+                        </div>
+                        <h5>Database Status</h5>
+                        <p>{{ database_status.status|title }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-4 mb-2">
+                            {{ system_info.uptime }}
+                        </div>
+                        <h5>Uptime</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-4 mb-2">
+                            {{ system_info.memory_usage }}
+                        </div>
+                        <h5>Memory Usage</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="display-4 mb-2">
+                            {{ system_info.cpu_usage }}
+                        </div>
+                        <h5>CPU Usage</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Database Details</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped m-0">
+                    <thead>
+                        <tr>
+                            <th>Table</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if database_status.tables %}
+                            {% for table in database_status.tables %}
+                            <tr>
+                                <td>{{ table }}</td>
+                                <td>
+                                    <span class="badge bg-success text-white">
+                                        AVAILABLE
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="2" class="text-center">No table information available</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Recent Transactions</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped m-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Time</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if recent_transactions %}
+                            {% for transaction in recent_transactions %}
+                            <tr>
+                                <td>{{ transaction.id }}</td>
+                                <td>{{ transaction.type }}</td>
+                                <td>{{ transaction.timestamp }}</td>
+                                <td>
+                                    <span class="badge bg-{{ transaction.status }} text-white">
+                                        {{ transaction.status|upper }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">No recent transactions</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <a href="/diagnostic/diagnostics" class="btn btn-primary">Detailed Diagnostics</a>
+            <a href="/" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+</body>
+</html> 

@@ -1,0 +1,70 @@
+# Python
+__pycache__/**
+
+# Virtual Environment
+.venv/**
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Application specific
+*.log
+.env
+*.env
+*.env.*
+
+
+# OS
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.out
+
+# Security
+*.pem
+*.key
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+simple-venv/
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Test results
+test_results/
+plots/
+
+# Local environment files
+.env.local
+
+# Resume output files
+output_resumes/
+*.tex
+*.pdf
+*.aux
+*.log
+*.out 
