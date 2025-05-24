@@ -28,8 +28,8 @@ git push origin your-branch-name
 4. Configure the service:
    - **Name**: resume-optimizer (or your preferred name)
    - **Runtime**: Python 3
-   - **Build Command**: `pip install -r requirements-render.txt`
-   - **Start Command**: `gunicorn wsgi:app`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn --bind 0.0.0.0:$PORT "working_app:create_app()"`
 
 ### 3. Configure Environment Variables
 

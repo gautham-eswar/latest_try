@@ -1272,11 +1272,11 @@ def track_transaction(diagnostic_system):
         return decorated_function
     return decorator 
 
-diagnostic_sistem:DiagnosticSystem = None
+diagnostic_system:DiagnosticSystem = None
 def get_diagnostic_system():
-    global diagnostic_sistem
+    global diagnostic_system
 
-    if not diagnostic_sistem:
+    if not diagnostic_system:
         try:
             diagnostic_system = DiagnosticSystem()
             logger.info("Diagnostic system initialized successfully")
@@ -1285,4 +1285,4 @@ def get_diagnostic_system():
                 "Diagnostic system module not found. Some features will be disabled."
             )
 
-    return diagnostic_sistem
+    return diagnostic_system

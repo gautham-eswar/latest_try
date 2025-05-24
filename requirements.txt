@@ -8,6 +8,7 @@ python-dotenv==1.0.0
 
 # API Clients
 requests==2.31.0
+httpx==0.27.0
 
 # Data Processing
 python-dateutil==2.8.2
