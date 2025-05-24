@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script to validate PDF generation using the actual classic template.
-This script tests the real classic_template.py module from resume_latex_generator.
+This script tests the real classic_template.py module from Pipeline.
 """
 
 import os
@@ -11,12 +11,12 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-# Add the parent directory to the Python path so we can import the resume_latex_generator modules
+# Add the parent directory to the Python path so we can import the Pipeline modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Try importing the generate_latex_content function from the classic template
 try:
-    from resume_latex_generator.templates.classic_template import generate_latex_content
+    from Pipeline.latex_resume.templates.classic_template import generate_latex_content
     print("Successfully imported generate_latex_content from classic_template")
 except ImportError as e:
     print(f"Error importing from classic_template: {e}")
