@@ -246,12 +246,6 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
 def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]], tech_skills: List[str], metrics: List[str]) -> Optional[str]:
     """
     Generates the LaTeX content for the experience section.
-    Args:
-        experience_list: A list of dictionaries containing experience information.
-        tech_skills: A list of technical skills to highlight.
-        metrics: A list of metrics to highlight.
-    Returns:
-        A string containing the LaTeX content for the experience section.
     """
     if not experience_list:
         return None
@@ -299,10 +293,6 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
                 content_lines.append("      \\resumeItemListEnd")
 
     content_lines.append("  \\resumeSubHeadingListEnd")
-    print("--- PRINT DIAGNOSTIC (_generate_experience_section): Received tech_skills ---", flush=True)
-    print(tech_skills, flush=True)
-    print("--- END PRINT DIAGNOSTIC (_generate_experience_section tech_skills) ---", flush=True)
-
     return "\n".join(content_lines)
 
 def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tech_skills: List[str], metrics: List[str]) -> Optional[str]:
@@ -577,6 +567,51 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
     final_latex_parts.extend([r"  \resumeSubHeadingListEnd", ""])
     return "\n".join(final_latex_parts)
 
+def validate_resume_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validates and cleans resume data to ensure all sections are in expected formats.
+    Returns cleaned data or raises an exception with clear error message.
+    """
+    print("--- DATA VALIDATION: Checking resume data structure ---", flush=True)
+    
+    # Ensure main data is a dictionary
+    if not isinstance(data, dict):
+        raise ValueError(f"Resume data must be a dictionary, got {type(data)}")
+    
+    cleaned_data = copy.deepcopy(data)
+    
+    # Define expected list sections and dict sections
+    list_sections = ['education', 'Education', 'experience', 'Experience', 'projects', 'Projects', 
+                     'languages', 'Languages', 'certifications', 'Certifications', 'awards', 'Awards',
+                     'involvement', 'Involvement', 'leadership', 'Leadership']
+    
+    dict_sections = ['skills', 'Skills', 'Personal Information', 'personal_information']
+    
+    # Fix list sections - convert strings or non-lists to empty lists
+    for section_key in list_sections:
+        if section_key in cleaned_data:
+            if not isinstance(cleaned_data[section_key], list):
+                print(f"DATA VALIDATION: Converting {section_key} from {type(cleaned_data[section_key])} to empty list", flush=True)
+                cleaned_data[section_key] = []
+            else:
+                # Ensure all items in the list are dictionaries
+                valid_items = []
+                for i, item in enumerate(cleaned_data[section_key]):
+                    if isinstance(item, dict):
+                        valid_items.append(item)
+                    else:
+                        print(f"DATA VALIDATION: Removing invalid item from {section_key}[{i}]: {type(item)} - {item}", flush=True)
+                cleaned_data[section_key] = valid_items
+    
+    # Fix dict sections - convert non-dicts to empty dicts
+    for section_key in dict_sections:
+        if section_key in cleaned_data:
+            if not isinstance(cleaned_data[section_key], dict):
+                print(f"DATA VALIDATION: Converting {section_key} from {type(cleaned_data[section_key])} to empty dict", flush=True)
+                cleaned_data[section_key] = {}
+    
+    print("--- DATA VALIDATION: Completed successfully ---", flush=True)
+    return cleaned_data
 
 def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = None, target_paper_height_value_str: Optional[str] = None, reduce_font_size: bool = False) -> str:
     """
@@ -589,7 +624,13 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     Returns:
         A string containing the complete LaTeX document.
     """
-    current_data_source = copy.deepcopy(data) 
+    # VALIDATE DATA FIRST - this fixes the root cause!
+    try:
+        current_data_source = validate_resume_data(data)
+    except Exception as e:
+        print(f"ERROR: Resume data validation failed: {e}", flush=True)
+        raise
+
     # ... (rest of the data extraction as before)
     # ... (name, email, linkedin, github, phone, website, objective, education, experience, projects, skills_data, etc.)
 

@@ -7,7 +7,7 @@ The Resume Optimizer application processes uploaded resumes, enhances them based
 ## 2. Data Ingestion (`/api/upload`)
 
 *   **Endpoint:** `POST /api/upload`
-*   **Inputs:**
+    *   **Inputs:**
     *   Resume file (TXT, PDF, DOCX) via form data (`file`).
     *   User ID via form data (`user_id`).
 *   **Process (`Pipeline/resume_uploader.py::parse_and_upload_resume`):**
@@ -31,7 +31,7 @@ The Resume Optimizer application processes uploaded resumes, enhances them based
 This process is orchestrated by `Pipeline/optimizer.py::enhance_resume`.
 
 *   **Endpoint:** `POST /api/optimize`
-*   **Inputs:**
+    *   **Inputs:**
     *   `resume_id` (ID of the original resume to enhance) via form data.
     *   `user_id` via form data.
     *   `job_description` (text of the job description) via form data.
