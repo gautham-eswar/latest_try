@@ -139,13 +139,15 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     if supabase_pdf_path:
         logger.info(f"Job {job_id}: Proactive PDF successfully generated and uploaded to Supabase Storage: {supabase_pdf_path}")
         # Optionally, update the optimization_jobs table again with the PDF path
-        try:
-            update_optimization_job(job_id, {
-                "proactive_pdf_storage_path": supabase_pdf_path
-            })
-            logger.info(f"Job {job_id}: Updated optimization_jobs table with PDF storage path: {supabase_pdf_path}")
-        except Exception as e_update_pdf_path:
-            logger.error(f"Job {job_id}: Failed to update optimization_jobs table with PDF path {supabase_pdf_path}. Error: {e_update_pdf_path}", exc_info=True)
+        # Note: Commenting out for now since the 'proactive_pdf_storage_path' column doesn't exist in Supabase
+        # try:
+        #     update_optimization_job(job_id, {
+        #         "proactive_pdf_storage_path": supabase_pdf_path
+        #     })
+        #     logger.info(f"Job {job_id}: Updated optimization_jobs table with PDF storage path: {supabase_pdf_path}")
+        # except Exception as e_update_pdf_path:
+        #     logger.error(f"Job {job_id}: Failed to update optimization_jobs table with PDF path {supabase_pdf_path}. Error: {e_update_pdf_path}", exc_info=True)
+        logger.info(f"Job {job_id}: PDF path stored in Supabase Storage: {supabase_pdf_path} (database column update skipped)")
     else:
         logger.warning(f"Job {job_id}: Proactive PDF generation/upload failed for enhanced_resume_id: {enhanced_resume_id}")
 
