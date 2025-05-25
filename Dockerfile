@@ -40,4 +40,4 @@ COPY . .
 EXPOSE 8080
 
 # 8. Set Default Command (Using Gunicorn for production)
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "working_app:create_app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "working_app:app"] 

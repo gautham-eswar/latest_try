@@ -404,3 +404,11 @@ def create_app():
             return "", 204
     
     return app
+
+
+# Create the WSGI application instance for Gunicorn
+app = create_app()
+
+# For development server
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)), debug=False)
