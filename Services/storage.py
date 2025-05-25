@@ -26,7 +26,7 @@ def upload_pdf_to_supabase(local_pdf_path: str, user_id: str, enhanced_resume_id
             return None
 
         bucket_name = "resume-pdfs"
-        storage_path = f"{user_id}/{enhanced_resume_id}/enhanced_resume_{enhanced_resume_id}.pdf"
+        storage_path = f"Resumes/{user_id}/{enhanced_resume_id}/enhanced_resume_{enhanced_resume_id}.pdf"
 
         logger.info(f"Attempting to upload {local_pdf_path} to Supabase Storage at path: {storage_path}")
 
