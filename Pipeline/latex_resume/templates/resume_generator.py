@@ -369,6 +369,7 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tec
 
 def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills: List[str]) -> Optional[str]:
     print("--- PRINT DIAGNOSTIC (_generate_skills_section): Received skills_dict ---", flush=True)
+    print(f"PRINT DIAGNOSTIC: Type of skills_dict: {type(skills_dict)}", flush=True)
     try:
         print(json.dumps(skills_dict, indent=2), flush=True)
     except TypeError:
@@ -377,26 +378,45 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     print("--- END PRINT DIAGNOSTIC (_generate_skills_section) ---", flush=True)
 
     print("--- PRINT DIAGNOSTIC (_generate_skills_section): Received tech_skills ---", flush=True)
+    print(f"PRINT DIAGNOSTIC: Type of tech_skills: {type(tech_skills)}", flush=True)
     print(tech_skills, flush=True)
     print("--- END PRINT DIAGNOSTIC (_generate_skills_section tech_skills) ---", flush=True)
 
-    if not skills_dict: return None
+    if not skills_dict: 
+        print("PRINT DIAGNOSTIC: skills_dict is None or empty, returning None", flush=True)
+        return None
+    
+    # Check if skills_dict is actually a dictionary
+    if not isinstance(skills_dict, dict):
+        print(f"ERROR DIAGNOSTIC: skills_dict is not a dict! Type: {type(skills_dict)}, Value: {skills_dict}", flush=True)
+        return None
     
     lines = []
-    technical_skills_list = skills_dict.get("Technical Skills")
+    try:
+        technical_skills_list = skills_dict.get("Technical Skills")
+        print(f"PRINT DIAGNOSTIC: Retrieved technical_skills_list: {technical_skills_list}, type: {type(technical_skills_list)}", flush=True)
+    except AttributeError as e:
+        print(f"ERROR DIAGNOSTIC: AttributeError when calling .get() on skills_dict: {e}", flush=True)
+        print(f"ERROR DIAGNOSTIC: skills_dict type: {type(skills_dict)}, value: {skills_dict}", flush=True)
+        return None
 
     if technical_skills_list and isinstance(technical_skills_list, list):
         # TEMP DIAGNOSTIC: Simplify skills output
-        skills_str = ", ".join(fix_latex_special_chars(s) for s in technical_skills_list if s)
-        if skills_str:
-            lines.append(r"\section{Technical Skills}") # Add section title here
-            lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
-            lines.append(r"  \item \textbf{Technical Skills}: " + skills_str)
-            lines.append(r"\end{itemize}")
-            lines.append("")
-        else:
-            return None # No technical skills to list
+        try:
+            skills_str = ", ".join(fix_latex_special_chars(s) for s in technical_skills_list if s)
+            if skills_str:
+                lines.append(r"\section{Technical Skills}") # Add section title here
+                lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
+                lines.append(r"  \item \textbf{Technical Skills}: " + skills_str)
+                lines.append(r"\end{itemize}")
+                lines.append("")
+            else:
+                return None # No technical skills to list
+        except Exception as e:
+            print(f"ERROR DIAGNOSTIC: Exception during skills processing: {e}", flush=True)
+            return None
     else:
+        print(f"PRINT DIAGNOSTIC: No valid Technical Skills list found. technical_skills_list: {technical_skills_list}", flush=True)
         return None # No "Technical Skills" list found
 
     return "\n".join(lines) if lines else None
