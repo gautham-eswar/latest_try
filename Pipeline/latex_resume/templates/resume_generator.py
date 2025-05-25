@@ -11,6 +11,7 @@ import json
 import hashlib
 import logging # Add logging import
 import copy # <<< ADD THIS IMPORT
+import httpx # Add httpx import for client configuration
 
 # # === REMOVE BASIC CONFIG FROM THIS MODULE ===
 # logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(name)s - %(message)s')
@@ -50,7 +51,9 @@ def _initialize_openai_client() -> bool:
         return False
     
     try:
-        OPENAI_CLIENT = openai.OpenAI(api_key=api_key)
+        # Use explicit httpx client to avoid proxy issues on Render
+        httpx_client = httpx.Client(trust_env=False)
+        OPENAI_CLIENT = openai.OpenAI(api_key=api_key, http_client=httpx_client)
         OPENAI_API_KEY_LOADED = True
         print("AI HINT: OpenAI client initialized successfully for skill/metric highlighting.")
         return True
