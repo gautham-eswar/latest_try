@@ -36,7 +36,11 @@ def upload_pdf_to_supabase(local_pdf_path: str, user_id: str, enhanced_resume_id
             response = db.storage.from_(bucket_name).upload(
                 path=storage_path,
                 file=file_obj,
-                file_options={"cacheControl": "3600", "upsert": "true"}
+                file_options={
+                    "cacheControl": "3600", 
+                    "upsert": "true",
+                    "contentType": "application/pdf"
+                }
             )
         
         # Supabase client typically raises an exception on failure, 
