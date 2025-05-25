@@ -39,7 +39,7 @@ def upload_pdf_to_supabase(local_pdf_path: str, user_id: str, enhanced_resume_id
                 file_options={
                     "cacheControl": "3600", 
                     "upsert": "true",
-                    "contentType": "application/pdf"
+                    "content-type": "application/pdf"
                 }
             )
         
