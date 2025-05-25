@@ -6,6 +6,7 @@ FROM python:3.9-slim
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=working_app.py
 ENV FLASK_RUN_PORT=8080
+ENV FLASK_DEBUG=false
 # For production, critical secrets like OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY
 # should be set at runtime via the hosting platform (e.g., Render environment variables)
 # rather than being hardcoded in the Dockerfile.
@@ -40,4 +41,4 @@ COPY . .
 EXPOSE 8080
 
 # 8. Set Default Command (Using Gunicorn for production)
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "working_app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "180", "--workers", "1", "working_app:app"] 
