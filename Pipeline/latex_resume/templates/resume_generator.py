@@ -393,31 +393,51 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     
     lines = []
     try:
-        technical_skills_list = skills_dict.get("Technical Skills")
-        print(f"PRINT DIAGNOSTIC: Retrieved technical_skills_list: {technical_skills_list}, type: {type(technical_skills_list)}", flush=True)
+        technical_skills_data = skills_dict.get("Technical Skills")
+        print(f"PRINT DIAGNOSTIC: Retrieved technical_skills_data: {technical_skills_data}, type: {type(technical_skills_data)}", flush=True)
     except AttributeError as e:
         print(f"ERROR DIAGNOSTIC: AttributeError when calling .get() on skills_dict: {e}", flush=True)
         print(f"ERROR DIAGNOSTIC: skills_dict type: {type(skills_dict)}, value: {skills_dict}", flush=True)
         return None
 
-    if technical_skills_list and isinstance(technical_skills_list, list):
-        # TEMP DIAGNOSTIC: Simplify skills output
+    # Handle both cases: technical_skills_data as a list or as a dictionary with subcategories
+    all_technical_skills = []
+    
+    if isinstance(technical_skills_data, list):
+        # Case 1: "Technical Skills" is directly a list
+        all_technical_skills = [skill for skill in technical_skills_data if skill and isinstance(skill, str)]
+        print(f"PRINT DIAGNOSTIC: Found technical skills as list: {all_technical_skills}", flush=True)
+    elif isinstance(technical_skills_data, dict):
+        # Case 2: "Technical Skills" is a dictionary with subcategories
+        print("PRINT DIAGNOSTIC: Technical skills is a dictionary with subcategories", flush=True)
+        for category, skills_list in technical_skills_data.items():
+            if isinstance(skills_list, list):
+                valid_skills = [skill for skill in skills_list if skill and isinstance(skill, str)]
+                all_technical_skills.extend(valid_skills)
+                print(f"PRINT DIAGNOSTIC: Added skills from category '{category}': {valid_skills}", flush=True)
+    else:
+        print(f"PRINT DIAGNOSTIC: Technical Skills data is neither list nor dict. Type: {type(technical_skills_data)}, Value: {technical_skills_data}", flush=True)
+
+    if all_technical_skills:
+        # Generate skills section with all collected technical skills
         try:
-            skills_str = ", ".join(fix_latex_special_chars(s) for s in technical_skills_list if s)
+            skills_str = ", ".join(fix_latex_special_chars(s) for s in all_technical_skills if s)
             if skills_str:
-                lines.append(r"\section{Technical Skills}") # Add section title here
+                lines.append(r"\section{Technical Skills}")
                 lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
                 lines.append(r"  \item \textbf{Technical Skills}: " + skills_str)
                 lines.append(r"\end{itemize}")
                 lines.append("")
+                print(f"PRINT DIAGNOSTIC: Successfully generated skills section with {len(all_technical_skills)} skills", flush=True)
             else:
-                return None # No technical skills to list
+                print("PRINT DIAGNOSTIC: No valid technical skills found after processing", flush=True)
+                return None
         except Exception as e:
             print(f"ERROR DIAGNOSTIC: Exception during skills processing: {e}", flush=True)
             return None
     else:
-        print(f"PRINT DIAGNOSTIC: No valid Technical Skills list found. technical_skills_list: {technical_skills_list}", flush=True)
-        return None # No "Technical Skills" list found
+        print("PRINT DIAGNOSTIC: No technical skills found in any format", flush=True)
+        return None
 
     return "\n".join(lines) if lines else None
 
