@@ -399,22 +399,25 @@ def proactively_generate_pdf(user_id: str, enhanced_resume_id: str, enhanced_res
         latex_content = generate_latex_content(enhanced_resume_content)
         logger.info(f"Successfully generated LaTeX content ({len(latex_content)} characters) for enhanced_resume_id: {enhanced_resume_id}")
 
-        # Store LaTeX content in database
+        # Store LaTeX content in database (non-critical - continue even if this fails)
+        latex_storage_success = False
         try:
             db = get_db()
             update_response = db.table("resumes").update({
-                "latex_content": latex_content
+                "final_resume_latex": latex_content
             }).eq("id", enhanced_resume_id).execute()
             
             if update_response.data:
-                logger.info(f"Successfully stored LaTeX content in database for enhanced_resume_id: {enhanced_resume_id}")
+                logger.info(f"Successfully stored LaTeX content in final_resume_latex for enhanced_resume_id: {enhanced_resume_id}")
+                latex_storage_success = True
             else:
-                logger.warning(f"Failed to update database with LaTeX content for enhanced_resume_id: {enhanced_resume_id}")
+                logger.warning(f"Failed to update database with LaTeX content for enhanced_resume_id: {enhanced_resume_id} - continuing with PDF generation")
         except Exception as db_error:
-            logger.error(f"Error storing LaTeX content in database for enhanced_resume_id {enhanced_resume_id}: {db_error}")
+            logger.error(f"Error storing LaTeX content in final_resume_latex for enhanced_resume_id {enhanced_resume_id}: {db_error} - continuing with PDF generation")
             # Continue with PDF generation even if LaTeX storage fails
 
-        # Generate PDF as before
+        # Generate PDF regardless of LaTeX storage success/failure
+        logger.info(f"Proceeding with PDF generation for enhanced_resume_id: {enhanced_resume_id} (LaTeX storage: {'success' if latex_storage_success else 'failed'})")
         pdf_path_generated, success = generate_resume_pdf(enhanced_resume_content, local_pdf_path)
 
         if pdf_path_generated and Path(pdf_path_generated).exists():

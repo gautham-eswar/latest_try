@@ -131,13 +131,13 @@ def download_resume(app, resume_id, format_type):
     else:
         # Supabase path
         actual_resume_id_being_served = None # The ID of the record actually served
-        latex_content_from_db = None  # Initialize LaTeX content variable
+        final_resume_latex_from_db = None  # Initialize LaTeX content variable
         try:
             # 1. Try to fetch the latest enhanced version using input resume_id as original_resume_id
             logger.info(f"Attempting to load latest enhanced version for original_id: {resume_id} from 'resumes' table.")
             response_enhanced = (
                 db.table("resumes")
-                .select("data, id, created_at, latex_content")  # Added latex_content to selection
+                .select("data, id, created_at, final_resume_latex")  # Updated to use final_resume_latex
                 .eq("original_resume_id", resume_id)
                 .not_.is_("enhancement_id", "null") # Ensure it's an enhanced version
                 .order("created_at", desc=True)
@@ -148,7 +148,7 @@ def download_resume(app, resume_id, format_type):
             if response_enhanced.data:
                 resume_data_to_use = response_enhanced.data[0]["data"]
                 actual_resume_id_being_served = response_enhanced.data[0]["id"]
-                latex_content_from_db = response_enhanced.data[0].get("latex_content")  # Get stored LaTeX content
+                final_resume_latex_from_db = response_enhanced.data[0].get("final_resume_latex")  # Get stored LaTeX content
                 data_source = f"enhanced (Supabase, original_id: {resume_id}, actual_id: {actual_resume_id_being_served})"
                 logger.info(f"Loaded latest enhanced version. Original ID: {resume_id}, Actual ID served: {actual_resume_id_being_served}")
             else:
@@ -156,7 +156,7 @@ def download_resume(app, resume_id, format_type):
                 logger.info(f"No enhanced version found for original_id: {resume_id}. Attempting to load by direct id: {resume_id} from 'resumes' table.")
                 response_direct = (
                     db.table("resumes")
-                    .select("data, id, latex_content")  # Added latex_content to selection
+                    .select("data, id, final_resume_latex")  # Updated to use final_resume_latex
                     .eq("id", resume_id)
                     .limit(1)
                     .execute()
@@ -164,7 +164,7 @@ def download_resume(app, resume_id, format_type):
                 if response_direct.data:
                     resume_data_to_use = response_direct.data[0]["data"]
                     actual_resume_id_being_served = response_direct.data[0]["id"]
-                    latex_content_from_db = response_direct.data[0].get("latex_content")  # Get stored LaTeX content
+                    final_resume_latex_from_db = response_direct.data[0].get("final_resume_latex")  # Get stored LaTeX content
                     # Check if this "direct" hit was actually an enhanced resume itself
                     # (e.g., user directly provided an ID of an enhanced record)
                     # This is implicitly handled as we don't need to distinguish its 'type' beyond it being a valid resume.
@@ -173,7 +173,7 @@ def download_resume(app, resume_id, format_type):
                 else:
                     logger.warning(f"No resume data found for ID {resume_id} in 'resumes' table using any method.")
                     # resume_data_to_use remains None
-                    latex_content_from_db = None
+                    final_resume_latex_from_db = None
 
         except PostgrestAPIError as db_e:
             logger.error(
@@ -184,7 +184,7 @@ def download_resume(app, resume_id, format_type):
             if hasattr(db_e, 'details'): logger.error(f"DB Error Details: {db_e.details}")
             if hasattr(db_e, 'hint'): logger.error(f"DB Error Hint: {db_e.hint}")
             # resume_data_to_use remains None
-            latex_content_from_db = None  # Ensure LaTeX content is None on error
+            final_resume_latex_from_db = None  # Ensure LaTeX content is None on error
             logger.warning("Proceeding as if data not found due to Supabase API error.")
         except Exception as e: # Catch other potential errors like network issues, unexpected response structure
             logger.error(
@@ -192,7 +192,7 @@ def download_resume(app, resume_id, format_type):
                 exc_info=True,
             )
             # resume_data_to_use remains None
-            latex_content_from_db = None  # Ensure LaTeX content is None on error
+            final_resume_latex_from_db = None  # Ensure LaTeX content is None on error
             logger.warning("Proceeding as if data not found due to unexpected error.")
 
 
@@ -219,15 +219,17 @@ def download_resume(app, resume_id, format_type):
 
     elif format_type == "latex":
         try:
-            logger.info(f"Generating LaTeX for resume ID: {resume_id}")
+            logger.info(f"Serving stored LaTeX for resume ID: {resume_id}")
             
-            # Use stored LaTeX content if available, otherwise generate it
-            if latex_content_from_db:
-                logger.info(f"Using stored LaTeX content for resume ID: {resume_id}")
-                latex_content = latex_content_from_db
+            # Use stored LaTeX content - should always be available since PDF generation stores it
+            if final_resume_latex_from_db:
+                latex_content = final_resume_latex_from_db
+                logger.info(f"Successfully retrieved stored LaTeX content for resume ID: {resume_id}")
             else:
-                logger.info(f"No stored LaTeX content found, generating LaTeX for resume ID: {resume_id}")
-                latex_content = generate_latex_resume(resume_data_to_use)
+                logger.error(f"No stored LaTeX content found for resume ID: {resume_id} - this should not happen with automatic PDF generation")
+                return app.create_error_response(
+                    "LatexNotFound", f"LaTeX content not found for resume ID {resume_id}", 404
+                )
             
             response = Response(
                 latex_content,
