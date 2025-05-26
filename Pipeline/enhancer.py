@@ -12,6 +12,8 @@ import copy
 import re
 from typing import Dict, List, Any, Optional, Tuple, Set
 import httpx
+import asyncio
+# Removed cachetools
 
 # Import OpenAI
 try:
@@ -47,15 +49,16 @@ class ResumeEnhancer:
         
         # Use explicit httpx client to avoid proxy issues on Render
         try:
-            # Explicitly create httpx client, disabling environment proxy usage
-            httpx_client = httpx.Client(trust_env=False)
-            self.client = OpenAI(api_key=self.api_key, http_client=httpx_client)
-            logger.info("ResumeEnhancer: OpenAI client initialized successfully with custom httpx client.")
+            # Explicitly create httpx async client, disabling environment proxy usage
+            httpx_async_client = httpx.AsyncClient(trust_env=False)
+            self.client = OpenAI(api_key=self.api_key, http_client=httpx_async_client)
+            logger.info("ResumeEnhancer: OpenAI client initialized successfully with custom httpx async client.")
         except Exception as e:
-            logger.error(f"ResumeEnhancer: Failed to initialize OpenAI client: {e}", exc_info=True)
-            raise RuntimeError(f"ResumeEnhancer: Could not initialize OpenAI client - {e}") from e
+            logger.error(f"ResumeEnhancer: Failed to initialize OpenAI async client: {e}", exc_info=True)
+            raise RuntimeError(f"ResumeEnhancer: Could not initialize OpenAI async client - {e}") from e
         
-        self.model = model
+        self.model = "gpt-4.1-mini" # Updated model to gpt-4.1-mini
+        # Removed enhancement_cache initialization
         
         # Track which bullets have been modified
         self.modified_bullets = set()
@@ -63,7 +66,7 @@ class ResumeEnhancer:
         # Track keyword usage
         self.keyword_usage = {}
         
-    def enhance_resume(self, 
+    async def enhance_resume(self, 
                       resume_data: Dict[str, Any], 
                       matches_by_bullet: Dict[str, List[Dict[str, Any]]], 
                       final_technical_skills: Optional[Dict[str, List[str]]] = None,
@@ -75,7 +78,6 @@ class ResumeEnhancer:
             resume_data: Resume JSON data
             matches_by_bullet: Keywords matched to bullets
             final_technical_skills: Dictionary of categorized technical skills to update the resume with.
-                                      Example: {"Programming Languages": ["Python", "Java"], "Tools": ["Docker"]}
             max_keyword_usage: Maximum times a keyword can be used in bullet enhancements
             
         Returns:
@@ -83,65 +85,77 @@ class ResumeEnhancer:
         """
         logger.info("Starting resume enhancement for bullets and skills section")
         
-        # Create a deep copy of the resume to avoid modifying the original
         enhanced_resume = copy.deepcopy(resume_data)
+        self.modified_bullets = set() # Should ideally be instance variable if method is called multiple times on same instance for different resumes.
+        self.keyword_usage = {}    # Same as above. For a single call, local is fine.
         
-        # Reset tracking data
-        self.modified_bullets = set()
-        self.keyword_usage = {}
-        
-        # Track all modifications for reporting
         modifications = []
         
-        # Filter matches to limit keyword repetition
         filtered_matches = self._filter_matches_by_usage(matches_by_bullet, max_keyword_usage)
         
-        # Process Experience section
+        tasks = []
+        # Prepare tasks for bullet enhancement
         for exp_idx, experience in enumerate(enhanced_resume.get("Experience", [])):
-            for bullet_idx, bullet in enumerate(experience.get("responsibilities/achievements", [])):
-                # Skip if already modified
-                if bullet in self.modified_bullets:
-                    continue
-                
-                # Check if we have matches for this bullet
-                if bullet in filtered_matches and filtered_matches[bullet]:
-                    # Get keywords for this bullet
-                    keywords_for_bullet = filtered_matches[bullet]
-                    
-                    # Skip if no keywords to add
+            for bullet_idx, bullet_text in enumerate(experience.get("responsibilities/achievements", [])):
+                # We use bullet_text as the key for filtered_matches
+                if bullet_text in filtered_matches and filtered_matches[bullet_text]:
+                    keywords_for_bullet = filtered_matches[bullet_text]
                     if not keywords_for_bullet:
                         continue
+                    # Ensure we don't try to enhance an already processed bullet (though with deepcopy and no shared state, this might be redundant here)
+                    if bullet_text in self.modified_bullets: 
+                        continue
+                    tasks.append(self._enhance_bullet_with_keywords_wrapper(exp_idx, bullet_idx, bullet_text, keywords_for_bullet))
+
+        if tasks:
+            logger.info(f"Starting concurrent enhancement for {len(tasks)} bullets.")
+            enhancement_results = await asyncio.gather(*tasks) # return_exceptions=True is implicit in wrapper
+            logger.info(f"Finished concurrent enhancement. Processing {len(enhancement_results)} results.")
+
+            for result_item in enhancement_results:
+                exp_idx, bullet_idx, enhanced_text_or_exc, original_bullet, keywords_list = result_item
+                
+                current_experience_section = enhanced_resume.get("Experience", [])
+                if exp_idx >= len(current_experience_section):
+                    logger.error(f"Experience index {exp_idx} out of bounds. Skipping result.")
+                    continue
+                
+                experience_entry = current_experience_section[exp_idx]
+                
+                if isinstance(enhanced_text_or_exc, Exception):
+                    logger.error(f"Error enhancing bullet (exp:{exp_idx}, bullet:{bullet_idx}) '{original_bullet[:30]}...': {enhanced_text_or_exc}")
+                    # Original bullet remains, no modification recorded for this attempt beyond error log
+                    continue
+
+                enhanced_bullet = enhanced_text_or_exc
+                
+                # Validate the enhancement
+                # Note: _validate_enhancement expects a list of keyword strings
+                keyword_strings = [kw["keyword"] for kw in keywords_list]
+                if self._validate_enhancement(original_bullet, enhanced_bullet, keyword_strings):
+                    experience_entry["responsibilities/achievements"][bullet_idx] = enhanced_bullet
+                    self.modified_bullets.add(original_bullet) # Track original bullet text as modified
                     
-                    # Enhance the bullet with the keywords
-                    enhanced_bullet = self._enhance_bullet_with_keywords(bullet, keywords_for_bullet)
+                    for keyword_data in keywords_list:
+                        keyword = keyword_data["keyword"].lower()
+                        self.keyword_usage[keyword] = self.keyword_usage.get(keyword, 0) + 1
                     
-                    # Validate the enhancement
-                    if self._validate_enhancement(bullet, enhanced_bullet, [kw["keyword"] for kw in keywords_for_bullet]):
-                        # Update the resume
-                        experience["responsibilities/achievements"][bullet_idx] = enhanced_bullet
-                        
-                        # Mark as modified
-                        self.modified_bullets.add(bullet)
-                        
-                        # Update keyword usage
-                        for keyword_data in keywords_for_bullet:
-                            keyword = keyword_data["keyword"].lower()
-                            self.keyword_usage[keyword] = self.keyword_usage.get(keyword, 0) + 1
-                        
-                        # Record the modification
-                        modifications.append({
-                            "company": experience.get("company", ""),
-                            "position": experience.get("title", ""),
-                            "original_bullet": bullet,
-                            "enhanced_bullet": enhanced_bullet,
-                            "keywords_added": [kw["keyword"] for kw in keywords_for_bullet],
-                            "experience_idx": exp_idx,
-                            "bullet_idx": bullet_idx
-                        })
-                        
-                        logger.info(f"Enhanced bullet: '{bullet[:30]}...' with {len(keywords_for_bullet)} keywords")
-        
-        logger.info(f"Resume bullet point enhancement complete. Modified {len(modifications)} bullets.")
+                    modifications.append({
+                        "company": experience_entry.get("company", ""),
+                        "position": experience_entry.get("title", ""),
+                        "original_bullet": original_bullet,
+                        "enhanced_bullet": enhanced_bullet,
+                        "keywords_added": keyword_strings,
+                        "experience_idx": exp_idx,
+                        "bullet_idx": bullet_idx
+                    })
+                    logger.info(f"Successfully enhanced bullet (exp:{exp_idx}, bullet:{bullet_idx}): '{original_bullet[:30]}...'")
+                else:
+                    logger.warning(f"Validation failed for enhanced bullet (exp:{exp_idx}, bullet:{bullet_idx}): '{original_bullet[:30]}...'. Original kept. Enhanced: '{enhanced_bullet[:50]}...'")
+                    # Original bullet remains if validation fails
+
+        bullet_mod_count = sum(1 for mod in modifications if "section" not in mod) # A bit fragile way to count bullet mods
+        logger.info(f"Resume bullet point enhancement processing complete. Modified {bullet_mod_count} bullets.")
 
         # --- Technical Skills Section Update ---
         if final_technical_skills is not None:
@@ -272,24 +286,24 @@ class ResumeEnhancer:
         logger.info(f"Filtered to {total_keywords} keywords across {len(filtered_matches)} bullets")
         
         return filtered_matches
-    
-    def _enhance_bullet_with_keywords(self, bullet: str, keywords: List[Dict[str, Any]]) -> str:
+
+    async def _enhance_bullet_with_keywords(self, bullet: str, keywords: List[Dict[str, Any]]) -> str:
         """
-        Enhance a bullet point with multiple keywords.
-        
+        Enhance a bullet point with multiple keywords. (No caching)
         Args:
             bullet: Original bullet text
-            keywords: Keywords to incorporate
-            
+            keywords: List of keyword dicts (with 'keyword' and 'context')
         Returns:
             str: Enhanced bullet text
         """
-        # Prepare keyword information for prompt
-        keyword_text = ""
-        for idx, kw in enumerate(keywords):
-            keyword_text += f"{idx+1}. {kw['keyword']}\\n   Context from job description: {kw['context']}\\n"
+        logger.debug(f"Enhancing bullet (no cache): '{bullet[:50]}...'")
         
-        # Create prompt for bullet enhancement
+        keyword_text_for_prompt = ""
+        for idx, kw_data in enumerate(keywords): 
+            keyword_str = kw_data['keyword']
+            context_str = kw_data.get('context', 'N/A')
+            keyword_text_for_prompt += f"{idx+1}. {keyword_str}\\n   Context from job description: {context_str}\\n"
+
         prompt = f"""
         Task: Enhance the following resume bullet point by naturally incorporating the specified keywords.
 
@@ -297,10 +311,10 @@ class ResumeEnhancer:
         "{bullet}"
 
         Keywords to incorporate naturally:
-        {keyword_text}
+        {keyword_text_for_prompt}
 
         Requirements:
-        1. MUST include ALL the keywords in the enhanced bullet point
+        1. MUST include ALL the keywords (from the keyword strings provided) in the enhanced bullet point
         2. MUST preserve ALL numbers, percentages, and metrics EXACTLY as they appear
         3. MUST maintain the original meaning, achievements, and scope of work
         4. MUST keep the same professional tone and tense
@@ -312,33 +326,36 @@ class ResumeEnhancer:
         """
         
         try:
-            # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=self.model,
+            response = await self.client.chat.completions.create(
+                model=self.model, # self.model is "gpt-4.1-turbo"
                 messages=[
                     {"role": "system", "content": "You are a professional resume writer specializing in keyword optimization while maintaining factual accuracy."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,  # Lower temperature for more consistent output
+                temperature=0.3,
                 max_tokens=512
             )
             
-            # Extract the enhanced bullet
             enhanced_bullet = response.choices[0].message.content.strip()
-            
-            # Clean up the response (remove quotes if present)
             if enhanced_bullet.startswith('"') and enhanced_bullet.endswith('"'):
                 enhanced_bullet = enhanced_bullet[1:-1]
-            
-            # Clean up any extra spaces
             enhanced_bullet = re.sub(r'\s+', ' ', enhanced_bullet).strip()
-            
             return enhanced_bullet
-            
         except Exception as e:
-            logger.error(f"Error enhancing bullet: {str(e)}")
-            # Return original if enhancement fails
-            return bullet
+            logger.error(f"Error enhancing bullet '{bullet[:30]}...' with OpenAI: {e}", exc_info=True)
+            # Re-raise to be caught by the wrapper in enhance_resume for proper error handling per bullet
+            raise e
+
+    async def _enhance_bullet_with_keywords_wrapper(self, exp_idx: int, bullet_idx: int, bullet_text: str, keywords: List[Dict[str, Any]]):
+        """
+        Wrapper for _enhance_bullet_with_keywords to pass through indices and other data.
+        """
+        try:
+            enhanced_text = await self._enhance_bullet_with_keywords(bullet_text, keywords)
+            return exp_idx, bullet_idx, enhanced_text, bullet_text, keywords # Success case
+        except Exception as e:
+            # Return exception along with context, so gather can collect it and we can log appropriately
+            return exp_idx, bullet_idx, e, bullet_text, keywords # Failure case
     
     def _validate_enhancement(self, original: str, enhanced: str, keywords: List[str]) -> bool:
         """
@@ -459,18 +476,29 @@ if __name__ == "__main__":
     
     # Initialize resume enhancer
     enhancer = ResumeEnhancer()
-    
-    # Enhance resume
-    enhanced_resume, modifications = enhancer.enhance_resume(
-        resume_data, 
-        matches_by_bullet,
-        max_keyword_usage=args.max_usage
-    )
-    
-    # Save results
-    enhancer.save_results(enhanced_resume, modifications, args.output_dir)
-    
-    # Print summary
-    print(f"Resume enhancement complete.")
-    print(f"Modified {len(modifications)} bullets.")
-    print(f"Enhanced resume saved to {args.output_dir}/enhanced_resume.json")
+
+    # Define an async main function to run the enhancer
+    async def main():
+        # Enhance resume
+        enhanced_resume, modifications = await enhancer.enhance_resume(
+            resume_data, 
+            matches_by_bullet,
+            # final_technical_skills can be passed if available from semantic_matches.json or other source
+            # For this example, assuming it might not be in args.matches by default.
+            # If it is, it should be loaded, e.g., matches_data.get("final_technical_skills")
+            final_technical_skills=matches_data.get("final_technical_skills"), 
+            max_keyword_usage=args.max_usage
+        )
+        
+        # Save results
+        enhancer.save_results(enhanced_resume, modifications, args.output_dir)
+        
+        # Print summary
+        # Calculate bullet modifications based on the structure of 'modifications' list
+        bullet_modifications_count = sum(1 for mod in modifications if mod.get("type") != "Technical Skills Update" and "section" not in mod)
+        print(f"Resume enhancement complete.")
+        print(f"Modified {bullet_modifications_count} bullets.") # Adjusted to count only bullet mods
+        print(f"Enhanced resume saved to {args.output_dir}/enhanced_resume.json")
+
+    # Run the async main function
+    asyncio.run(main())

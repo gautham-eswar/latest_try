@@ -13,6 +13,8 @@ from typing import Dict, List, Any, Optional, Tuple, Set
 import pandas as pd
 import httpx
 import copy
+import asyncio
+# Removed cachetools imports
 
 # Import OpenAI
 try:
@@ -49,24 +51,26 @@ class SemanticMatcher:
         # Use explicit httpx client to avoid proxy issues on Render
         try:
             # Explicitly create httpx client, disabling environment proxy usage
-            httpx_client = httpx.Client(trust_env=False)
-            self.client = OpenAI(api_key=self.api_key, http_client=httpx_client)
-            logger.info("SemanticMatcher: OpenAI client initialized successfully with custom httpx client.")
+            httpx_async_client = httpx.AsyncClient(trust_env=False)
+            self.client = OpenAI(api_key=self.api_key, http_client=httpx_async_client)
+            logger.info("SemanticMatcher: OpenAI client initialized successfully with custom httpx async client.")
         except Exception as e:
-            logger.error(f"SemanticMatcher: Failed to initialize OpenAI client: {e}", exc_info=True)
+            logger.error(f"SemanticMatcher: Failed to initialize OpenAI async client: {e}", exc_info=True)
             # Depending on desired behavior, either raise the error or handle it
             # For now, let's raise it to make the failure clear
             raise RuntimeError(f"SemanticMatcher: Could not initialize OpenAI client - {e}") from e
             # self.client = None # Or set client to None if you want to handle errors downstream
         
         self.model = model
-        self.generation_model = "gpt-3.5-turbo" # For categorization tasks
+        self.generation_model = "gpt-4.1-mini" # Updated for categorization tasks to gpt-4.1-mini
+        
+        # Removed caches
         
         # Default similarity threshold
         self.similarity_threshold = 0.75
         self.skill_similarity_threshold = 0.90 # For deduplicating skills
         
-    def process_keywords_and_resume(self, 
+    async def process_keywords_and_resume(self, 
                                    keywords_data: Dict[str, Any], 
                                    resume_data: Dict[str, Any],
                                    similarity_threshold: float = 0.75,
@@ -88,18 +92,46 @@ class SemanticMatcher:
         logger.info("Starting semantic processing pipeline for bullets and skills")
         self.similarity_threshold = similarity_threshold
         
-        # --- Bullet Point Processing ---
-        logger.info("Step 1: Generating embeddings for JD keywords (for bullets)")
-        keywords_with_embeddings = self.generate_keyword_embeddings(keywords_data["keywords"])
+        # --- Bullet Point Processing & Initial Resume Skills Embedding ---
+        logger.info("Concurrently generating embeddings for JD keywords, resume bullets, and resume skills...")
         
+        # Extract bullet points from resume first as it's synchronous
+        bullet_points = self.extract_bullet_points(resume_data)
+        
+        # Run keyword, bullet, and resume skill embedding generation concurrently
+        concurrent_embedding_results = await asyncio.gather(
+            self.generate_keyword_embeddings(keywords_data["keywords"]),
+            self.generate_bullet_embeddings(bullet_points),
+            self.extract_resume_technical_skills(resume_data), # Added resume skills embedding
+            return_exceptions=True
+        )
+        
+        # Handle results and potential errors from asyncio.gather
+        keywords_with_embeddings = []
+        if isinstance(concurrent_embedding_results[0], Exception):
+            logger.error(f"Error generating keyword embeddings: {concurrent_embedding_results[0]}")
+        else:
+            keywords_with_embeddings = concurrent_embedding_results[0]
+            
+        bullets_with_embeddings = []
+        if isinstance(concurrent_embedding_results[1], Exception):
+            logger.error(f"Error generating bullet embeddings: {concurrent_embedding_results[1]}")
+        else:
+            bullets_with_embeddings = concurrent_embedding_results[1]
+
+        resume_skills_structured = {} # Default to empty dict
+        if isinstance(concurrent_embedding_results[2], Exception):
+            logger.error(f"Error extracting and embedding resume technical skills: {concurrent_embedding_results[2]}")
+        else:
+            resume_skills_structured = concurrent_embedding_results[2]
+
+        logger.info(f"Generated embeddings for {len(keywords_with_embeddings)} keywords, {len(bullets_with_embeddings)} bullets, and {sum(len(cat_data.get('skills', [])) for cat_data in resume_skills_structured.values())} resume skills.")
+
         logger.info("Step 2: Deduplicating JD keywords (for bullets)")
         deduplicated_keywords_for_bullets = self.deduplicate_keywords(keywords_with_embeddings)
         
-        logger.info("Step 3: Extracting bullet points from resume")
-        bullet_points = self.extract_bullet_points(resume_data)
-        
-        logger.info(f"Step 4: Generating embeddings for {len(bullet_points)} bullet points")
-        bullets_with_embeddings = self.generate_bullet_embeddings(bullet_points)
+        # Step 3 (Extracting bullet points) was done earlier
+        logger.info(f"Extracted {len(bullet_points)} bullet points from resume")
         
         logger.info("Step 5: Calculating similarity between JD keywords and resume bullets")
         similarity_results = self.calculate_similarity(deduplicated_keywords_for_bullets, bullets_with_embeddings)
@@ -108,21 +140,32 @@ class SemanticMatcher:
         matches_by_bullet = self.group_matches_by_bullet(similarity_results)
 
         # --- Technical Skills Section Processing ---
-        logger.info("Step 7: Extracting and embedding resume technical skills")
-        resume_skills_structured = self.extract_resume_technical_skills(resume_data)
+        # Step 7 (Extracting and embedding resume technical skills) was done concurrently above
+        logger.info(f"Resume technical skills already extracted and embedded. Found {len(resume_skills_structured)} categories.")
         
         logger.info("Step 8: Filtering JD keywords for hard skills relevant to skills section")
+        # Ensure keywords_with_embeddings is available and populated
         jd_hard_skills_for_section = [
-            kw for kw in keywords_with_embeddings # Use keywords_with_embeddings to have their embeddings ready
+            kw for kw in keywords_with_embeddings 
             if kw.get("skill_type") == "hard skill" and kw.get("relevance_score", 0) >= relevance_threshold
         ]
         logger.debug(f"Found {len(jd_hard_skills_for_section)} JD hard skills meeting relevance threshold {relevance_threshold}")
 
         resume_skill_categories = list(resume_skills_structured.keys())
         logger.info(f"Step 9: Categorizing {len(jd_hard_skills_for_section)} JD hard skills against resume categories: {resume_skill_categories}")
-        categorized_jd_hard_skills = self._categorize_jd_skills_with_openai(jd_hard_skills_for_section, resume_skill_categories)
+        categorized_jd_hard_skills = await self._categorize_jd_skills_with_openai(jd_hard_skills_for_section, resume_skill_categories)
 
         logger.info("Step 10: Selecting final technical skills for resume section")
+        # select_final_technical_skills calls _get_embedding through consolidate_skills -> extract_resume_technical_skills (if not already embedded)
+        # and deduplicate_within_category. So it also needs to be async.
+        # However, current select_final_technical_skills expects embeddings to be there.
+        # The skill objects passed to select_final_technical_skills (resume_skills_structured, categorized_jd_hard_skills)
+        # should already have their embeddings generated by previous async calls.
+        # So, select_final_technical_skills itself might not need to be async if its internal embedding calls are removed
+        # or if it only uses pre-computed embeddings.
+        # For now, assuming select_final_technical_skills does NOT make new embedding calls.
+        # If it does, it needs to be made async and awaited.
+        # Based on current structure, embeddings are generated *before* this step.
         final_technical_skills, skill_selection_log = self.select_final_technical_skills(
             resume_skills_structured,
             categorized_jd_hard_skills,
@@ -154,7 +197,7 @@ class SemanticMatcher:
         logger.info(f"Semantic processing complete. Found {result['statistics']['total_bullet_matches']} bullet matches. Selected {result['statistics']['final_total_technical_skills']} technical skills.")
         return result
     
-    def generate_keyword_embeddings(self, keywords: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def generate_keyword_embeddings(self, keywords: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Generate embeddings for keywords with context.
         
@@ -164,24 +207,23 @@ class SemanticMatcher:
         Returns:
             list: Keywords with embeddings added
         """
-        keywords_with_embeddings = []
-        
+        tasks = []
         for keyword in keywords:
-            try:
-                # Combine keyword and context for richer embedding
-                text = f"{keyword['keyword']}: {keyword['context']}"
-                
-                # Generate embedding
-                embedding = self._get_embedding(text)
-                
-                # Add embedding to keyword data
+            text = f"{keyword['keyword']}: {keyword['context']}"
+            tasks.append(self._get_embedding(text))
+
+        embeddings_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        keywords_with_embeddings = []
+        for i, result in enumerate(embeddings_results):
+            keyword = keywords[i]
+            if isinstance(result, Exception):
+                logger.error(f"Error generating embedding for keyword '{keyword.get('keyword')}': {str(result)}")
+                # Skip this keyword or handle as needed
+            else:
                 keyword_with_embedding = keyword.copy()
-                keyword_with_embedding["embedding"] = embedding
+                keyword_with_embedding["embedding"] = result
                 keywords_with_embeddings.append(keyword_with_embedding)
-                
-            except Exception as e:
-                logger.error(f"Error generating embedding for keyword '{keyword.get('keyword')}': {str(e)}")
-                # Skip this keyword if embedding generation fails
         
         return keywords_with_embeddings
     
@@ -288,7 +330,7 @@ class SemanticMatcher:
         logger.debug(f"Extracted {len(bullet_points)} bullet points from resume.")
         return bullet_points
     
-    def generate_bullet_embeddings(self, bullet_points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def generate_bullet_embeddings(self, bullet_points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Generate embeddings for bullet points.
         
@@ -298,21 +340,22 @@ class SemanticMatcher:
         Returns:
             list: Bullet points with embeddings added
         """
-        bullets_with_embeddings = []
-        
+        tasks = []
         for bullet in bullet_points:
-            try:
-                # Generate embedding for the bullet text
-                embedding = self._get_embedding(bullet["bullet_text"])
-                
-                # Add embedding to bullet data
+            tasks.append(self._get_embedding(bullet["bullet_text"]))
+
+        embeddings_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        bullets_with_embeddings = []
+        for i, result in enumerate(embeddings_results):
+            bullet = bullet_points[i]
+            if isinstance(result, Exception):
+                logger.error(f"Error generating embedding for bullet '{bullet['bullet_text'][:30]}...': {str(result)}")
+                # Skip this bullet or handle as needed
+            else:
                 bullet_with_embedding = bullet.copy()
-                bullet_with_embedding["embedding"] = embedding
+                bullet_with_embedding["embedding"] = result
                 bullets_with_embeddings.append(bullet_with_embedding)
-                
-            except Exception as e:
-                logger.error(f"Error generating embedding for bullet '{bullet['bullet_text'][:30]}...': {str(e)}")
-                # Skip this bullet if embedding generation fails
         
         logger.debug(f"Generated embeddings for {len(bullets_with_embeddings)} bullet points.")
         return bullets_with_embeddings
@@ -484,10 +527,10 @@ class SemanticMatcher:
         logger.debug(f"Filtered keyword usage, resulting in matches for {len(filtered_matches)} bullets.")
         return filtered_matches
     
-    def extract_resume_technical_skills(self, resume_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    async def extract_resume_technical_skills(self, resume_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
         Extracts technical skills from the resume, preserving categories if they exist.
-        Generates embeddings for each skill.
+        Generates embeddings for each skill asynchronously.
 
         Args:
             resume_data: Parsed resume JSON.
@@ -504,68 +547,88 @@ class SemanticMatcher:
         """
         logger.debug("Extracting technical skills from resume_data.")
         skills_section = resume_data.get("Skills", {})
-        if not isinstance(skills_section, dict): # Handle cases where Skills might be a list or other type
+        if not isinstance(skills_section, dict):
             logger.warning(f"Resume 'Skills' section is not a dictionary as expected, but type {type(skills_section)}. Treating as empty.")
             skills_section = {}
 
-        technical_skills_data = skills_section.get("Technical Skills", []) # Default to empty list
-
+        technical_skills_data = skills_section.get("Technical Skills", [])
         structured_skills = {}
+        
+        # Prepare a list of all skill names and their category/original status
+        all_skills_to_embed_info = [] # Stores tuples of (skill_name, category_name_or_default, is_flat_list_skill)
 
         if isinstance(technical_skills_data, dict): # Skills are already categorized
             logger.debug("Resume technical skills appear to be categorized.")
             for category, skills_in_category in technical_skills_data.items():
                 if isinstance(skills_in_category, list):
-                    embedded_skills = []
                     for skill_name in skills_in_category:
                         if isinstance(skill_name, str) and skill_name.strip():
-                            try:
-                                embedding = self._get_embedding(skill_name)
-                                embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
-                            except Exception as e:
-                                logger.error(f"Failed to generate embedding for resume skill '{skill_name}' in category '{category}': {e}")
+                            all_skills_to_embed_info.append((skill_name.strip(), category, False))
                         else:
                             logger.warning(f"Invalid skill item '{skill_name}' in category '{category}', skipping.")
-                    if embedded_skills:
-                         structured_skills[category] = {"skills": embedded_skills, "is_original": True}
                 else:
                     logger.warning(f"Category '{category}' in Technical Skills does not contain a list of skills, skipping.")
+        
         elif isinstance(technical_skills_data, list): # Skills are a flat list
             logger.debug("Resume technical skills appear to be a flat list. Using default category.")
-            embedded_skills = []
+            default_category_name = "_DEFAULT_TECHNICAL_SKILLS_"
             for skill_name in technical_skills_data:
                 if isinstance(skill_name, str) and skill_name.strip():
-                    try:
-                        embedding = self._get_embedding(skill_name)
-                        embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
-                    except Exception as e:
-                        logger.error(f"Failed to generate embedding for resume skill '{skill_name}' (flat list): {e}")
+                    all_skills_to_embed_info.append((skill_name.strip(), default_category_name, True))
                 else:
-                     logger.warning(f"Invalid skill item '{skill_name}' in flat list of technical skills, skipping.")
-            if embedded_skills:
-                structured_skills["_DEFAULT_TECHNICAL_SKILLS_"] = {"skills": embedded_skills, "is_original": True}
+                    logger.warning(f"Invalid skill item '{skill_name}' in flat list of technical skills, skipping.")
         else:
             logger.warning(f"'Technical Skills' data is not a recognized dict or list: {type(technical_skills_data)}. No skills extracted.")
+            return {}
+
+        if not all_skills_to_embed_info:
+            logger.info("No valid technical skills found to extract and embed.")
+            return {}
+
+        # Create embedding tasks
+        embedding_tasks = [self._get_embedding(skill_info[0]) for skill_info in all_skills_to_embed_info]
+        embedding_results = await asyncio.gather(*embedding_tasks, return_exceptions=True)
+
+        # Process results and structure them
+        for i, embedding_or_exc in enumerate(embedding_results):
+            skill_name, category_name, _ = all_skills_to_embed_info[i]
+
+            if isinstance(embedding_or_exc, Exception):
+                logger.error(f"Failed to generate embedding for resume skill '{skill_name}' in category '{category_name}': {embedding_or_exc}")
+                continue
+
+            if category_name not in structured_skills:
+                structured_skills[category_name] = {"skills": [], "is_original": True}
+            
+            structured_skills[category_name]["skills"].append({
+                "skill": skill_name,
+                "embedding": embedding_or_exc
+            })
 
         total_extracted = sum(len(cat_data['skills']) for cat_data in structured_skills.values())
         logger.info(f"Extracted and embedded {total_extracted} technical skills from {len(structured_skills)} resume categories.")
         return structured_skills
 
-    def _categorize_jd_skills_with_openai(self, jd_hard_skills: List[Dict[str, Any]], resume_categories: List[str]) -> List[Dict[str, Any]]:
+    async def _categorize_jd_skills_with_openai(self, jd_hard_skills: List[Dict[str, Any]], resume_categories: List[str]) -> List[Dict[str, Any]]:
         """
         Categorizes JD hard skills using OpenAI based on existing resume skill categories.
+        OpenAI calls are made directly and concurrently.
         """
         logger.debug(f"Categorizing {len(jd_hard_skills)} JD hard skills using OpenAI. Resume categories: {resume_categories}")
-        categorized_skills = []
+        
+        if not jd_hard_skills:
+            return []
 
         if not resume_categories: # No categories to map to, assign a default new category
             logger.warning("No existing resume skill categories provided for mapping JD skills. Assigning all to a default new category.")
+            categorized_skills_results = []
             for skill_data in jd_hard_skills:
                 skill_data_copy = skill_data.copy()
                 skill_data_copy["assigned_category"] = "New Skills" # Default new category
-                categorized_skills.append(skill_data_copy)
-            return categorized_skills
+                categorized_skills_results.append(skill_data_copy)
+            return categorized_skills_results
 
+        tasks = []
         for skill_data in jd_hard_skills:
             skill_name = skill_data["keyword"]
             skill_context = skill_data.get("context", "N/A")
@@ -579,40 +642,46 @@ class SemanticMatcher:
                 f"Be concise. Only return the category name or 'New Category: ...'."
             )
             
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.generation_model,
-                    messages=[
-                        {"role": "system", "content": "You are an expert in categorizing technical skills."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.2,
-                    max_tokens=50
-                )
-                category_response = response.choices[0].message.content.strip()
-                logger.debug(f"OpenAI category response for '{skill_name}': '{category_response}'")
+            # Create a task for each OpenAI call
+            tasks.append(self.client.chat.completions.create(
+                model=self.generation_model, # Using updated gpt-4.1-turbo
+                messages=[
+                    {"role": "system", "content": "You are an expert in categorizing technical skills."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=50
+            ))
 
+        openai_responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+        categorized_skills = []
+        for i, response_or_exc in enumerate(openai_responses):
+            skill_data = jd_hard_skills[i]
+            skill_name = skill_data["keyword"]
+            skill_data_copy = skill_data.copy()
+
+            if isinstance(response_or_exc, Exception):
+                logger.error(f"Error categorizing skill '{skill_name}' with OpenAI: {response_or_exc}. Assigning to default 'Uncategorized'.")
+                skill_data_copy["assigned_category"] = "Uncategorized JD Skills"
+            else:
+                # response_or_exc is the successful OpenAI response object
+                category_response = response_or_exc.choices[0].message.content.strip()
+                logger.debug(f"OpenAI category response for '{skill_name}': '{category_response}'")
+                
                 assigned_category = category_response
                 if category_response.startswith("New Category:"):
                     assigned_category = category_response.replace("New Category:", "").strip()
                     if not assigned_category: # Handle empty new category name
                         assigned_category = f"New - {skill_name}" # Default if AI gives empty new cat name
-                elif category_response not in resume_categories: # If AI hallucinates a category not in the list and not 'New Category:'
-                    logger.warning(f"OpenAI suggested category '{category_response}' for skill '{skill_name}' which is not in existing resume categories or a 'New Category' format. Treating as a new category: '{category_response}'.")
-                    # Decide if we want to force it into an existing one, or accept it as new. For now, accept.
-                    # To be stricter, we might map it to the most similar existing one or a generic "Other New Skills"
-
-                skill_data_copy = skill_data.copy()
+                elif category_response not in resume_categories: 
+                    logger.warning(f"OpenAI suggested category '{category_response}' for skill '{skill_name}' which is not in existing resume categories {resume_categories} or a 'New Category' format. Treating as a new category: '{category_response}'.")
+                
                 skill_data_copy["assigned_category"] = assigned_category
-                categorized_skills.append(skill_data_copy)
-
-            except Exception as e:
-                logger.error(f"Error categorizing skill '{skill_name}' with OpenAI: {e}. Assigning to default 'Uncategorized'.")
-                skill_data_copy = skill_data.copy()
-                skill_data_copy["assigned_category"] = "Uncategorized JD Skills"
-                categorized_skills.append(skill_data_copy)
+            
+            categorized_skills.append(skill_data_copy)
         
-        logger.info(f"Categorized {len(categorized_skills)} JD hard skills using OpenAI.")
+        logger.info(f"Categorized {len(categorized_skills)} JD hard skills using OpenAI with model {self.generation_model}.")
         return categorized_skills
 
     def select_final_technical_skills(self,
@@ -776,7 +845,7 @@ class SemanticMatcher:
         
         return final_skills_by_category_dict, log_details
 
-    def _get_embedding(self, text: str) -> List[float]:
+    async def _get_embedding(self, text: str) -> List[float]:
         """
         Get embedding for text using OpenAI API.
         
@@ -786,7 +855,8 @@ class SemanticMatcher:
         Returns:
             list: Embedding vector
         """
-        response = self.client.embeddings.create(
+        # Removed cache miss logging
+        response = await self.client.embeddings.create(
             input=text,
             model=self.model
         )
@@ -879,25 +949,28 @@ if __name__ == "__main__":
     # Initialize semantic matcher
     matcher = SemanticMatcher()
     
-    # Process keywords and resume
-    results = matcher.process_keywords_and_resume(
-        keywords_data, 
-        resume_data,
-        similarity_threshold=args.threshold
-    )
-    
-    # Save results
-    matcher.save_results_to_file(results, args.output)
-    
-    # Export similarity results to CSV for analysis
-    matcher.export_similarity_to_csv(results["similarity_results"], "similarity_results.csv")
-    
-    # Print summary
-    print(f"Semantic processing complete.")
-    print(f"Original keywords: {results['statistics']['original_keywords']}")
-    print(f"Deduplicated keywords for bullets: {results['statistics']['deduplicated_keywords_for_bullets']}")
-    print(f"Bullets processed: {results['statistics']['bullets_processed']}")
-    print(f"Bullets with matches: {results['statistics']['bullets_with_matches']}")
-    print(f"Total bullet matches: {results['statistics']['total_bullet_matches']}")
-    print(f"Final total technical skills: {results['statistics']['final_total_technical_skills']}")
-    print(f"Results saved to {args.output}")
+    # Process keywords and resume using asyncio.run
+    async def main():
+        results = await matcher.process_keywords_and_resume(
+            keywords_data, 
+            resume_data,
+            similarity_threshold=args.threshold
+        )
+        
+        # Save results
+        matcher.save_results_to_file(results, args.output)
+        
+        # Export similarity results to CSV for analysis
+        matcher.export_similarity_to_csv(results["similarity_results"], "similarity_results.csv")
+        
+        # Print summary
+        print(f"Semantic processing complete.")
+        print(f"Original keywords: {results['statistics']['original_keywords']}")
+        print(f"Deduplicated keywords for bullets: {results['statistics']['deduplicated_keywords_for_bullets']}")
+        print(f"Bullets processed: {results['statistics']['bullets_processed']}")
+        print(f"Bullets with matches: {results['statistics']['bullets_with_matches']}")
+        print(f"Total bullet matches: {results['statistics']['total_bullet_matches']}")
+        print(f"Final total technical skills: {results['statistics']['final_total_technical_skills']}")
+        print(f"Results saved to {args.output}")
+
+    asyncio.run(main())

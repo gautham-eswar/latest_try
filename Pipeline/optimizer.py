@@ -4,20 +4,21 @@ import logging
 import os
 import time
 import uuid
+import asyncio # Added asyncio
 
 from flask import jsonify
 from postgrest import APIError as PostgrestAPIError
 from supabase import Client  # Import Supabase error type
 
 from Pipeline.job_tracking import create_optimization_job, update_optimization_job
-from Pipeline.keyword_extraction import extract_keywords
+from Pipeline.keyword_extraction import extract_keywords # Will be awaited
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, fetch_resume_data
 from Pipeline.resume_uploader import generate_resume_id, upload_resume
 from Services.database import FallbackDatabase, get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import create_error_response
-from Pipeline.embeddings import SemanticMatcher
-from Pipeline.enhancer import ResumeEnhancer
+from Pipeline.embeddings import SemanticMatcher # Init is sync, methods are async
+from Pipeline.enhancer import ResumeEnhancer # Init is sync, methods are async
 from Pipeline.latex_generation import proactively_generate_pdf # Added for proactive PDF generation
 
 
@@ -29,25 +30,27 @@ logger = logging.getLogger(__name__)
 diagnostic_system = get_diagnostic_system()
 
 
-def enhance_resume(job_id, resume_id, user_id, job_description_text):
+async def enhance_resume(job_id, resume_id, user_id, job_description_text):
 
-    logger.info(f"Starting resume enhancement: User ID: {user_id} \
+    logger.info(f"Starting resume enhancement (async): User ID: {user_id} \
                 Resume ID: {resume_id} Job Description: {job_description_text[:40]}")
 
-    # Initialize Supabase client
+    # Initialize Supabase client - remains synchronous
     db = get_db()
-
     
-    # Get the original parsed resume
+    # Get the original parsed resume - remains synchronous
     original_resume_info = fetch_resume_data(resume_id, user_id)
     original_resume_parsed = original_resume_info["data"]
 
-    # Extract Keywords from Job description
-    keywords_data = extract_keywords(job_description_text)
+    # Extract Keywords from Job description - now awaited
+    # Assuming extract_keywords has been refactored to be async
+    logger.info(f"Job {job_id}: Starting keyword extraction (await)...")
+    keywords_data = await extract_keywords(job_description_text) # API key and other params handled by extract_keywords defaults
     kw_count = len(keywords_data.get("keywords", []))
     logger.info(
         f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
     )
+    # update_optimization_job remains synchronous
     update_optimization_job(job_id, {
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
@@ -56,16 +59,16 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     # --- Semantic Matching ---
     match_results = None
     matches_by_bullet = {}
-    logger.info(f"Job {job_id}: Initializing SemanticMatcher...")
-    matcher = SemanticMatcher()
-    logger.info(f"Job {job_id}: Running semantic matching process...")
-    match_results = matcher.process_keywords_and_resume(
+    logger.info(f"Job {job_id}: Initializing SemanticMatcher (sync init)...")
+    # SemanticMatcher __init__ was already updated for async client
+    matcher = SemanticMatcher() 
+    logger.info(f"Job {job_id}: Running semantic matching process (await)...")
+    match_results = await matcher.process_keywords_and_resume(
         keywords_data, 
         original_resume_parsed,
-        # TODO: Consider making similarity_threshold, relevance_threshold, overall_skill_limit configurable per job or globally
-        similarity_threshold=0.75, # For bullet matching
-        relevance_threshold=0.5,   # For JD hard skills to be considered for skills section
-        overall_skill_limit=20     # Target total technical skills in skills section
+        similarity_threshold=0.75, 
+        relevance_threshold=0.5,   
+        overall_skill_limit=20     
     )
     matches_by_bullet = match_results.get("matches_by_bullet", {})
     final_technical_skills = match_results.get("final_technical_skills", {})
@@ -82,8 +85,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     update_optimization_job(job_id, {
         "status": "Resume Enhancement",
         "match_count": bullets_matched_count,
-        "match_details": matches_by_bullet, # Contains keywords for bullets
-        "new_skills_section": final_technical_skills, # The new skills section structure
+        "match_details": matches_by_bullet, 
+        "new_skills_section": final_technical_skills, 
         "skills_selection_log": skill_selection_log
     })
 
@@ -91,13 +94,14 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     enhanced_resume_parsed = None
     modifications = []
 
-    logger.info(f"Job {job_id}: Initializing ResumeEnhancer...")
-    enhancer = ResumeEnhancer()
-    logger.info(f"Job {job_id}: Running resume enhancement process...")
-    enhanced_resume_parsed, modifications = enhancer.enhance_resume(
+    logger.info(f"Job {job_id}: Initializing ResumeEnhancer (sync init)...")
+    # ResumeEnhancer __init__ was already updated for async client
+    enhancer = ResumeEnhancer() 
+    logger.info(f"Job {job_id}: Running resume enhancement process (await)...")
+    enhanced_resume_parsed, modifications = await enhancer.enhance_resume(
         original_resume_parsed, 
         matches_by_bullet,
-        final_technical_skills=final_technical_skills # Pass the selected skills here
+        final_technical_skills=final_technical_skills 
     )
     logger.info(
         f"Job {job_id}: Resume enhancement complete. {len(modifications)} modifications made."
