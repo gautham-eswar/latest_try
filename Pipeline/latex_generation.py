@@ -458,6 +458,72 @@ def proactively_generate_pdf(user_id: str, enhanced_resume_id: str, enhanced_res
                 logger.warning(f"Failed to clean up local PDF {local_pdf_path} after exception: {e_remove}")
         return None
 
+def analyze_pdf_fonts(pdf_path: str) -> Dict[str, Any]:
+    """
+    Analyze PDF for font embedding and quality metrics.
+    
+    Args:
+        pdf_path: Path to the PDF file to analyze
+        
+    Returns:
+        Dictionary containing font analysis results
+    """
+    analysis = {
+        "fonts_embedded": False,
+        "font_details": [],
+        "pdf_info": {},
+        "quality_score": "unknown"
+    }
+    
+    try:
+        # Check font embedding with pdffonts
+        fonts_result = subprocess.run(
+            ["pdffonts", pdf_path], 
+            capture_output=True, 
+            text=True, 
+            check=False
+        )
+        
+        if fonts_result.returncode == 0:
+            font_lines = fonts_result.stdout.strip().split('\n')[2:]  # Skip header
+            analysis["font_details"] = font_lines
+            
+            # Check if fonts are embedded
+            embedded_count = 0
+            for line in font_lines:
+                if line and "yes" in line.lower():
+                    embedded_count += 1
+            
+            analysis["fonts_embedded"] = embedded_count > 0
+            
+        # Get PDF info
+        info_result = subprocess.run(
+            ["pdfinfo", pdf_path], 
+            capture_output=True, 
+            text=True, 
+            check=False
+        )
+        
+        if info_result.returncode == 0:
+            for line in info_result.stdout.splitlines():
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    analysis["pdf_info"][key.strip()] = value.strip()
+        
+        # Determine quality score
+        if analysis["fonts_embedded"]:
+            analysis["quality_score"] = "good"
+        else:
+            analysis["quality_score"] = "poor"
+            
+        logger.info(f"PDF font analysis completed for {pdf_path}")
+        return analysis
+        
+    except Exception as e:
+        logger.warning(f"Could not analyze PDF fonts for {pdf_path}: {e}")
+        analysis["error"] = str(e)
+        return analysis
+
 # --- Example Usage (for direct testing of this module) ---
 if __name__ == "__main__":
     # Create a dummy JSON data for testing

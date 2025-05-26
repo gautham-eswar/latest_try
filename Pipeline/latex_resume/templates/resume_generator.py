@@ -682,7 +682,10 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     # Construct the LaTeX document string
     preamble_parts = [
         f"\\documentclass[letterpaper,{font_size_pt}]{{article}}",
+        "\\usepackage[utf8]{inputenc}",      # Add explicit UTF-8 input encoding
         "\\usepackage[T1]{fontenc}",
+        "\\usepackage{lmodern}",             # Add Latin Modern fonts for better rendering
+        "\\usepackage{microtype}",           # Add microtypography for better text quality
         "\\usepackage{latexsym}",
         "\\usepackage{titlesec}",
         "\\usepackage{marvosym}",

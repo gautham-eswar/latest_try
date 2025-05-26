@@ -500,7 +500,10 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
     # LaTeX Preamble
     preamble_parts = [
         r"\documentclass[letterpaper,11pt]{article}",
+        r"\usepackage[utf8]{inputenc}",      # Add explicit UTF-8 input encoding
         r"\usepackage[T1]{fontenc}",
+        r"\usepackage{lmodern}",             # Add Latin Modern fonts for better rendering
+        r"\usepackage{microtype}",           # Add microtypography for better text quality
         r"\usepackage{latexsym}",
         r"\usepackage[empty]{fullpage}", 
         r"\usepackage{titlesec}",

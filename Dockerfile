@@ -23,7 +23,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     texlive-latex-base \
     texlive-fonts-recommended \
+    texlive-fonts-extra \
     texlive-latex-extra \
+    lmodern \
+    cm-super \
     poppler-utils \
     gcc \
     python3-dev \
