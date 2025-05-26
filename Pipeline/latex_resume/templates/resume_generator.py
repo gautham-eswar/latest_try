@@ -100,7 +100,7 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         return None
     
     name = fix_latex_special_chars(personal_info.get("name"))
-    email = personal_info.get("email")  # Raw email, will handle special chars in href
+    email = personal_info.get("email")  # Keep raw for href, but we need special display handling
     phone = fix_latex_special_chars(personal_info.get("phone"))
     
     # Get raw values for URLs, with a fallback for LinkedIn
@@ -120,29 +120,30 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     if phone:
         contact_parts.append(phone)
     if email:
-        email_display = email.replace("_", r"\_")
-        contact_parts.append(f"\\href{{mailto:{email}}}{{{email_display}}}")
+        # For emails: use raw email in href, but escape only underscores for display
+        # Use \url{} to prevent line breaking in emails
+        contact_parts.append(f"\\href{{mailto:{email}}}{{\\url{{{email}}}}}")
     
     if raw_linkedin:
-        linkedin_display = fix_latex_special_chars(raw_linkedin)
+        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
         linkedin_url = raw_linkedin # Use raw value for URL
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{{linkedin_display}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{\\url{{{raw_linkedin}}}}}")
     
     if raw_github:
-        github_display = fix_latex_special_chars(raw_github)
+        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
         github_url = raw_github # Use raw value for URL
         if not github_url.startswith("http"):
             github_url = f"https://{github_url}"
-        contact_parts.append(f"\\href{{{github_url}}}{{{github_display}}}")
+        contact_parts.append(f"\\href{{{github_url}}}{{\\url{{{raw_github}}}}}")
         
     if raw_website:
-        website_display = fix_latex_special_chars(raw_website)
+        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
         website_url = raw_website # Use raw value for URL
         if not website_url.startswith("http"): # Basic check for protocol
              website_url = f"http://{website_url}"
-        contact_parts.append(f"\\href{{{website_url}}}{{{website_display}}}")
+        contact_parts.append(f"\\href{{{website_url}}}{{\\url{{{raw_website}}}}}")
 
     # Add location to contact_parts if it exists
     if location:
