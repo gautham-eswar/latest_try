@@ -748,7 +748,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         r"}",
         r"\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}, itemsep=1pt, parsep=0pt, topsep=0pt]}",
         r"\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}",
-        r"\newcommand{\resumeItemListStart}{\begin{itemize}[itemsep=2pt, parsep=0pt, topsep=2pt]\sloppy}",
+        r"\newcommand{\resumeItemListStart}{\begin{itemize}[itemsep=2pt, parsep=0pt, topsep=2pt]}",
         r"\newcommand{\resumeItemListEnd}{\end{itemize}}"
     ])
 
