@@ -1,4 +1,3 @@
-
 import json
 import logging
 import os
@@ -72,13 +71,29 @@ def parse_and_upload_resume(file, user_id):
     resume_text = extract_text_from_file(Path(file_path))
     parsed_resume = parse_resume(resume_text)
 
-    # Upload resume to database
-    upload_resume({
+    # Generate LaTeX content for the parsed resume
+    latex_content = None
+    try:
+        from Pipeline.latex_resume.templates.resume_generator import generate_latex_content
+        latex_content = generate_latex_content(parsed_resume)
+        logger.info(f"Successfully generated LaTeX content ({len(latex_content)} characters) for resume_id: {resume_id}")
+    except Exception as latex_error:
+        logger.warning(f"Failed to generate LaTeX content for resume_id {resume_id}: {latex_error}")
+        # Continue without LaTeX content - it's not critical for the upload process
+
+    # Upload resume to database with LaTeX content
+    resume_data = {
         "id": resume_id,
         "user_id": user_id,
         "data": parsed_resume,
-        "file_name": file.filename, 
-    })
+        "file_name": file.filename,
+    }
+    
+    # Add LaTeX content if successfully generated
+    if latex_content:
+        resume_data["latex_content"] = latex_content
+
+    upload_resume(resume_data)
     
     return jsonify(
         {

@@ -11,6 +11,7 @@ from werkzeug.utils import secure_filename
 
 from Pipeline.latex_resume.templates.resume_generator import generate_latex_content, clear_api_cache_diagnostic
 from Services.storage import upload_pdf_to_supabase # Added for PDF upload
+from Services.database import get_db
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -362,7 +363,8 @@ def generate_resume_pdf(
 def proactively_generate_pdf(user_id: str, enhanced_resume_id: str, enhanced_resume_content: Dict[str, Any]) -> Optional[str]:
     """
     Proactively generates a PDF from enhanced resume content, saves it locally,
-    uploads it to Supabase Storage, and then cleans up the local file.
+    uploads it to Supabase Storage, stores the LaTeX content in the database,
+    and then cleans up the local file.
 
     Args:
         user_id: The ID of the user.
@@ -392,6 +394,27 @@ def proactively_generate_pdf(user_id: str, enhanced_resume_id: str, enhanced_res
     logger.info(f"Target temporary local path for proactive PDF: {local_pdf_path}")
 
     try:
+        # Generate LaTeX content first (before PDF generation)
+        logger.info(f"Generating LaTeX content for enhanced_resume_id: {enhanced_resume_id}")
+        latex_content = generate_latex_content(enhanced_resume_content)
+        logger.info(f"Successfully generated LaTeX content ({len(latex_content)} characters) for enhanced_resume_id: {enhanced_resume_id}")
+
+        # Store LaTeX content in database
+        try:
+            db = get_db()
+            update_response = db.table("resumes").update({
+                "latex_content": latex_content
+            }).eq("id", enhanced_resume_id).execute()
+            
+            if update_response.data:
+                logger.info(f"Successfully stored LaTeX content in database for enhanced_resume_id: {enhanced_resume_id}")
+            else:
+                logger.warning(f"Failed to update database with LaTeX content for enhanced_resume_id: {enhanced_resume_id}")
+        except Exception as db_error:
+            logger.error(f"Error storing LaTeX content in database for enhanced_resume_id {enhanced_resume_id}: {db_error}")
+            # Continue with PDF generation even if LaTeX storage fails
+
+        # Generate PDF as before
         pdf_path_generated, success = generate_resume_pdf(enhanced_resume_content, local_pdf_path)
 
         if pdf_path_generated and Path(pdf_path_generated).exists():
