@@ -494,6 +494,7 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
     if not involvement_list: return None
     content_lines = []
     for item in involvement_list:
+        responsibilities = None
         # Add type checking to handle cases where item might be a string instead of dict
         if isinstance(item, str):
             # If it's a string, treat it as organization name with no other details
@@ -516,7 +517,8 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
                     dates_str = start
             elif isinstance(date_val, str): # If it's a string, use it directly
                 dates_str = fix_latex_special_chars(date_val)
-            # If date_val is None or some other type, dates_str remains ""
+            
+            responsibilities = item.get("responsibilities")
         else:
             # Skip items that are neither string nor dict
             print(f"WARNING: Skipping involvement item of unexpected type {type(item)}: {item}", flush=True)
@@ -530,14 +532,11 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
         subheading_command = "    \\resumeSubheading{{{{" + position + "}}}}{{{{" + dates_str + "}}}}{{{{" + organization + "}}}}{{{{}}}}"
         content_lines.append(subheading_command)
 
-        # Only try to get responsibilities if item is a dict
-        if isinstance(item, dict):
-            responsibilities = item.get("responsibilities")
-            if responsibilities and isinstance(responsibilities, list):
-                content_lines.append(r"      \resumeItemListStart")
-                for resp in responsibilities:
-                    if resp: content_lines.append(f"        \\resumeItem{{{ fix_latex_special_chars(resp) }}}")
-                content_lines.append(r"      \resumeItemListEnd")
+        if responsibilities and isinstance(responsibilities, list):
+            content_lines.append(r"      \resumeItemListStart")
+            for resp in responsibilities:
+                if resp: content_lines.append(f"        \\resumeItem{{{ fix_latex_special_chars(resp) }}}")
+            content_lines.append(r"      \resumeItemListEnd")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Leadership \& Involvement}}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
