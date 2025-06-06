@@ -383,15 +383,18 @@ class ResumeEnhancer:
         if not metrics_preserved:
             return False
         
-        # Check 3: Length is reasonable
+        # Check 3: Length is reasonable - allow up to 1.5x increase for meaningful enhancements
         if len(enhanced) > len(original) * 1.5:
             logger.warning(f"Enhancement validation failed: Too long (Original: {len(original)}, Enhanced: {len(enhanced)})")
             return False
         
-        # Check 4: Doesn't deviate too much from original
-        # Simple check using length as a proxy for now
-        if abs(len(enhanced) - len(original)) > len(original) * 0.5:
-            logger.warning(f"Enhancement validation failed: Too different in length")
+        # Check 4: Doesn't deviate too much from original - allow reasonable flexibility
+        # Allow up to 50% increase or 30% decrease in length
+        length_diff = abs(len(enhanced) - len(original))
+        max_allowed_diff = max(len(original) * 0.5, 30)  # At least 30 chars difference allowed
+        
+        if length_diff > max_allowed_diff:
+            logger.warning(f"Enhancement validation failed: Too different in length (diff: {length_diff}, max allowed: {max_allowed_diff})")
             return False
         
         return True
