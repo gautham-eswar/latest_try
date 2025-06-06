@@ -494,23 +494,35 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
     if not involvement_list: return None
     content_lines = []
     for item in involvement_list:
-        organization = fix_latex_special_chars(item.get("organization"))
-        position = fix_latex_special_chars(item.get("position"))
-        if not organization and not position: continue
+        # Add type checking to handle cases where item might be a string instead of dict
+        if isinstance(item, str):
+            # If it's a string, treat it as organization name with no other details
+            organization = fix_latex_special_chars(item)
+            position = ""
+            dates_str = ""
+        elif isinstance(item, dict):
+            organization = fix_latex_special_chars(item.get("organization", ""))
+            position = fix_latex_special_chars(item.get("position", ""))
             
-        date_val = item.get("date") # Get raw date value
-        dates_str = ""
-        if isinstance(date_val, dict): # If it's a dictionary, process start/end
-            start = fix_latex_special_chars(date_val.get("start_date"))
-            end = fix_latex_special_chars(date_val.get("end_date"))
-            dates_str = f"{start} -- {end}" if start or end else ""
-            if end and end.lower() == 'present': 
-                dates_str = f"{start} -- Present"
-            elif not end and start: 
-                dates_str = start
-        elif isinstance(date_val, str): # If it's a string, use it directly
-            dates_str = fix_latex_special_chars(date_val)
-        # If date_val is None or some other type, dates_str remains ""
+            date_val = item.get("date") # Get raw date value
+            dates_str = ""
+            if isinstance(date_val, dict): # If it's a dictionary, process start/end
+                start = fix_latex_special_chars(date_val.get("start_date", ""))
+                end = fix_latex_special_chars(date_val.get("end_date", ""))
+                dates_str = f"{start} -- {end}" if start or end else ""
+                if end and end.lower() == 'present': 
+                    dates_str = f"{start} -- Present"
+                elif not end and start: 
+                    dates_str = start
+            elif isinstance(date_val, str): # If it's a string, use it directly
+                dates_str = fix_latex_special_chars(date_val)
+            # If date_val is None or some other type, dates_str remains ""
+        else:
+            # Skip items that are neither string nor dict
+            print(f"WARNING: Skipping involvement item of unexpected type {type(item)}: {item}", flush=True)
+            continue
+            
+        if not organization and not position: continue
             
         # Corrected resumeSubheading: Use {{}} for the missing 4th argument (location)
         # Organization is now the 3rd arg (like degree/title), position is 1st (like company/uni)
@@ -518,12 +530,14 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
         subheading_command = "    \\resumeSubheading{{{{" + position + "}}}}{{{{" + dates_str + "}}}}{{{{" + organization + "}}}}{{{{}}}}"
         content_lines.append(subheading_command)
 
-        responsibilities = item.get("responsibilities")
-        if responsibilities and isinstance(responsibilities, list):
-            content_lines.append(r"      \resumeItemListStart")
-            for resp in responsibilities:
-                if resp: content_lines.append(f"        \\resumeItem{{{ fix_latex_special_chars(resp) }}}")
-            content_lines.append(r"      \resumeItemListEnd")
+        # Only try to get responsibilities if item is a dict
+        if isinstance(item, dict):
+            responsibilities = item.get("responsibilities")
+            if responsibilities and isinstance(responsibilities, list):
+                content_lines.append(r"      \resumeItemListStart")
+                for resp in responsibilities:
+                    if resp: content_lines.append(f"        \\resumeItem{{{ fix_latex_special_chars(resp) }}}")
+                content_lines.append(r"      \resumeItemListEnd")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Leadership \& Involvement}}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
@@ -582,14 +596,16 @@ def validate_resume_data(data: Dict[str, Any]) -> Dict[str, Any]:
     cleaned_data = copy.deepcopy(data)
     
     # Define expected list sections and dict sections
-    list_sections = ['education', 'Education', 'experience', 'Experience', 'projects', 'Projects', 
-                     'languages', 'Languages', 'certifications', 'Certifications', 'awards', 'Awards',
-                     'involvement', 'Involvement', 'leadership', 'Leadership']
+    strict_dict_list_sections = ['education', 'Education', 'experience', 'Experience', 'projects', 'Projects', 
+                                'languages', 'Languages', 'certifications', 'Certifications', 'awards', 'Awards']
+    
+    # These sections can contain both strings and dictionaries
+    flexible_list_sections = ['involvement', 'Involvement', 'leadership', 'Leadership']
     
     dict_sections = ['skills', 'Skills', 'Personal Information', 'personal_information']
     
-    # Fix list sections - convert strings or non-lists to empty lists
-    for section_key in list_sections:
+    # Fix strict list sections - convert strings or non-lists to empty lists, ensure items are dicts
+    for section_key in strict_dict_list_sections:
         if section_key in cleaned_data:
             if not isinstance(cleaned_data[section_key], list):
                 print(f"DATA VALIDATION: Converting {section_key} from {type(cleaned_data[section_key])} to empty list", flush=True)
@@ -599,6 +615,22 @@ def validate_resume_data(data: Dict[str, Any]) -> Dict[str, Any]:
                 valid_items = []
                 for i, item in enumerate(cleaned_data[section_key]):
                     if isinstance(item, dict):
+                        valid_items.append(item)
+                    else:
+                        print(f"DATA VALIDATION: Removing invalid item from {section_key}[{i}]: {type(item)} - {item}", flush=True)
+                cleaned_data[section_key] = valid_items
+    
+    # Fix flexible list sections - allow strings and dictionaries
+    for section_key in flexible_list_sections:
+        if section_key in cleaned_data:
+            if not isinstance(cleaned_data[section_key], list):
+                print(f"DATA VALIDATION: Converting {section_key} from {type(cleaned_data[section_key])} to empty list", flush=True)
+                cleaned_data[section_key] = []
+            else:
+                # Allow both strings and dictionaries
+                valid_items = []
+                for i, item in enumerate(cleaned_data[section_key]):
+                    if isinstance(item, (dict, str)):
                         valid_items.append(item)
                     else:
                         print(f"DATA VALIDATION: Removing invalid item from {section_key}[{i}]: {type(item)} - {item}", flush=True)
