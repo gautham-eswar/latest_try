@@ -393,29 +393,44 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
     lines = ["\\section{Leadership \\& Involvement}", "  \\resumeSubHeadingListStart"] # Escape ampersand in section title
     
     for item in involvement_list: # Assuming schema-compliant list
-        organization = fix_latex_special_chars(item.get("organization"))
-        position = fix_latex_special_chars(item.get("position"))
-        
-        date_val = item.get("date") # Schema suggests 'date' (string) or 'dates' (dict)
-        dates_str = ""
-        if isinstance(date_val, dict):
-            start = fix_latex_special_chars(date_val.get("start_date"))
-            end = fix_latex_special_chars(date_val.get("end_date"))
-            dates_str = f"{start} -- {end}" if start or end else ""
-            if end and end.lower() == 'present': dates_str = f"{start} -- Present"
-            elif not end and start : dates_str = start
-        elif isinstance(date_val, str):
-            dates_str = fix_latex_special_chars(date_val)
+        # Add type checking to handle cases where item might be a string instead of dict
+        if isinstance(item, str):
+            # If it's a string, treat it as organization name with no other details
+            organization = fix_latex_special_chars(item)
+            position = ""
+            dates_str = ""
+            responsibilities = None
+        elif isinstance(item, dict):
+            organization = fix_latex_special_chars(item.get("organization", ""))
+            position = fix_latex_special_chars(item.get("position", ""))
+            
+            date_val = item.get("date") # Schema suggests 'date' (string) or 'dates' (dict)
+            dates_str = ""
+            if isinstance(date_val, dict):
+                start = fix_latex_special_chars(date_val.get("start_date", ""))
+                end = fix_latex_special_chars(date_val.get("end_date", ""))
+                dates_str = f"{start} -- {end}" if start or end else ""
+                if end and end.lower() == 'present': dates_str = f"{start} -- Present"
+                elif not end and start : dates_str = start
+            elif isinstance(date_val, str):
+                dates_str = fix_latex_special_chars(date_val)
+            
+            responsibilities = item.get("responsibilities")
+        else:
+            # Skip items that are neither string nor dict
+            print(f"WARNING: Skipping involvement item of unexpected type {type(item)}: {item}", flush=True)
+            continue
+            
+        if not organization and not position: continue
 
         lines.append(f"    \\resumeSubheading")
         lines.append(f"      {{{position}}}{{{dates_str}}}")
         lines.append(f"      {{{organization}}}{{}}")
 
-        responsibilities = item.get("responsibilities")
         if responsibilities and isinstance(responsibilities, list):
             lines.append(r"      \resumeItemListStart")
             for resp in responsibilities:
-                lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
+                if resp: lines.append(f"        \\resumeItem{{{fix_latex_special_chars(resp)}}}")
             lines.append(r"      \resumeItemListEnd")
             
     lines.append("  \\resumeSubHeadingListEnd")
