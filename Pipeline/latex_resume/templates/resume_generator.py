@@ -129,7 +129,7 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         linkedin_url = raw_linkedin # Use raw value for URL
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{\\url{{{raw_linkedin}}}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{Linkedin: \\url{{{raw_linkedin}}}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking
@@ -198,9 +198,11 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
         end_date_raw = edu.get("dates", {}).get("end_date", "") if isinstance(edu.get("dates"), dict) else edu.get("end_date", "")
         start_date = fix_latex_special_chars(start_date_raw)
         end_date = fix_latex_special_chars(end_date_raw)
-        dates_str = f"{start_date} -- {end_date}" if start_date or end_date else ""
-        if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present"
-        elif not end_date and start_date: dates_str = start_date
+        dates_str = ""
+        if start_date and end_date:
+            dates_str = f"{start_date} -- {end_date}"
+        elif start_date:
+            dates_str = start_date
 
         if uni and degree_str:
             content_lines.append(f"    \\resumeSubheading{{{uni}}}{{{dates_str}}}{{{degree_str}}}{{{loc_str}}}")
@@ -259,32 +261,27 @@ def _generate_experience_section(experience_list: Optional[List[Dict[str, Any]]]
     content_lines = [f"\\section{{{section_title}}}"]
     content_lines.append("  \\resumeSubHeadingListStart")
 
-    for experience in experience_list:
-        # Safely extract required fields (with fallbacks to empty strings)
-        company = fix_latex_special_chars(experience.get("company", ""))
-        position = fix_latex_special_chars(experience.get("position") or experience.get("title", ""))
-        
-        # Get dates
-        dates = experience.get("dates", {})
-        if isinstance(dates, dict):
-            start_date = fix_latex_special_chars(dates.get("start_date", ""))
-            end_date = fix_latex_special_chars(dates.get("end_date", ""))
-            dates_str = f"{start_date} -- {end_date}" if start_date and end_date else ""
-            if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present"
-            elif not end_date and start_date: dates_str = start_date
-        else:
-            dates_str = fix_latex_special_chars(str(dates))
+    for exp in experience_list:
+        company = fix_latex_special_chars(exp.get("company"))
+        position = fix_latex_special_chars(exp.get("position") or exp.get("title"))
+        loc_str = _parse_location_dict(exp.get("location"))
 
-        # Get location
-        raw_loc = experience.get("location")
-        loc_str = _parse_location_dict(raw_loc)
-        
-        if company and position: 
-            # Using string concatenation to avoid f-string linter issues
-            line = "    \\resumeSubheading{{{{" + position + "}}}}{{{{" + dates_str + "}}}}{{{{" + company + "}}}}{{{{" + loc_str + "}}}}"
-            content_lines.append(line)
+        date_val = exp.get("dates") or exp.get("date")
+        dates_str = ""
+        if isinstance(date_val, dict):
+            start = fix_latex_special_chars(date_val.get("start_date"))
+            end = fix_latex_special_chars(date_val.get("end_date"))
+            if start and end:
+                dates_str = f"{start} -- {end}"
+            elif start:
+                dates_str = start
+        elif isinstance(date_val, str):
+            dates_str = fix_latex_special_chars(date_val)
+
+        if company and position:
+            content_lines.append(f"    \\resumeSubheading{{{company}}}{{{dates_str}}}{{{position}}}{{{loc_str}}}")
             
-            responsibilities = experience.get("responsibilities/achievements") or experience.get("responsibilities") or experience.get("achievements") or []
+            responsibilities = exp.get("responsibilities/achievements") or exp.get("responsibilities") or exp.get("achievements") or []
             if responsibilities:
                 content_lines.append("      \\resumeItemListStart")
                 for resp in responsibilities:
@@ -322,10 +319,13 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tec
         start_date = fix_latex_special_chars(start_date_raw)
         end_date = fix_latex_special_chars(end_date_raw)
         
-        dates_str = f"{start_date} -- {end_date}" if start_date or end_date else start_date or end_date or ""
-        if end_date and end_date.lower() == 'present': dates_str = f"{start_date} -- Present" if start_date else "Present"
-        elif start_date and not end_date: dates_str = start_date
-        elif end_date and not start_date: dates_str = end_date
+        dates_str = ""
+        if start_date and end_date:
+            dates_str = f"{start_date} -- {end_date}"
+        elif start_date:
+            dates_str = start_date
+        elif end_date:
+            dates_str = end_date
 
         tech_used_list = proj.get("technologies_used") or proj.get("technologies")
         tech_str = ""
@@ -454,11 +454,10 @@ def _generate_certifications_section(cert_list: Optional[List[Dict[str, Any]]]) 
     if not cert_list: return None
     content_lines = []
     for cert in cert_list:
-        name = fix_latex_special_chars(cert.get("certification"))
-        if not name: continue # Skip if no name
+        name = fix_latex_special_chars(cert.get("certification") or cert.get("title"))
         institution = fix_latex_special_chars(cert.get("institution"))
         date = fix_latex_special_chars(cert.get("date"))
-        content_lines.append(f"    \\resumeSubheading{{{{ {name} }}}}{{{{ {date} }}}}{{{{ {institution} }}}}{{{{}}}}")
+        content_lines.append(f"    \\resumeSubheading{{{name}}}{{{date}}}{{{institution}}}{{}}")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Certifications}}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
@@ -470,19 +469,9 @@ def _generate_awards_section(awards_list: Optional[List[Dict[str, Any]]]) -> Opt
     content_lines = []
     for award in awards_list:
         title = fix_latex_special_chars(award.get("title"))
-        if not title: continue
         issuer = fix_latex_special_chars(award.get("issuer"))
         date = fix_latex_special_chars(award.get("date"))
-        description = fix_latex_special_chars(award.get("description"))
-        # Using string concatenation to avoid f-string linter issue for \resumeSubheading
-        line = "    \\resumeSubheading{{{{" + title + "}}}}{{{{" + date + "}}}}{{{{" + issuer + "}}}}{{{{}}}}"
-        content_lines.append(line)
-        if description:
-            content_lines.extend([
-                r"      \resumeItemListStart",
-                f"        \\resumeItem{{{description}}}",
-                r"      \resumeItemListEnd"
-            ])
+        content_lines.append(f"    \\resumeSubheading{{{title}}}{{{date}}}{{{issuer}}}{{}}")
     if not content_lines: return None
     final_latex_parts = [r"\section{{Awards}}", r"  \resumeSubHeadingListStart"]
     final_latex_parts.extend(content_lines)
@@ -510,10 +499,9 @@ def _generate_involvement_section(involvement_list: Optional[List[Dict[str, Any]
             if isinstance(date_val, dict): # If it's a dictionary, process start/end
                 start = fix_latex_special_chars(date_val.get("start_date", ""))
                 end = fix_latex_special_chars(date_val.get("end_date", ""))
-                dates_str = f"{start} -- {end}" if start or end else ""
-                if end and end.lower() == 'present': 
-                    dates_str = f"{start} -- Present"
-                elif not end and start: 
+                if start and end:
+                    dates_str = f"{start} -- {end}"
+                elif start:
                     dates_str = start
             elif isinstance(date_val, str): # If it's a string, use it directly
                 dates_str = fix_latex_special_chars(date_val)
@@ -557,10 +545,9 @@ def _generate_misc_leadership_section(misc_data: Optional[Dict[str, Any]]) -> Op
         if isinstance(dates_val, dict): # If it's a dictionary, process start/end
             start_date = fix_latex_special_chars(dates_val.get("start_date"))
             end_date = fix_latex_special_chars(dates_val.get("end_date"))
-            dates_str = f"{{start_date}} -- {{end_date}}" if start_date or end_date else ""
-            if end_date and end_date.lower() == 'present': 
-                dates_str = f"{{start_date}} -- Present"
-            elif not end_date and start_date: 
+            if start_date and end_date:
+                dates_str = f"{start_date} -- {end_date}"
+            elif start_date:
                 dates_str = start_date
         elif isinstance(dates_val, str): # If it's a string, use it directly
             dates_str = fix_latex_special_chars(dates_val)
