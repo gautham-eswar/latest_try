@@ -49,6 +49,11 @@ def setup_logging():
     # Get the root logger. All other loggers will inherit this configuration.
     root_logger = logging.getLogger()
 
+    # If the in-memory handler is already attached, avoid reconfiguring
+    for handler in root_logger.handlers:
+        if isinstance(handler, MemoryLogHandler):
+            return
+
     # Determine if running under Gunicorn by checking environment or process
     # Gunicorn sets the 'gunicorn' logger, which is a reliable check.
     is_gunicorn = "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or 'gunicorn.error' in logging.Logger.manager.loggerDict

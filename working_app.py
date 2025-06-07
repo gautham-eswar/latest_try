@@ -70,7 +70,9 @@ def handle_missing_api_key():
 def create_app():
     """Create and configure the Flask application."""
     global app, diagnostic_system
-    
+
+    # Ensure logging is configured in case Gunicorn reset it
+    Services.logging_config.setup_logging()
     # Create Flask app
     app = Flask(__name__, template_folder="templates", static_folder="static")
     
