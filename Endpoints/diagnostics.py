@@ -12,9 +12,9 @@ import psutil
 from Services.utils import START_TIME, format_size, format_uptime, get_component_status
 
 # Basic logging
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(levelname)s - %(message)s"
+# )
 logger = logging.getLogger(__name__)
 
 

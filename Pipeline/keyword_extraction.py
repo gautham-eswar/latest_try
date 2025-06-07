@@ -1,17 +1,14 @@
 import json
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from Services.openai_interface import call_openai_api
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
 
 
 def extract_keywords(

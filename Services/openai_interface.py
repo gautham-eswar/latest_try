@@ -1,18 +1,15 @@
-
-
 import logging
 import os
 import sys
 import time
+import httpx
 
 from dotenv import load_dotenv
 import requests
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.WARNING, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # OpenAI API settings
@@ -81,3 +78,6 @@ def call_openai_api(system_prompt, user_prompt, max_retries=3):
     
     # This should not be reached due to the raise in the loop, but just in case
     raise ValueError("Failed to get a response from OpenAI API")
+
+# Cache for OpenAI API responses
+# ... existing code ...

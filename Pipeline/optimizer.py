@@ -20,10 +20,7 @@ from Pipeline.embeddings import SemanticMatcher
 from Pipeline.enhancer import ResumeEnhancer
 from Pipeline.latex_generation import proactively_generate_pdf # Added for proactive PDF generation
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 diagnostic_system = get_diagnostic_system()
@@ -31,34 +28,36 @@ diagnostic_system = get_diagnostic_system()
 
 def enhance_resume(job_id, resume_id, user_id, job_description_text):
 
-    logger.info(f"Starting resume enhancement: User ID: {user_id} \
-                Resume ID: {resume_id} Job Description: {job_description_text[:40]}")
+    logger.info(f"--- Pipeline Start: Enhance Resume for Job {job_id} ---")
+    logger.info(f"Received User ID: {user_id}, Resume ID: {resume_id}")
 
     # Initialize Supabase client
     db = get_db()
 
     
-    # Get the original parsed resume
+    # --- Stage: Fetching Original Resume ---
+    logger.info(f"--- Stage 1/5: Fetching Original Resume ---")
     original_resume_info = fetch_resume_data(resume_id, user_id)
     original_resume_parsed = original_resume_info["data"]
+    logger.info(f"--- Stage 1/5: Completed ---")
 
-    # Extract Keywords from Job description
+
+    # --- Stage: Keyword Extraction ---
+    logger.info(f"--- Stage 2/5: Extracting Keywords ---")
     keywords_data = extract_keywords(job_description_text)
     kw_count = len(keywords_data.get("keywords", []))
-    logger.info(
-        f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords."
-    )
+    logger.info(f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords.")
     update_optimization_job(job_id, {
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
     })
+    logger.info(f"--- Stage 2/5: Completed ---")
 
-    # --- Semantic Matching ---
+    # --- Stage: Semantic Matching ---
+    logger.info(f"--- Stage 3/5: Performing Semantic Matching ---")
     match_results = None
     matches_by_bullet = {}
-    logger.info(f"Job {job_id}: Initializing SemanticMatcher...")
     matcher = SemanticMatcher()
-    logger.info(f"Job {job_id}: Running semantic matching process...")
     match_results = matcher.process_keywords_and_resume(
         keywords_data, 
         original_resume_parsed,
@@ -86,8 +85,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         "new_skills_section": final_technical_skills, # The new skills section structure
         "skills_selection_log": skill_selection_log
     })
+    logger.info(f"--- Stage 3/5: Completed ---")
 
-    # --- Resume Enhancement ---
+    # --- Stage: Resume Enhancement ---
+    logger.info(f"--- Stage 4/5: Enhancing Resume Content ---")
     enhanced_resume_parsed = None
     modifications = []
 
@@ -106,8 +107,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         "status": "Enhanced resume Upload",
         "modifications": modifications,
     })
+    logger.info(f"--- Stage 4/5: Completed ---")
 
-    # --- Save Enhanced Resume & Analysis (to Supabase) ---
+    # --- Stage: Save Enhanced Resume & Analysis ---
+    logger.info(f"--- Stage 5/5: Saving Enhanced Resume to Database ---")
     logger.info(
         f"Attempting to save enhanced resume in Supabase table   ..."
     )
@@ -124,8 +127,11 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         "modifications": modifications,
         "enhanced_resume_id": enhanced_resume_id
     })
+    logger.info(f"--- Stage 5/5: Completed ---")
     
-    # --- Proactive PDF Generation and Upload ---
+    # --- Post-Processing: Proactive PDF Generation ---
+    logger.info(f"--- Post-Processing: Starting Proactive PDF Generation ---")
+    
     logger.info(f"Job {job_id}: Starting proactive PDF generation and upload for enhanced_resume_id: {enhanced_resume_id}")
     # 'enhanced_resume_parsed' holds the actual content needed for PDF generation.
     # 'user_id' and 'enhanced_resume_id' are available in this scope.
@@ -151,9 +157,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     else:
         logger.warning(f"Job {job_id}: Proactive PDF generation/upload failed for enhanced_resume_id: {enhanced_resume_id}")
 
+    logger.info(f"--- Post-Processing: Completed ---")
 
     # --- Return Success Response ---
-    logger.info(f"Job {job_id}: Optimization completed successfully (including proactive PDF attempt).")
+    logger.info(f"--- Pipeline End: Enhancement for Job {job_id} Completed Successfully ---")
     return jsonify(
         {
             "status": "success",

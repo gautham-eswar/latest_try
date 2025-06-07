@@ -8,9 +8,9 @@ from Services.diagnostic_system import get_diagnostic_system
 from Services.utils import get_component_status, get_uptime
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(levelname)s - %(message)s"
+# )
 logger = logging.getLogger(__name__)
 
 diagnostic_system = get_diagnostic_system()

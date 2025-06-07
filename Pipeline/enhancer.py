@@ -12,6 +12,8 @@ import copy
 import re
 from typing import Dict, List, Any, Optional, Tuple, Set
 import httpx
+import traceback
+from .embeddings import get_embedding_model
 
 # Import OpenAI
 try:
@@ -20,11 +22,11 @@ except ImportError:
     raise ImportError("OpenAI Python package is required. Install with: pip install openai")
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s - %(message)s'
-)
-logger = logging.getLogger("resume_enhancer")
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# )
+logger = logging.getLogger(__name__)
 
 
 class ResumeEnhancer:

@@ -12,9 +12,9 @@ from Services.utils import format_size, get_uptime
 
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(levelname)s - %(message)s"
+# )
 logger = logging.getLogger(__name__)
 
 

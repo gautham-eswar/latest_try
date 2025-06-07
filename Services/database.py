@@ -1,15 +1,12 @@
-
 import datetime
 import logging
 import os
 import uuid
 from supabase import create_client, Client  # Import Supabase client
+import supabase
+from typing import Dict, Any, Optional
 
-
-# Configure logging
-logging.basicConfig(
-    level=logging.WARNING, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 

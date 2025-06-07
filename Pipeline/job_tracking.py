@@ -1,16 +1,12 @@
-
-
 import logging
 import uuid
+import time
 
 from supabase import Client
 
 from Services.database import get_db
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 db = get_db()
 

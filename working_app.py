@@ -16,7 +16,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 
-# Import the advanced modules
+# Import the centralized logging configuration FIRST
+import Services.logging_config
+
 from Endpoints.diagnostics import diagnostics_page
 from Endpoints.health import health_page
 from Endpoints.status import status_page
@@ -26,60 +28,17 @@ from Pipeline.resume_uploader import parse_and_upload_resume
 from Pipeline.optimizer import enhance_resume
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
 
-
 from Services.database import get_db
 from Services.diagnostic_system import get_diagnostic_system
 from Services.errors import error_response
+from Services.logging_config import get_log_buffer
 
 
 # Load environment variables
 load_dotenv()
 
-# Create in-memory log buffer
-log_buffer = deque(maxlen=1000)  # Keep last 1000 log entries
-
-class MemoryLogHandler(logging.Handler):
-    """Custom log handler that stores logs in memory"""
-    def emit(self, record):
-        try:
-            log_entry = {
-                'timestamp': datetime.fromtimestamp(record.created).isoformat(),
-                'level': record.levelname,
-                'message': self.format(record),
-                'module': record.module,
-                'function': record.funcName,
-                'line': record.lineno
-            }
-            log_buffer.append(log_entry)
-        except Exception:
-            pass  # Don't let logging errors crash the app
-
-# Configure logging for Gunicorn compatibility
-# Get the root logger. All other loggers in the application will inherit this configuration.
-root_logger = logging.getLogger()
-
-if __name__ != '__main__':
-    # When running under Gunicorn, inherit its handlers and level.
-    gunicorn_logger = logging.getLogger('gunicorn.error')
-    root_logger.handlers = gunicorn_logger.handlers
-    root_logger.setLevel(gunicorn_logger.level)
-else:
-    # For local development, configure a basic console logger.
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
-
-# Add our custom in-memory handler to the root logger.
-# This ensures it captures logs from ALL modules.
-memory_handler = MemoryLogHandler()
-memory_handler.setFormatter(logging.Formatter('%(message)s'))
-root_logger.addHandler(memory_handler)
-
-# Ensure the root logger's level is at least INFO to capture everything.
-root_logger.setLevel(logging.INFO)
-
-# Get a specific logger for this file, which will now use the root config.
+# Get a logger for this file. The configuration is already set by the import.
 logger = logging.getLogger(__name__)
-
-logger.info("=== Resume Optimizer App is starting up (Root logger configured) ===")
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
@@ -329,6 +288,7 @@ def create_app():
     def view_logs():
         """View recent application logs."""
         try:
+            log_buffer = get_log_buffer()
             logs = list(log_buffer)
             return jsonify({
                 "status": "success",
@@ -347,6 +307,7 @@ def create_app():
     def view_logs_live():
         """View recent logs with auto-refresh HTML interface."""
         try:
+            log_buffer = get_log_buffer()
             logs = list(log_buffer)
             recent_logs = logs[-50:]  # Last 50 logs
             

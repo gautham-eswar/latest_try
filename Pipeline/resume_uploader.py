@@ -16,10 +16,7 @@ from werkzeug.utils import secure_filename
 from Services.database import get_db
 from Services.openai_interface import call_openai_api
 
-
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 db = get_db()
 
@@ -53,6 +50,7 @@ def upload_resume(resume_row):
 
 def parse_and_upload_resume(file, user_id):
 
+    logger.info(f"--- Stage 1/3: Starting Resume File Processing ---")
     # Generate a unique ID for the resume
     resume_id = generate_resume_id()
 
@@ -63,15 +61,20 @@ def parse_and_upload_resume(file, user_id):
                         {', '.join(ALLOWED_EXTENSIONS)}")
     
     # Save file temporarily
+    logger.info(f"Saving temporary file for resume_id: {resume_id}")
     temp_filename = secure_filename(f"{resume_id}.{file_ext}")
     file_path = os.path.join(UPLOAD_FOLDER, temp_filename)
     file.save(file_path)
+    logger.info(f"--- Stage 1/3: Completed ---")
 
     # Parse the resume
+    logger.info(f"--- Stage 2/3: Parsing Resume Text ---")
     resume_text = extract_text_from_file(Path(file_path))
     parsed_resume = parse_resume(resume_text)
+    logger.info(f"--- Stage 2/3: Completed ---")
 
-    # Upload resume to database 
+    # Upload resume to database
+    logger.info(f"--- Stage 3/3: Uploading Parsed Resume to Database ---")
     resume_data = {
         "id": resume_id,
         "user_id": user_id,
@@ -80,18 +83,19 @@ def parse_and_upload_resume(file, user_id):
     }
 
     upload_resume(resume_data)
+    logger.info(f"--- Stage 3/3: Completed ---")
     
-    return jsonify(
-        {
+    # This function will be modified to return data internally
+    # instead of a JSON response when integrated into the new /api/process endpoint.
+    return {
         "status": "success",
         "message": "Resume uploaded and parsed successfully",
-            "data": {
-                "resume_id": resume_id,
-                "file_name": file.filename,
-                "parsed_resume": parsed_resume
-                },
-        }
-    )
+        "data": {
+            "resume_id": resume_id,
+            "file_name": file.filename,
+            "parsed_resume": parsed_resume
+        },
+    }
 
 def extract_text_from_file(file_path: Path) -> str:
     """Extract text from TXT, PDF, and DOCX files."""
@@ -156,6 +160,7 @@ def extract_text_from_file(file_path: Path) -> str:
 
 def parse_resume(resume_text):
     """Parse resume text into structured data"""
+    logger.info("Parsing resume text with OpenAI...")
     system_prompt = "You are a resume parsing assistant. Extract structured information from resumes."
         # Inside parse_resume function
     # --- Start Replacement for user_prompt ---
@@ -163,6 +168,7 @@ def parse_resume(resume_text):
         user_prompt = file.read().replace("@resume_text", resume_text)
     
     result = call_openai_api(system_prompt, user_prompt)
+    logger.info("Received parsing result from OpenAI.")
 
     
     # Extract JSON from the result (might be wrapped in markdown code blocks)
@@ -173,4 +179,6 @@ def parse_resume(resume_text):
         return json.loads(structured_data)
     except json.JSONDecodeError as e:
         logger.error(f"Error parsing JSON from OpenAI: {e}")
-        raise ValueError("Failed to parse structured data from resume")
+        # Add more context to the error
+        logger.debug(f"OpenAI raw output that failed to parse:\n{result}")
+        raise ValueError("Failed to parse structured data from resume. The format from the AI was invalid.")

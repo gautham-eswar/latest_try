@@ -4,10 +4,8 @@ import os
 from pathlib import Path
 import time
 import uuid
-
-from flask import Response, jsonify
-from postgrest import APIError as PostgrestAPIError  # Import Supabase error type
-from supabase import Client
+import httpx
+from supabase import create_client, Client
 from werkzeug.utils import secure_filename
 
 from Pipeline.latex_generation import generate_latex_resume, generate_resume_pdf
@@ -21,9 +19,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "upload
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output")
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 def get_file_ext(file):

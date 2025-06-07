@@ -20,12 +20,8 @@ from Pipeline.keyword_extraction import extract_keywords
 from Pipeline.embeddings import SemanticMatcher
 from Pipeline.enhancer import ResumeEnhancer
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s - %(message)s'
-)
-logger = logging.getLogger('diagnostic_system')
+# logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 def log_openai_dependencies():
     """Log detailed OpenAI dependency information for debugging."""

@@ -1,55 +1,127 @@
-# Lovable Prompt: Resume Optimizer Frontend Functionality Fix
+# Lovable Prompt:  Seamless Resume Optimizer Frontend & Backend Specification
 
-**Project Goal:** Create a functional and seamless user interface for the Resume Optimizer application. The backend API endpoints are mostly defined, but the current frontend implementation has incorrect functionality.
+**Project Goal:** Define the precise frontend and backend interactions for a highly responsive and intuitive Resume Optimizer application. The core principle is a single user action ("Make it Better") that triggers the entire enhancement pipeline, from upload to comparison, providing clear user feedback throughout the process.
 
-**Constraint:** Do NOT change the existing visual theme, colors, fonts, or overall aesthetic style. Focus solely on implementing the correct workflow, data flow, and API connections.
+**Constraint:** The existing visual theme (colors, fonts, etc.) must be maintained. This document focuses exclusively on functionality, data flow, and API contracts to fix the application's workflow.
 
-**Core Workflow:**
+---
 
-The application allows users to upload their resume, provide a job description, and receive an optimized version of their resume tailored to the job description, along with an analysis of keyword matching.
+## Part 1: The Core "Make it Better" Workflow
 
-1.  **Home/Upload View:**
-    *   **UI Elements:**
-        *   A clear file upload component (accepts `.pdf`, `.docx`, `.txt`).
-        *   A text area for pasting the job description.
-        *   An "Optimize Resume" button.
-        *   Display area for status messages/errors.
-        *   Display area for results (appears after optimization).
-    *   **Functionality:**
-        *   **Resume Upload:** When a user selects a file, **immediately** upload it to the backend via a **POST** request to `/api/upload`.
-            *   **API Call:** `POST /api/upload` (Method **MUST** be `POST`, using `multipart/form-data` content type with the file).
-            *   **Backend Action:** Saves the file, extracts text, parses with OpenAI, saves parsed JSON to Supabase `resumes` table.
-            *   **API Response:** JSON containing `{ status: "success", resume_id: "...", data: {parsed_resume_json} }`.
-            *   **Frontend Action:** Store the returned `resume_id`. Show a success message (e.g., "Resume uploaded and parsed."). Optionally display the parsed resume sections (contact, experience, etc.) to the user for confirmation. Handle potential upload/parsing errors returned by the API.
-        *   **Job Description Input:** User pastes the full job description into the text area.
-        *   **Optimization Trigger:** When the user clicks "Optimize Resume" (this button should only be active *after* a resume has been successfully uploaded and its `resume_id` received):
-            *   **Frontend Action:** Show a loading indicator. Send the stored `resume_id` and the raw text from the job description text area to the backend.
-            *   **API Call:** `POST /api/optimize`
-            *   **Request Body:** JSON `{ "resume_id": "...", "job_description": { "description": "..." } }` (Note: backend might need adjustment to expect raw text directly or structured description). *Backend currently expects `job_description` as an object, let's stick to that for now.*
-            *   **Backend Action (Intended Advanced Workflow):**
-                1.  Load parsed resume using `resume_id` (from local file or Supabase).
-                2.  Extract keywords from `job_description.description` (using advanced keyword extraction).
-                3.  Use `SemanticMatcher` to generate embeddings, deduplicate keywords, and match keywords to resume bullets.
-                4.  Use `ResumeEnhancer` to rewrite bullets incorporating matched keywords.
-                5.  Save the enhanced resume data (locally or in Supabase `enhanced_resumes` table).
-                6.  Save match/analysis data (locally or in Supabase `matches` table).
-            *   **API Response:** JSON containing `{ status: "success", resume_id: "...", data: {enhanced_resume_json}, analysis: {match_details} }`. Handle potential errors.
-            *   **Frontend Action:** Hide loading indicator. Process the response and display the results (see step 2).
+This is the central user journey. It begins with the user on the main page and ends with them seeing a side-by-side comparison of their original and enhanced resume.
 
-2.  **Results View (Displayed on the same page after optimization):**
-    *   **UI Elements:**
-        *   Side-by-side comparison of original vs. enhanced resume sections (especially "Experience"). Clearly highlight the changes/added keywords in the enhanced version.
-        *   A summary section displaying match analysis (e.g., % keyword match, list of matched keywords, list of missing keywords - based on the `analysis` object from the API response).
-        *   Download buttons (e.g., "Download PDF", "Download DOCX" - potentially using LaTeX backend conversion).
-    *   **Functionality:**
-        *   **Display:** Render the `data` (enhanced resume) and `analysis` results clearly. Use visual cues (like background highlighting) for changed text in the side-by-side view. **Conditionally render sections:** If parts of the `data` (e.g., specific resume sections) or `analysis` (e.g., no matches found) are empty or missing, do not show empty placeholder containers for those sections. Display a simple message like "No matching keywords found" or "No enhancements made to this section" if appropriate.
-        *   **Download:** When a download button is clicked (e.g., "Download PDF"):
-            *   **API Call:** `GET /api/download/{resume_id}/pdf` (replace `{resume_id}` with the stored ID, and `pdf` with the requested format - `json`, `pdf`, `latex`).
-            *   **Backend Action:** Retrieves the enhanced resume data, converts it to the requested format (potentially involves LaTeX for PDF).
-            *   **API Response:** The file content with appropriate `Content-Type` and `Content-Disposition` headers.
-            *   **Frontend Action:** Trigger the browser's file download mechanism with the received file.
+### Step 1: The User Interface (Home View)
 
-**Data Persistence (Backend - Context for Frontend):**
+The user interacts with a simple interface containing:
+- A **file input** for their resume (`.pdf`, `.docx`, `.txt`).
+- A **textarea** for the job description.
+- A single **"Make it Better"** button, which is the primary call to action.
 
-*   The backend ideally uses Supabase to store user data, resumes, job descriptions, keywords, and results. Key tables might include: `users`, `resumes` (original parsed), `job_descriptions`, `keywords`, `enhanced_resumes`, `matches`.
-*   The frontend primarily interacts with the backend via `resume_id`. It does **not** need to interact directly with Supabase. It just needs to hold onto the `
+### Step 2: The "Make it Better" On-Click Event
+
+When the user clicks the "Make it Better" button, the frontend executes the following logic:
+
+1.  **Validation:**
+    *   Check that a file has been selected in the file input.
+    *   Check that the job description textarea is not empty.
+    *   If either check fails, show a gentle, non-intrusive error message (e.g., a temporary red border on the empty field) and do not proceed.
+
+2.  **Initiate Loading State:**
+    *   Immediately display a **full-page, non-interactive loading overlay**. This assures the user that the system is working.
+
+3.  **Prepare the Data:**
+    *   Create a `FormData` object. This is essential for sending a file and text data together.
+    *   Append the user's resume file: `formData.append('resume_file', selectedFile);`
+    *   Append the job description text: `formData.append('job_description', jobDescriptionText);`
+    *   Append the user ID (if available): `formData.append('user_id', userId);`
+
+4.  **Execute the API Call:**
+    *   Make a single `POST` request to the unified backend endpoint within a `try...catch` block to handle all outcomes.
+
+### Step 3: The Unified API Endpoint (`/api/process`)
+
+This is the new, all-in-one endpoint that the backend must expose. It replaces the separate upload and optimize calls.
+
+- **Endpoint:** `POST /api/process`
+- **Request Type:** `multipart/form-data` (handled automatically by the browser when sending `FormData`).
+
+#### Backend Logic for `/api/process`:
+
+The backend must execute these steps sequentially upon receiving a request:
+
+1.  **Receive and Validate:** Get the `resume_file`, `job_description`, and `user_id` from the multipart request. If any are missing, return a `400 Bad Request` error immediately.
+
+2.  **Upload & Parse Resume (Internal Step A):**
+    *   Perform the entire resume upload and parsing logic that was previously in the `/api/upload` endpoint.
+    *   This includes saving the raw file, extracting its text, parsing the text into a structured JSON format, and saving that structured data to the database (e.g., in a `resumes` table). This step yields the `original_resume_id` and the `parsed_resume_json`.
+
+3.  **Enhance Resume (Internal Step B):**
+    *   Take the `parsed_resume_json` from the previous step and the `job_description` text from the request.
+    *   Perform the entire optimization logic that was previously in the `/api/optimize` endpoint.
+    *   This includes keyword extraction, semantic matching, content enhancement, and saving the final enhanced resume to the database (e.g., in an `enhanced_resumes` table), yielding the `enhanced_resume_id` and `analysis` data.
+
+4.  **Return the Final Response:**
+    *   **On Success:** If all internal steps complete, return a `200 OK` status with the consolidated results.
+    *   **On Failure:** If any internal step fails (e.g., file parsing error, enhancement error), the entire operation fails. Return a single, clear error response (`4xx` or `5xx`) with a descriptive message.
+
+#### API Response Contracts:
+
+-   **Success Response (`200 OK`):**
+    ```json
+    {
+      "status": "success",
+      "message": "Resume processed and optimized successfully.",
+      "data": {
+        "job_id": "...",
+        "original_resume_id": "...",
+        "enhanced_resume_id": "...",
+        "analysis": {
+          "matches_by_bullet": { ... },
+          "skill_selection_log": { ... },
+          "modifications_summary": [ ... ]
+        }
+      }
+    }
+    ```
+
+-   **Error Response (e.g., `400`, `500`):**
+    ```json
+    {
+      "error": "ProcessingError",
+      "message": "Failed to parse the uploaded resume file. Please ensure it is not corrupted and is a supported format.",
+      "status_code": 400
+    }
+    ```
+
+### Step 4: Frontend Response Handling
+
+1.  **On Success (`try` block):**
+    *   Check for a `200 OK` status and `response.data.status === 'success'`.
+    *   Extract the necessary IDs (`job_id`, `enhanced_resume_id`, etc.) from the response.
+    *   **Redirect to the comparison page.** A good URL would be `/compare/{job_id}`.
+    *   The loading overlay will vanish automatically as the new page loads.
+
+2.  **On Failure (`catch` block):**
+    *   **Hide the loading overlay.**
+    *   Display a **red error toaster** at the bottom of the screen.
+    *   The content of the toaster should be the `message` from the JSON error response. This provides direct, actionable feedback to the user.
+
+---
+
+## Part 2: The Download Workflow
+
+Once the user is on the comparison page, they need to be able to download the results.
+
+- **Endpoint:** `GET /api/download/{resume_id}/{format}`
+- **Example:** `GET /api/download/enh_12345/pdf`
+
+### Frontend Action:
+
+- The comparison page will have download buttons (e.g., "Download PDF").
+- Clicking a button makes a simple `GET` request to the download endpoint with the `enhanced_resume_id` (which was received from the `/api/process` call) and the desired format (`pdf`, `docx`, etc.).
+
+### Backend Action:
+
+- Retrieves the specified enhanced resume data.
+- Converts it to the requested format (e.g., using the LaTeX generator for PDFs).
+- Returns the generated file with the correct `Content-Type` headers to trigger a browser download.
