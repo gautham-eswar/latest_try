@@ -72,7 +72,7 @@ else:
 
 # Add our memory log handler
 memory_handler = MemoryLogHandler()
-memory_handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+memory_handler.setFormatter(logging.Formatter('%(message)s'))
 logger.addHandler(memory_handler)
 logger.setLevel(logging.INFO)
 
