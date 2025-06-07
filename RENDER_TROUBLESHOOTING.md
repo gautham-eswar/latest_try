@@ -9,11 +9,11 @@ This guide helps resolve common issues when deploying the Resume Optimizer to Re
 **Issue**: Build fails with errors like: `ERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts`
 
 **Solution**:
-1. Use `requirements-render.txt` with properly pinned versions
+1. Use `requirements.txt` with properly pinned versions
 2. For httpx/Supabase conflict, use a compatible range: `httpx>=0.24.0,<0.26.0`
 3. Update your service build command:
    ```
-   pip install -r requirements-render.txt
+   pip install -r requirements.txt
    ```
 
 ### Missing API Key
@@ -31,8 +31,8 @@ This guide helps resolve common issues when deploying the Resume Optimizer to Re
 
 **Solution**:
 1. Ensure `PORT` env variable is set to match the port in your start command
-2. Verify your start command is using `gunicorn wsgi:app` without hardcoded ports
-3. Check for port conflicts in your code (wsgi.py should use the PORT env variable)
+2. Verify your start command is using `gunicorn working_app:app` without hardcoded ports
+3. Check for port conflicts in your code (working_app.py should use the PORT env variable)
 
 ### Memory Limits
 
@@ -69,7 +69,7 @@ Test your application in a Render-like environment before deploying:
 export RENDER=true
 export PORT=8080
 export FLASK_ENV=production
-python wsgi.py
+python working_app.py
 ```
 
 ### HTTP 502 Bad Gateway

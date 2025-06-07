@@ -28,8 +28,8 @@ git push origin your-branch-name
 4. Configure the service:
    - **Name**: resume-optimizer (or your preferred name)
    - **Runtime**: Python 3
-   - **Build Command**: `pip install -r requirements-render.txt`
-   - **Start Command**: `gunicorn wsgi:app`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn working_app:app`
 
 ### 3. Configure Environment Variables
 
@@ -48,7 +48,7 @@ Click **Create Web Service** to deploy.
 If you encounter build failures:
 
 1. Check the build logs for specific errors
-2. Ensure all dependencies are properly specified in `requirements-render.txt`
+2. Ensure all dependencies are properly specified in `requirements.txt`
 3. For packages that require compilation, try using pre-built wheels
 4. Consider using a more powerful instance if the build is timing out
 
