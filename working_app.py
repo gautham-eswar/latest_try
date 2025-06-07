@@ -35,11 +35,11 @@ from Services.errors import error_response
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(levelname)s - %(message)s"
-)
+# logging.basicConfig(
+#     level=logging.INFO, format="%(levelname)s - %(message)s"
+# )
 logger = logging.getLogger(__name__)
-logger.info("--- Resume Optimizer App is starting up ---")
+# logger.info("--- Resume Optimizer App is starting up ---")
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
