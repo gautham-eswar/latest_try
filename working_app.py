@@ -34,12 +34,23 @@ from Services.errors import error_response
 # Load environment variables
 load_dotenv()
 
-# Configure logging
+# Configure logging for Gunicorn compatibility
 # logging.basicConfig(
 #     level=logging.INFO, format="%(levelname)s - %(message)s"
 # )
 logger = logging.getLogger(__name__)
-# logger.info("--- Resume Optimizer App is starting up ---")
+
+# Configure logging to work with Gunicorn
+if __name__ != '__main__':
+    # Running under Gunicorn
+    gunicorn_logger = logging.getLogger('gunicorn.error')
+    logger.handlers = gunicorn_logger.handlers[:]
+    logger.setLevel(gunicorn_logger.level)
+else:
+    # Running in development
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+
+logger.info("=== Resume Optimizer App is starting up ===")
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
