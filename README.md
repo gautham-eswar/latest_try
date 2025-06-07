@@ -42,12 +42,6 @@ A web application that optimizes resumes based on job descriptions using AI.
    docker run -p 8080:8080 -e OPENAI_API_KEY=your_openai_api_key resume-optimizer
    ```
 
-2. Or use Docker Compose:
-   ```
-   export OPENAI_API_KEY=your_openai_api_key
-   docker-compose up
-   ```
-
 ## API Endpoints
 
 - `POST /api/upload`: Upload a resume file (PDF, DOCX, TXT). Returns parsed JSON and `resume_id`.
@@ -56,41 +50,31 @@ A web application that optimizes resumes based on job descriptions using AI.
 - `GET /api/health`: Health check endpoint (JSON). Returns 200 even on partial failures for monitoring services.
 - `GET /diagnostic/diagnostics`: HTML diagnostics dashboard.
 
-**Note:** The API endpoints described here reflect the *intended* functionality for the frontend. See the 'Backend Considerations' section below.
-
 ## Frontend Development (Lovable)
 
 A detailed prompt for fixing the frontend functionality using Lovable has been created in `Lovable.md`. This prompt outlines the required UI components, user workflow, API interactions, and display logic, adhering to the existing visual theme.
 
-## Backend Considerations & Recent Changes
+## Backend Architecture
 
-*   **OpenAI API Issue:** The previous `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'` has been **resolved**. This was likely due to implicit proxy handling in the Render environment conflicting with the OpenAI library. The fix involved explicitly disabling environment proxy detection via `httpx.Client(trust_env=False)`.
-*   **Dependencies:** OpenAI library version aligned to `1.6.1` across `requirements.txt` and `requirements-render.txt`.
-*   **Backend Refactoring Needed:**
-    *   The current `/api/optimize` endpoint in `working_app.py` uses a simpler OpenAI-based flow for parsing and keyword extraction. It does **not** yet utilize the more advanced `SemanticMatcher` (`embeddings.py`) and `ResumeEnhancer` (`enhancer.py`) classes.
-    *   The backend needs to be refactored to integrate this advanced workflow into the `/api/optimize` endpoint to fully support the functionality described in the `Lovable.md` prompt. This advanced workflow involves:
-        *   `SemanticMatcher`: Generates embeddings for keywords and resume bullets, deduplicates keywords, calculates similarity, and groups keyword matches by bullet point. For the "Technical Skills" section, it extracts existing skills, categorizes relevant job description hard skills using OpenAI, and then **selects the final set of technical skills. This selection process now uses a round-robin approach that prioritizes original resume skill categories, aiming to preserve the resume's existing skill structure while incorporating new relevant skills up to an overall limit.**
-        *   `ResumeEnhancer`: Takes the matched keywords and the refined technical skills list to rewrite experience bullets (incorporating keywords naturally) and update the resume's "Technical Skills" section using OpenAI.
-    *   **Persistence:** The current implementation relies heavily on local file storage (`./uploads`, `./output`). For scalability and proper state management, this should be refactored to use a database like Supabase. Intended tables might include `resumes` (parsed), `job_descriptions`, `keywords`, `matches`, `enhanced_resumes`.
-*   **Diagnostics:** The diagnostics system (`diagnostic_system.py`) has been enhanced with more detailed logging, especially around OpenAI client initialization and dependency checking.
+The application consists of several key components:
 
-## Testing
+### Core Pipeline Components
+- **SemanticMatcher** (`Pipeline/embeddings.py`): Handles embedding generation, keyword deduplication, and semantic matching between keywords and resume bullet points. Includes advanced technical skills selection using a round-robin approach.
+- **ResumeEnhancer** (`Pipeline/enhancer.py`): Takes matched keywords and enhances resume bullet points using OpenAI while preserving original meaning through semantic validation.
+- **Keyword Extraction** (`Pipeline/keyword_extraction.py`): Extracts relevant keywords from job descriptions with context and relevance scoring.
 
-Run the test suite:
-```
-python test_resume_processing.py
-```
+### Data Storage
+- **Supabase Integration**: Uses Supabase for persistent storage of resumes, enhanced versions, and analysis results.
+- **Local Fallback**: Includes local file storage fallback for development and testing.
 
-Performance testing with large inputs:
-```
-python large_input_test.py
-```
+### PDF Generation
+- **LaTeX-based PDF Generation**: Converts enhanced resumes to professional PDFs using LaTeX templates with adaptive page sizing.
 
-## Diagnostics
+## Deployment
 
-Access the diagnostics dashboard at `/diagnostics` to monitor system performance and pipeline status.
+The application is designed for deployment on Render. See `RENDER_DEPLOYMENT.md` for detailed deployment instructions and `RENDER_TROUBLESHOOTING.md` for common deployment issues.
 
-# Environment Variables
+## Environment Variables
 
 This application requires the following environment variables:
 
@@ -98,6 +82,8 @@ This application requires the following environment variables:
 - `PORT`: The port the application will run on (default: 8080)
 - `FLASK_ENV`: The environment to run Flask in (development or production)
 - `PDF_GENERATION_MODE`: PDF generation mode (default: fallback)
+- `SUPABASE_URL`: Supabase project URL (if using Supabase)
+- `SUPABASE_KEY`: Supabase API key (if using Supabase)
 
 You can set these variables in a `.env` file in the root directory or in your deployment platform's environment settings. For local development:
 
@@ -111,4 +97,15 @@ PDF_GENERATION_MODE=fallback
 EOF
 ```
 
-For Render deployment, set these variables in the Render dashboard or in your `render.yaml` file.
+For Render deployment, set these variables in the Render dashboard.
+
+## Testing
+
+Run the diagnostic endpoint to check system status:
+```
+curl http://localhost:8080/diagnostic/diagnostics
+```
+
+## Diagnostics
+
+Access the diagnostics dashboard at `/diagnostic/diagnostics` to monitor system performance and pipeline status.
