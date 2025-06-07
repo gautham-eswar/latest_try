@@ -46,4 +46,7 @@ packaging>=21.0        # Added for version comparison
 
 # Production Deployment
 gunicorn==20.1.0
- 
+
+# Task Queueing
+celery>=5.0
+redis>=4.0

@@ -15,6 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from flask import Flask, jsonify, request, g
 from flask_cors import CORS
+from celery import Celery
 
 # Import the centralized logging configuration FIRST
 import Services.logging_config
@@ -25,7 +26,8 @@ from Endpoints.status import status_page
 
 from Pipeline.job_tracking import create_optimization_job, update_optimization_job
 from Pipeline.resume_uploader import parse_and_upload_resume
-from Pipeline.optimizer import enhance_resume
+# from Pipeline.optimizer import enhance_resume # No longer directly called from endpoint
+from Pipeline.tasks import process_single_job_description_task # Import Celery task
 from Pipeline.resume_loading import OUTPUT_FOLDER, UPLOAD_FOLDER, download_resume, get_file_ext
 
 from Services.database import get_db
@@ -39,6 +41,10 @@ load_dotenv()
 
 # Get a logger for this file. The configuration is already set by the import.
 logger = logging.getLogger(__name__)
+
+# Define REDIS_URL (can be near other constants or env var loading)
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+logger.info(f"Using Redis URL: {REDIS_URL}") # Log the Redis URL being used
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
@@ -211,46 +217,54 @@ def create_app():
 
     @app.route("/api/optimize", methods=["POST"])
     def optimize_resume_endpoint():
-        """Optimize a resume using SemanticMatcher and ResumeEnhancer."""
-        # Handle invalid JSON in the request
+        """Queues a resume optimization job using Celery."""
+        # Validate input
+        if "resume_id" not in request.form:
+            return error_response("MissingResumeId", "No Resume ID provided in the request", 400)
+        if "user_id" not in request.form:
+            return error_response("MissingUserId", "No User ID provided in the request", 400)
+        if "job_description" not in request.form:
+            return error_response("MissingJobDescription", "No job description provided", 400)
 
-        if "resume_id" not in request.form.keys():
-            return error_response(
-                "MissingResumeId", f"No Resume ID provided in the request", 400
-            )
-        if "user_id" not in request.form.keys():
-            return error_response(
-                "MissingUserId", f"No User ID provided in the request", 400
-            )
-        if "job_description" not in request.form.keys():
-            return error_response(
-                "MissingJobDescription", f"No job description provided", 400
-            )
-        
+        resume_id = request.form["resume_id"]
+        user_id = request.form["user_id"]
+        job_description = request.form["job_description"]
+
         try:
-            resume_id = request.form["resume_id"]
-            user_id = request.form["user_id"]
-            job_description = request.form["job_description"]
-            
-            # Create optimization task in supabase (for tracking purposes)
+            # create_optimization_job now sets status to "Queued" internally
             job_id = create_optimization_job(resume_id, user_id, job_description)
 
-            return enhance_resume(job_id, resume_id, user_id, job_description)
-        
+            if not job_id:
+                logger.error(f"Failed to create optimization job for resume_id: {resume_id}, user_id: {user_id}. create_optimization_job returned None.")
+                return error_response(
+                    "JobCreationError", "Failed to create optimization job tracking record.", 500
+                )
+
+            process_single_job_description_task.delay(
+                job_id=job_id,
+                resume_id=resume_id,
+                user_id=user_id,
+                job_description_text=job_description
+            )
+
+            logger.info(f"Optimization job {job_id} for resume {resume_id} by user {user_id} successfully queued.")
+
+            return jsonify({
+                "status": "queued",
+                "message": "Resume optimization job has been queued successfully.",
+                "job_id": job_id
+            }), 202
+
         except Exception as e:
-            error_msg = str(e)
+            # Ensure resume_id and user_id are defined for logging, even if job_id might not be.
+            # If they are not in request.form, they would have been caught by initial validation.
             logger.error(
-                f"Error enhancing resume: {error_msg}",
+                f"Error in /api/optimize endpoint for resume {resume_id}, user {user_id}: {str(e)}",
                 exc_info=True,
             )
-            update_optimization_job(job_id, {
-                "status": "Error",
-                "error_message": error_msg,
-            })
             return error_response(
-                "Optimization error", 
-                f"""Error optimizing resume: {error_msg}. Resume ID:{resume_id}""",
-                500)
+                "ApiOptimizeError", f"An unexpected error occurred while queueing the optimization job: {str(e)}", 500
+            )
 
     @app.route("/api/download/<resume_id>/<format_type>", methods=["GET"])
     def download_resume_endpoint(resume_id, format_type):
@@ -475,12 +489,42 @@ def create_app():
         except:
             # If favicon.ico isn't found, return empty response with 204 status
             return "", 204
+
+    # Add Celery related config to Flask app config
+    # This allows make_celery to pick it up, or for direct use.
+    app.config['CELERY_BROKER_URL'] = REDIS_URL
+    app.config['CELERY_RESULT_BACKEND'] = REDIS_URL
+    # Optional: Add other Celery settings if needed, e.g., task_serializer
+    # app.config['CELERY_TASK_SERIALIZER'] = 'json'
+    # app.config['CELERY_ACCEPT_CONTENT'] = ['json']
+    # app.config['CELERY_RESULT_SERIALIZER'] = 'json'
+    # app.config['CELERY_TIMEZONE'] = 'UTC'
     
     return app
 
+# Celery setup function
+def make_celery(flask_app):
+    # Use app.name for Celery app name for uniqueness if multiple apps
+    # or flask_app.import_name as commonly seen
+    celery_instance = Celery(
+        flask_app.import_name,
+        backend=flask_app.config.get('CELERY_RESULT_BACKEND', REDIS_URL), # Use app.config or direct REDIS_URL
+        broker=flask_app.config.get('CELERY_BROKER_URL', REDIS_URL)
+    )
+    celery_instance.conf.update(flask_app.config) # Update celery config with flask app config
+
+    class ContextTask(celery_instance.Task):
+        abstract = True # Ensure this is an abstract task
+        def __call__(self, *args, **kwargs):
+            with flask_app.app_context():
+                return self.run(*args, **kwargs)
+
+    celery_instance.Task = ContextTask
+    return celery_instance
 
 # Create the WSGI application instance for Gunicorn
 app = create_app()
+celery = make_celery(app) # Create the celery instance associated with the app
 
 # For development server
 if __name__ == "__main__":

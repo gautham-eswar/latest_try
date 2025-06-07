@@ -19,7 +19,7 @@ def create_optimization_job(resume_id, user_id, job_description):
         "user_id": user_id,
         "resume_id": resume_id,
         "job_description": job_description, 
-        "status": "Processing Keywords"
+        "status": "Queued"  # Changed initial status
     }).execute()
 
     if not (hasattr(response, "data") and response.data):
