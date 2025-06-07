@@ -55,28 +55,31 @@ class MemoryLogHandler(logging.Handler):
             pass  # Don't let logging errors crash the app
 
 # Configure logging for Gunicorn compatibility
-# logging.basicConfig(
-#     level=logging.INFO, format="%(levelname)s - %(message)s"
-# )
-logger = logging.getLogger(__name__)
+# Get the root logger. All other loggers in the application will inherit this configuration.
+root_logger = logging.getLogger()
 
-# Configure logging to work with Gunicorn
 if __name__ != '__main__':
-    # Running under Gunicorn
+    # When running under Gunicorn, inherit its handlers and level.
     gunicorn_logger = logging.getLogger('gunicorn.error')
-    logger.handlers = gunicorn_logger.handlers[:]
-    logger.setLevel(gunicorn_logger.level)
+    root_logger.handlers = gunicorn_logger.handlers
+    root_logger.setLevel(gunicorn_logger.level)
 else:
-    # Running in development
+    # For local development, configure a basic console logger.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
-# Add our memory log handler
+# Add our custom in-memory handler to the root logger.
+# This ensures it captures logs from ALL modules.
 memory_handler = MemoryLogHandler()
 memory_handler.setFormatter(logging.Formatter('%(message)s'))
-logger.addHandler(memory_handler)
-logger.setLevel(logging.INFO)
+root_logger.addHandler(memory_handler)
 
-logger.info("=== Resume Optimizer App is starting up ===")
+# Ensure the root logger's level is at least INFO to capture everything.
+root_logger.setLevel(logging.INFO)
+
+# Get a specific logger for this file, which will now use the root config.
+logger = logging.getLogger(__name__)
+
+logger.info("=== Resume Optimizer App is starting up (Root logger configured) ===")
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
