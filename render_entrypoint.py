@@ -10,15 +10,8 @@ import logging
 import argparse
 from dotenv import load_dotenv
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(name)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger("render_entrypoint")
+# Logging is configured by Services.logging_config via working_app import
+logger = logging.getLogger(__name__) # Standard practice
 
 def main():
     """Main entry point for the application when run on Render."""
@@ -36,14 +29,17 @@ def main():
     os.environ["PORT"] = str(args.port)
     os.environ["RENDER"] = "true"
     
+    # Use the logger instance for this module
     logger.info(f"Starting Resume Optimizer service on {args.host}:{args.port}")
     
     try:
         # Import and create the Flask application
         try:
             from working_app import create_app
+            # Use the logger instance for this module
             logger.info("Using working_app.py")
         except ImportError as e:
+            # Use the logger instance for this module
             logger.critical(f"Could not import app: {str(e)}")
             raise ImportError("Failed to import application module")
         
@@ -52,12 +48,14 @@ def main():
         
         # Run the application
         if args.debug:
+            # Use the logger instance for this module
             logger.info("Running in debug mode")
             app.run(host=args.host, port=args.port, debug=True)
         else:
             app.run(host=args.host, port=args.port)
             
     except Exception as e:
+        # Use the logger instance for this module
         logger.critical(f"Failed to start application: {str(e)}")
         logger.critical(f"Exception type: {type(e).__name__}")
         logger.critical(f"Exception args: {e.args}")

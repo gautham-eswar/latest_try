@@ -1,30 +1,19 @@
-"""
-Centralized Logging Configuration for the Resume Optimizer Application.
-
-This module sets up the root logger for the entire application. It should be
-imported at the very top of the main application file (working_app.py) before
-any other application modules are imported. This ensures that all subsequent
-loggers inherit this configuration.
-"""
-
 import logging
 from collections import deque
 from datetime import datetime
 import os
+import sys # Added sys for StreamHandler
 
 # --- In-Memory Log Handler ---
-# This handler captures logs in a rotating buffer for viewing via an API endpoint.
-
-log_buffer = deque(maxlen=1000)  # Keep the last 1000 log entries
+log_buffer = deque(maxlen=1000)
 
 class MemoryLogHandler(logging.Handler):
-    """Custom log handler that stores logs in memory."""
     def emit(self, record):
         try:
             log_entry = {
                 'timestamp': datetime.fromtimestamp(record.created).isoformat(),
                 'level': record.levelname,
-                'message': self.format(record),
+                'message': self.format(record), # Use formatter for the message
                 'module': record.module,
                 'function': record.funcName,
                 'line': record.lineno,
@@ -32,55 +21,65 @@ class MemoryLogHandler(logging.Handler):
             }
             log_buffer.append(log_entry)
         except Exception:
-            # Avoid letting logging errors crash the application
             pass
 
 def get_log_buffer():
-    """Returns the global log buffer."""
     return log_buffer
 
 # --- Root Logger Configuration ---
-
 def setup_logging():
-    """
-    Configures the root logger for the application.
-    This function should be called only once when the application starts.
-    """
-    # Get the root logger. All other loggers will inherit this configuration.
     root_logger = logging.getLogger()
+    # Clear any existing handlers first to prevent duplicates, especially in reloads
+    if root_logger.hasHandlers():
+        root_logger.handlers.clear()
 
-    # Determine if running under Gunicorn by checking environment or process
-    # Gunicorn sets the 'gunicorn' logger, which is a reliable check.
+    # Set a default level for the root logger. Gunicorn might override this for its logs.
+    # Handlers can have their own levels if needed.
+    root_logger.setLevel(logging.INFO)
+
     is_gunicorn = "gunicorn" in os.environ.get("SERVER_SOFTWARE", "") or 'gunicorn.error' in logging.Logger.manager.loggerDict
 
     if is_gunicorn:
-        # When running under Gunicorn, inherit its handlers and level.
+        # Gunicorn is active.
+        # Gunicorn's own logs (access, error) will be handled by Gunicorn's logging setup.
+        # We primarily need to ensure our application's logs (which go to the root logger)
+        # are also output to the console in a way Gunicorn captures.
         gunicorn_logger = logging.getLogger('gunicorn.error')
-        if gunicorn_logger.handlers:
-            root_logger.handlers = gunicorn_logger.handlers
-        root_logger.setLevel(gunicorn_logger.level)
-    else:
-        # For local development, configure a basic console logger.
-        # Clear any existing handlers to avoid duplicates
-        if root_logger.hasHandlers():
-            root_logger.handlers.clear()
-        
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - [%(name)s] - %(message)s (%(funcName)s:%(lineno)d)"
-        )
+        root_logger.setLevel(gunicorn_logger.level) # Respect Gunicorn's level for the root logger
 
-    # Add our custom in-memory handler to the root logger.
-    # This ensures it captures logs from ALL modules.
+        # Add a stream handler that Gunicorn will capture
+        # Gunicorn typically captures stdout/stderr.
+        console_handler = logging.StreamHandler(sys.stdout) # Explicitly use stdout
+        console_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(levelname)s - [%(name)s] - %(message)s (%(funcName)s:%(lineno)d)"
+        ))
+        root_logger.addHandler(console_handler)
+        
+        # Gunicorn already logs its own messages. We don't need to copy its handlers.
+        # Our goal is that messages logged via `logging.getLogger(__name__)`
+        # get to the console (for Gunicorn/Render) AND our MemoryHandler.
+        logging.getLogger().info("Logging configured for Gunicorn environment.")
+
+    else:
+        # Not running under Gunicorn (e.g., local development).
+        # Configure a basic console logger.
+        console_handler = logging.StreamHandler(sys.stdout) # Use stdout for consistency
+        console_handler.setFormatter(logging.Formatter(
+            "%(asctime)s - %(levelname)s - [%(name)s] - %(message)s (%(funcName)s:%(lineno)d)"
+        ))
+        root_logger.addHandler(console_handler)
+        logging.getLogger().info("Logging configured for local development environment.")
+
+    # Add the custom in-memory handler to the root logger.
+    # This will capture logs from all modules using the standard logging system.
     memory_handler = MemoryLogHandler()
+    # Ensure the message passed to the buffer is the fully formatted string
     memory_handler.setFormatter(logging.Formatter('%(message)s'))
     root_logger.addHandler(memory_handler)
 
-    # Ensure the root logger's level is at least INFO to capture everything.
-    root_logger.setLevel(logging.INFO)
-
     # Log a confirmation message that the new system is in place.
-    root_logger.info("Centralized logging configured successfully.")
+    # This message should now go to both console and memory_handler.
+    root_logger.info("Centralized logging configured successfully (MemoryHandler added).")
 
 # --- Run the setup immediately upon import ---
-setup_logging() 
+setup_logging()
