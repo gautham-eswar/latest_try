@@ -44,4 +44,4 @@ COPY . .
 EXPOSE 8080
 
 # 8. Set Default Command (Using Gunicorn for production)
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "180", "--workers", "1", "working_app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "180", "--log-level", "info", "--workers", "1", "working_app:app"] 
