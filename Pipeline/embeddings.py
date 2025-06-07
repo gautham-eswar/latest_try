@@ -172,7 +172,7 @@ class SemanticMatcher:
                 text = f"{keyword['keyword']}: {keyword['context']}"
                 
                 # Generate embedding
-                embedding = self._get_embedding(text)
+                embedding = self.get_embedding(text)
                 
                 # Add embedding to keyword data
                 keyword_with_embedding = keyword.copy()
@@ -218,7 +218,7 @@ class SemanticMatcher:
                     continue
                     
                 # Calculate cosine similarity between embeddings
-                similarity = self._cosine_similarity(kw1["embedding"], kw2["embedding"])
+                similarity = self.cosine_similarity(kw1["embedding"], kw2["embedding"])
                 
                 # If very similar (high threshold to be conservative)
                 if similarity > 0.92:  # High threshold to avoid false matches
@@ -303,7 +303,7 @@ class SemanticMatcher:
         for bullet in bullet_points:
             try:
                 # Generate embedding for the bullet text
-                embedding = self._get_embedding(bullet["bullet_text"])
+                embedding = self.get_embedding(bullet["bullet_text"])
                 
                 # Add embedding to bullet data
                 bullet_with_embedding = bullet.copy()
@@ -339,7 +339,7 @@ class SemanticMatcher:
                 bullet_embedding = bullet["embedding"]
                 
                 # Calculate cosine similarity
-                similarity = self._cosine_similarity(keyword_embedding, bullet_embedding)
+                similarity = self.cosine_similarity(keyword_embedding, bullet_embedding)
                 
                 # Only keep matches above threshold
                 if similarity >= self.similarity_threshold:
@@ -520,7 +520,7 @@ class SemanticMatcher:
                     for skill_name in skills_in_category:
                         if isinstance(skill_name, str) and skill_name.strip():
                             try:
-                                embedding = self._get_embedding(skill_name)
+                                embedding = self.get_embedding(skill_name)
                                 embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
                             except Exception as e:
                                 logger.error(f"Failed to generate embedding for resume skill '{skill_name}' in category '{category}': {e}")
@@ -536,7 +536,7 @@ class SemanticMatcher:
             for skill_name in technical_skills_data:
                 if isinstance(skill_name, str) and skill_name.strip():
                     try:
-                        embedding = self._get_embedding(skill_name)
+                        embedding = self.get_embedding(skill_name)
                         embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
                     except Exception as e:
                         logger.error(f"Failed to generate embedding for resume skill '{skill_name}' (flat list): {e}")
@@ -683,7 +683,7 @@ class SemanticMatcher:
                     # Check text similarity (case-insensitive, strip spaces)
                     s1_norm = s1["skill"].strip().lower()
                     s2_norm = s2["skill"].strip().lower()
-                    if s1_norm == s2_norm or self._cosine_similarity(s1["embedding"], s2["embedding"]) > self.skill_similarity_threshold :
+                    if s1_norm == s2_norm or self.cosine_similarity(s1["embedding"], s2["embedding"]) > self.skill_similarity_threshold :
                         duplicates_found.append(s2)
                         processed_indices.add(j)
                         # Prefer original, then higher relevance for duplicates
@@ -776,9 +776,9 @@ class SemanticMatcher:
         
         return final_skills_by_category_dict, log_details
 
-    def _get_embedding(self, text: str) -> List[float]:
+    def get_embedding(self, text: str) -> List[float]:
         """
-        Get embedding for text using OpenAI API.
+        Generate embedding for a single text string.
         
         Args:
             text: Text to get embedding for
@@ -786,13 +786,17 @@ class SemanticMatcher:
         Returns:
             list: Embedding vector
         """
-        response = self.client.embeddings.create(
-            input=text,
-            model=self.model
-        )
-        return response.data[0].embedding
-    
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        try:
+            response = self.client.embeddings.create(
+                input=text,
+                model=self.model
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Error in get_embedding: {e}")
+            raise
+            
+    def cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """
         Calculate cosine similarity between two vectors.
         
@@ -807,19 +811,14 @@ class SemanticMatcher:
         v1 = np.array(vec1)
         v2 = np.array(vec2)
         
-        # Calculate dot product
-        dot_product = np.dot(v1, v2)
-        
         # Calculate magnitudes
-        mag1 = np.linalg.norm(v1)
-        mag2 = np.linalg.norm(v2)
+        vec1_norm = np.linalg.norm(v1)
+        vec2_norm = np.linalg.norm(v2)
         
-        # Avoid division by zero
-        if mag1 == 0 or mag2 == 0:
-            return 0
+        if vec1_norm == 0 or vec2_norm == 0:
+            return 0.0
             
-        # Calculate cosine similarity
-        return dot_product / (mag1 * mag2)
+        return np.dot(v1, v2) / (vec1_norm * vec2_norm)
     
     def save_results_to_file(self, results: Dict[str, Any], output_path: str) -> None:
         """
@@ -901,3 +900,12 @@ if __name__ == "__main__":
     print(f"Total bullet matches: {results['statistics']['total_bullet_matches']}")
     print(f"Final total technical skills: {results['statistics']['final_total_technical_skills']}")
     print(f"Results saved to {args.output}")
+
+
+def get_embedding_model(api_key: Optional[str] = None):
+    """
+    Factory function to get a SemanticMatcher instance.
+    This function is a compatibility layer to resolve an import error
+    in the enhancer module.
+    """
+    return SemanticMatcher(api_key=api_key)

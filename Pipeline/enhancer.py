@@ -58,6 +58,7 @@ class ResumeEnhancer:
             raise RuntimeError(f"ResumeEnhancer: Could not initialize OpenAI client - {e}") from e
         
         self.model = model
+        self.embedding_model = get_embedding_model(api_key=self.api_key)
         
         # Track which bullets have been modified
         self.modified_bullets = set()
@@ -344,62 +345,34 @@ class ResumeEnhancer:
     
     def _validate_enhancement(self, original: str, enhanced: str, keywords: List[str]) -> bool:
         """
-        Validate that the enhanced bullet properly incorporates keywords and
-        preserves the original meaning and metrics.
-        
-        Args:
-            original: Original bullet text
-            enhanced: Enhanced bullet text
-            keywords: List of keywords that should be included
-            
-        Returns:
-            bool: True if enhancement is valid, False otherwise
+        Validate that the enhancement did not alter the original meaning.
         """
-        # Check 1: All keywords are present
-        keywords_included = True
-        missing_keywords = []
-        
-        for keyword in keywords:
-            if keyword.lower() not in enhanced.lower():
-                keywords_included = False
-                missing_keywords.append(keyword)
-        
-        if not keywords_included:
-            logger.warning(f"Enhancement validation failed: Missing keywords {missing_keywords}")
+        try:
+            logger.info(f"Validating enhancement for bullet: '{original[:30]}...'")
+
+            # Must contain at least one keyword
+            if not any(re.search(r'\b' + re.escape(kw) + r'\b', enhanced, re.IGNORECASE) for kw in keywords):
+                logger.warning(f"Validation failed: Enhanced bullet does not contain any of the target keywords. Keywords: {keywords}")
+                return False
+
+            # Semantic similarity check
+            original_embedding = self.embedding_model.get_embedding(original)
+            enhanced_embedding = self.embedding_model.get_embedding(enhanced)
+            
+            similarity = self.embedding_model.cosine_similarity(original_embedding, enhanced_embedding)
+            
+            logger.debug(f"Validation similarity score: {similarity:.4f}")
+
+            # If similarity is too low, the meaning has likely changed
+            if similarity < 0.90:
+                logger.warning(f"Validation failed: Semantic similarity below threshold ({similarity:.4f} < 0.90)")
+                return False
+
+            logger.info("Validation successful: Enhancement is semantically similar and contains keywords.")
+            return True
+        except Exception as e:
+            logger.error(f"An error occurred during enhancement validation: {e}", exc_info=True)
             return False
-        
-        # Check 2: All metrics are preserved
-        # Extract numbers and percentages from original
-        metric_pattern = r'\d+(?:\.\d+)?%|\$\d+(?:,\d+)*(?:\.\d+)?|\d+(?:,\d+)*(?:\.\d+)?'
-        original_metrics = re.findall(metric_pattern, original)
-        
-        # Check if all original metrics are in enhanced
-        metrics_preserved = True
-        
-        for metric in original_metrics:
-            if metric not in enhanced:
-                metrics_preserved = False
-                logger.warning(f"Enhancement validation failed: Missing metric {metric}")
-                break
-        
-        if not metrics_preserved:
-            return False
-        
-        # Check 3: Length is reasonable - allow up to 1.5x increase for meaningful enhancements
-        if len(enhanced) > len(original) * 1.5:
-            logger.warning(f"Enhancement validation failed: Too long (Original: {len(original)}, Enhanced: {len(enhanced)})")
-            return False
-        
-        # Check 4: Doesn't deviate too much from original - allow reasonable flexibility
-        # Allow up to 50% increase or 30% decrease in length
-        length_diff = abs(len(enhanced) - len(original))
-        max_allowed_diff = max(len(original) * 0.5, 30)  # At least 30 chars difference allowed
-        
-        if length_diff > max_allowed_diff:
-            logger.warning(f"Enhancement validation failed: Too different in length (diff: {length_diff}, max allowed: {max_allowed_diff})")
-            return False
-        
-        return True
     
     def save_results(self, 
                     enhanced_resume: Dict[str, Any], 
