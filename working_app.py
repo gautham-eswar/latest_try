@@ -39,6 +39,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+logger.info("--- Resume Optimizer App is starting up ---")
 
 # Constants
 ALLOWED_EXTENSIONS = {"txt", "pdf", "docx"}
@@ -114,6 +115,7 @@ def create_app():
     @app.after_request
     def after_request(response):
         """Complete request tracking and add transaction ID to response."""
+        logger.info("--- after_request handler executed ---")
         if hasattr(g, "transaction_id") and hasattr(g, "start_time"):
             duration = time.time() - g.start_time
             logger.info(
