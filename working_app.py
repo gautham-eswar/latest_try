@@ -8,6 +8,7 @@ from datetime import datetime
 import uuid
 import json
 import time
+from collections import deque
 from dotenv import load_dotenv
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -34,6 +35,25 @@ from Services.errors import error_response
 # Load environment variables
 load_dotenv()
 
+# Create in-memory log buffer
+log_buffer = deque(maxlen=1000)  # Keep last 1000 log entries
+
+class MemoryLogHandler(logging.Handler):
+    """Custom log handler that stores logs in memory"""
+    def emit(self, record):
+        try:
+            log_entry = {
+                'timestamp': datetime.fromtimestamp(record.created).isoformat(),
+                'level': record.levelname,
+                'message': self.format(record),
+                'module': record.module,
+                'function': record.funcName,
+                'line': record.lineno
+            }
+            log_buffer.append(log_entry)
+        except Exception:
+            pass  # Don't let logging errors crash the app
+
 # Configure logging for Gunicorn compatibility
 # logging.basicConfig(
 #     level=logging.INFO, format="%(levelname)s - %(message)s"
@@ -49,6 +69,12 @@ if __name__ != '__main__':
 else:
     # Running in development
     logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
+
+# Add our memory log handler
+memory_handler = MemoryLogHandler()
+memory_handler.setFormatter(logging.Formatter('%(levelname)s - %(message)s'))
+logger.addHandler(memory_handler)
+logger.setLevel(logging.INFO)
 
 logger.info("=== Resume Optimizer App is starting up ===")
 
@@ -158,7 +184,9 @@ def create_app():
                 "/api/download/:resumeId/:format",
                 "/status",
                 "/diagnostic/diagnostics",
-                    "/api/test/custom-error/:error_code",
+                "/api/logs",
+                "/api/logs/live",
+                "/api/test/custom-error/:error_code",
                 ],
             }
         )
@@ -293,6 +321,74 @@ def create_app():
     def diagnostics_endpoint():
         """Show diagnostic information."""
         return diagnostics_page()
+
+    @app.route("/api/logs")
+    def view_logs():
+        """View recent application logs."""
+        try:
+            logs = list(log_buffer)
+            return jsonify({
+                "status": "success",
+                "total_logs": len(logs),
+                "logs": logs[-100:],  # Return last 100 logs
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            return jsonify({
+                "status": "error",
+                "message": f"Error retrieving logs: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            }), 500
+
+    @app.route("/api/logs/live")
+    def view_logs_live():
+        """View recent logs with auto-refresh HTML interface."""
+        try:
+            logs = list(log_buffer)
+            recent_logs = logs[-50:]  # Last 50 logs
+            
+            html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Live Application Logs</title>
+                <meta http-equiv="refresh" content="5">
+                <style>
+                    body { font-family: monospace; background: #1e1e1e; color: #fff; margin: 20px; }
+                    .log-entry { margin: 5px 0; padding: 5px; border-left: 3px solid #333; }
+                    .INFO { border-left-color: #4CAF50; }
+                    .WARNING { border-left-color: #FF9800; }
+                    .ERROR { border-left-color: #F44336; }
+                    .DEBUG { border-left-color: #2196F3; }
+                    .timestamp { color: #888; }
+                    .level { font-weight: bold; }
+                    .refresh-info { background: #333; padding: 10px; margin-bottom: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="refresh-info">
+                    <h2>Live Application Logs</h2>
+                    <p>Auto-refreshes every 5 seconds | Total logs: """ + str(len(logs)) + """ | Last updated: """ + datetime.now().strftime('%H:%M:%S') + """</p>
+                </div>
+            """
+            
+            for log in reversed(recent_logs):  # Most recent first
+                html += f'''
+                <div class="log-entry {log['level']}">
+                    <span class="timestamp">{log['timestamp']}</span> 
+                    <span class="level">[{log['level']}]</span> 
+                    {log['message']}
+                </div>
+                '''
+            
+            html += """
+            </body>
+            </html>
+            """
+            
+            return html
+        except Exception as e:
+            return f"<html><body><h1>Error loading logs: {str(e)}</h1></body></html>", 500
 
     @app.route("/api/test/simulate-failure")
     def test_simulate_failure():
