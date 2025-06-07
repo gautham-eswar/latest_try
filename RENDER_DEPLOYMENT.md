@@ -1,6 +1,6 @@
 # Deploying Resume Optimizer to Render
 
-This guide provides step-by-step instructions for deploying the Resume Optimizer application to Render.
+This guide provides step-by-step instructions for deploying the Resume Optimizer application to Render using either a **Native Python Runtime** or **Docker**.
 
 ## Prerequisites
 
@@ -20,66 +20,78 @@ git commit -m "[Gautham] Optimize for Render deployment"
 git push origin your-branch-name
 ```
 
-### 2. Create a New Web Service on Render
+### 2. Choose Your Deployment Method
 
-1. Log in to your Render dashboard at https://dashboard.render.com/
-2. Click **New** and select **Web Service**
-3. Connect your repository
-4. Configure the service:
-   - **Name**: resume-optimizer (or your preferred name)
-   - **Runtime**: Python 3
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `gunicorn working_app:app`
+You can deploy this application on Render in two ways:
 
-### 3. Configure Environment Variables
+- **As a Python Web Service:** Render manages the Python environment. This is simpler for standard Python applications.
+- **As a Docker Container:** You provide a `Dockerfile`, and Render runs it. This offers maximum control and consistency.
 
-Add the following environment variables:
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `PORT`: 8080
-- `FLASK_ENV`: production
-- `PDF_GENERATION_MODE`: fallback (or your preferred mode)
+---
 
-### 4. Deploy the Service
+### Method 1: Deploying as a Python Web Service
 
-Click **Create Web Service** to deploy.
+Follow these steps if you want Render to handle the Python environment for you.
 
-## Troubleshooting
+**1. Create a New Web Service on Render**
+- Log in to your Render dashboard.
+- Click **New** and select **Web Service**.
+- Connect your repository.
 
-If you encounter build failures:
+**2. Configure the Service**
+- **Name**: resume-optimizer (or your preferred name)
+- **Runtime**: `Python 3`
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `gunicorn working_app:app`
 
-1. Check the build logs for specific errors
-2. Ensure all dependencies are properly specified in `requirements.txt`
-3. For packages that require compilation, try using pre-built wheels
-4. Consider using a more powerful instance if the build is timing out
+**3. Configure Environment Variables**
+- Add your `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, etc.
 
-## Updating the Deployment
+**4. Deploy**
+- Click **Create Web Service**.
+
+---
+
+### Method 2: Deploying as a Docker Container
+
+Follow these steps to deploy the application using the provided `Dockerfile`. This is the recommended method for consistency.
+
+**1. Create a New Web Service on Render**
+- Log in to your Render dashboard.
+- Click **New** and select **Web Service**.
+- Connect your repository.
+
+**2. Configure the Service**
+- **Name**: resume-optimizer-docker (or your preferred name)
+- **Runtime**: `Docker`
+- Render will automatically detect and use your `Dockerfile`. You do **not** need to specify a Build or Start command in the Render UI.
+
+**3. Configure Environment Variables**
+- Add your `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, etc.
+- The `Dockerfile` exposes port 8080, which Render will use automatically.
+
+**4. Deploy**
+- Click **Create Web Service**.
+
+---
+
+## Post-Deployment
+
+### Updating the Deployment
 
 To update your deployment:
 1. Push changes to your Git repository
 2. Render will automatically deploy the latest version if auto-deploy is enabled
 3. You can also manually trigger a deploy from the Render dashboard
 
-## Monitoring
+### Monitoring
 
 - Monitor application performance via the Render dashboard
 - Check application logs for errors
-- Use the `/diagnostics` endpoint for detailed system status
+- Use the `/diagnostic/diagnostics` endpoint for detailed system status
 
 ## Using Docker (Alternative)
 
 You can also deploy the application using Docker:
 
-```bash
-# Build the Docker image
-docker build -t resume-optimizer .
-
-# Run the container
-docker run -p 8080:8080 -e OPENAI_API_KEY=your_key_here resume-optimizer
 ```
-
-## Performance and Scaling
-
-Render's free tier has limitations. For production use, consider:
-- Upgrading to a paid plan
-- Setting up autoscaling for handling traffic spikes
-- Configuring additional disk space for uploads 
