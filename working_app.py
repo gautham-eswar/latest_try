@@ -237,7 +237,9 @@ def create_app():
             # Create optimization task in supabase (for tracking purposes)
             job_id = create_optimization_job(resume_id, user_id, job_description)
 
-            return enhance_resume(job_id, resume_id, user_id, job_description)
+            response_received = enhance_resume(job_id, resume_id, user_id, job_description)
+            logger.info(f"[TZ] --- RESPONSE RECEIVED: {response_received} ---")
+            return response_received
         
         except Exception as e:
             error_msg = str(e)

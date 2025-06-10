@@ -161,8 +161,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
 
     # --- Return Success Response ---
     logger.info(f"--- Pipeline End: Enhancement for Job {job_id} Completed Successfully ---")
-    return jsonify(
-        {
+    res =  {
             "status": "success",
             "message": "Resume optimized successfully using advanced workflow",
             "resume_id": resume_id,
@@ -176,6 +175,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
                     "modifications_summary": modifications # Summary of changes made
                 },
             }
-            
         }
-    )
+    jsonified_res = jsonify(res)
+    logger.info(f"[TZ] --- RESPONSE TO RETURN: {jsonified_res} ---")
+    return jsonified_res
+    
