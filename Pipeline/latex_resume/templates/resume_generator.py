@@ -125,11 +125,15 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\url{{{email}}}}}")
     
     if raw_linkedin:
-        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
-        linkedin_url = raw_linkedin # Use raw value for URL
+        # Normalize display: remove protocol, ensure single display label, and avoid underscore issues via \url
+        linkedin_url = raw_linkedin
+        if not isinstance(linkedin_url, str):
+            linkedin_url = str(linkedin_url)
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{Linkedin: \\url{{{raw_linkedin}}}}}")
+        display = raw_linkedin
+        # Avoid duplicate 'LinkedIn:' labels and odd case; standardize to 'LinkedIn'
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{display}}}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking

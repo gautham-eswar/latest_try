@@ -177,8 +177,9 @@ class ResumeEnhancer:
             logger.info("No final technical skills data provided, skipping skills section update.")
 
         total_modifications = len(modifications)
-        bullet_mods = sum(1 for mod in modifications if mod.get("type") != "Technical Skills Update")
-        skill_sec_mods = total_modifications - bullet_mods
+        # Count skills section modifications explicitly to avoid false zeros
+        skill_sec_mods = sum(1 for mod in modifications if mod.get("section") == "Skills")
+        bullet_mods = total_modifications - skill_sec_mods
 
         logger.info(f"Resume enhancement process complete. Total modifications: {total_modifications} ({bullet_mods} bullet changes, {skill_sec_mods} skills section changes).")
         return enhanced_resume, modifications
