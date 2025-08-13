@@ -245,6 +245,7 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
                         extras_items.append(f"{fix_latex_special_chars(label)}: {fix_latex_special_chars(s)}")
             
             item_list_content = []
+            coursework_line: Optional[str] = None
             # Normalize additional_info: allow list, or softly split string by comma/semicolon
             if isinstance(additional_info_raw, list):
                 for entry in additional_info_raw:
@@ -260,12 +261,13 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
                 else:
                     item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info_raw)}}}")
             
+            # Render coursework compactly (no bullet) to minimize space
             if relevant_coursework_raw and isinstance(relevant_coursework_raw, list):
                 courses_str = ", ".join(fix_latex_special_chars(c) for c in relevant_coursework_raw if c)
                 if courses_str:
-                    item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {courses_str}}}")
+                    coursework_line = f"      Relevant Coursework: {courses_str}"
             elif relevant_coursework_raw and isinstance(relevant_coursework_raw, str) and relevant_coursework_raw.strip():
-                 item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {fix_latex_special_chars(relevant_coursework_raw)}}}")
+                 coursework_line = f"      Relevant Coursework: {fix_latex_special_chars(relevant_coursework_raw)}"
             
             # Append extras last as bullets
             for extra in extras_items:
@@ -275,6 +277,8 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
                 content_lines.append(r"      \resumeItemListStart")
                 content_lines.extend(item_list_content)
                 content_lines.append(r"      \resumeItemListEnd")
+            if coursework_line:
+                content_lines.append(coursework_line)
                 
     if not content_lines: return None
     final_latex_parts = [r"\section{{Education}}", r"  \resumeSubHeadingListStart"] + content_lines + [r"  \resumeSubHeadingListEnd", ""]
@@ -429,43 +433,88 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     if isinstance(technical_skills_data, dict):
         # Case 1: "Technical Skills" is a dictionary with categories
         print("PRINT DIAGNOSTIC: Skills data is a dictionary with categories.", flush=True)
-        
-        category_lines = []
+
+        def _normalize(text: str) -> str:
+            return re.sub(r"\s+", " ", str(text).strip().lower())
+
+        category_lines: List[str] = []
         for category, skills_list in technical_skills_data.items():
             if not (isinstance(skills_list, list) and skills_list):
-                continue # Skip empty or invalid skill lists
+                continue  # Skip empty or invalid skill lists
 
-            final_skills_str_parts = []
-            for item in skills_list:
-                if isinstance(item, str):
-                    final_skills_str_parts.append(fix_latex_special_chars(item))
-                elif isinstance(item, dict):
-                    for sub_cat, sub_skills_list in item.items():
-                        if isinstance(sub_skills_list, list) and sub_skills_list:
-                            sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
-                            # Bold the sub-category title
-                            final_skills_str_parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
-            
-            if final_skills_str_parts:
-                skills_str = "; ".join(final_skills_str_parts)
-                # Bold the main category title
-                category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {skills_str}")
+            normalized_category = _normalize(category)
+
+            def _filter_unique(values: List[str], drop_token: str) -> List[str]:
+                seen: set[str] = set()
+                result: List[str] = []
+                for v in values:
+                    v_norm = _normalize(v)
+                    if not v_norm or v_norm == drop_token or v_norm in seen:
+                        continue
+                    seen.add(v_norm)
+                    result.append(fix_latex_special_chars(v))
+                return result
+
+            # Special handling for generic buckets like "Category"/"Categories"
+            if normalized_category in {"category", "categories"}:
+                for item in skills_list:
+                    if not isinstance(item, dict):
+                        continue
+                    for sub_cat, sub_list in item.items():
+                        if not (isinstance(sub_list, list) and sub_list):
+                            continue
+                        filtered = _filter_unique([str(x) for x in sub_list], _normalize(sub_cat))
+                        if filtered:
+                            category_lines.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {', '.join(filtered)}")
+                continue
+
+            # Regular category handling
+            final_parts: List[str] = []
+            # Simple items
+            simple_items = [it for it in skills_list if isinstance(it, str)]
+            final_parts.extend(_filter_unique(simple_items, normalized_category))
+
+            # Nested subcategories
+            for it in skills_list:
+                if isinstance(it, dict):
+                    for sub_cat, sub_list in it.items():
+                        if not (isinstance(sub_list, list) and sub_list):
+                            continue
+                        filtered = _filter_unique([str(x) for x in sub_list], _normalize(sub_cat))
+                        if filtered:
+                            final_parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {', '.join(filtered)}")
+
+            if final_parts:
+                category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(final_parts)}")
+
+        # Optionally append Soft Skills as a compact line
+        soft_skills_list = skills_dict.get("Soft Skills")
+        if isinstance(soft_skills_list, list) and soft_skills_list:
+            soft_joined = ", ".join(fix_latex_special_chars(s) for s in soft_skills_list if s)
+            if soft_joined:
+                category_lines.append(f"\\textbf{{Soft Skills}}: {soft_joined}")
 
         if category_lines:
             lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
-            # Join all formatted categories with a LaTeX newline
             lines.append(r"  \item " + r" \\ ".join(category_lines))
             lines.append(r"\end{itemize}")
             lines.append("")
         
     elif isinstance(technical_skills_data, list):
-        # Case 2: "Technical Skills" is a flat list
-        all_skills = [s for s in technical_skills_data if isinstance(s, str) and s.strip()]
-        print(f"PRINT DIAGNOSTIC: Found skills as a flat list: {all_skills}", flush=True)
-        if all_skills:
-            skills_str = ", ".join(fix_latex_special_chars(s) for s in all_skills)
+        # Case 2: "Technical Skills" is a flat list → render compact Tech + Soft lines
+        tech_items = [s for s in technical_skills_data if isinstance(s, str) and s.strip()]
+        soft_skills_list = skills_dict.get("Soft Skills")
+        soft_items = [s for s in (soft_skills_list or []) if isinstance(s, str) and s.strip()]
+
+        pieces: List[str] = []
+        if tech_items:
+            pieces.append(f"\\textbf{{Technical Skills}}: {', '.join(fix_latex_special_chars(s) for s in tech_items)}")
+        if soft_items:
+            pieces.append(f"\\textbf{{Soft Skills}}: {', '.join(fix_latex_special_chars(s) for s in soft_items)}")
+
+        if pieces:
             lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
-            lines.append(r"  \item " + skills_str)
+            lines.append(r"  \item " + r" \\ ".join(pieces))
             lines.append(r"\end{itemize}")
             lines.append("")
 
