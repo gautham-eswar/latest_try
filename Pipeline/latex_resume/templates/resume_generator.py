@@ -125,15 +125,15 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\url{{{email}}}}}")
     
     if raw_linkedin:
-        # Normalize display: remove protocol, ensure single display label, and avoid underscore issues via \url
-        linkedin_url = raw_linkedin
-        if not isinstance(linkedin_url, str):
-            linkedin_url = str(linkedin_url)
+        # Normalize LinkedIn display and avoid double labels
+        linkedin_raw = str(raw_linkedin)
+        # Strip any leading label like 'LinkedIn:' (case-insensitive)
+        if linkedin_raw.lower().startswith("linkedin:"):
+            linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
+        linkedin_url = linkedin_raw
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        display = raw_linkedin
-        # Avoid duplicate 'LinkedIn:' labels and odd case; standardize to 'LinkedIn'
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{display}}}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{linkedin_raw}}}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking
@@ -409,37 +409,49 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
 
     lines.append(r"\section{Skills}") # Renamed section
 
+    # Render all categories under Skills, not just 'Technical Skills'
+    category_lines = []
+    # First, render top-level categories excluding Soft Skills and Technical Skills
+    for category, value in skills_dict.items():
+        if category in ("Technical Skills", "Soft Skills"):
+            continue
+        skills_list = value
+        if not (isinstance(skills_list, list) and skills_list):
+            continue
+        parts = []
+        for item in skills_list:
+            if isinstance(item, str):
+                parts.append(fix_latex_special_chars(item))
+            elif isinstance(item, dict):
+                for sub_cat, sub_skills_list in item.items():
+                    if isinstance(sub_skills_list, list) and sub_skills_list:
+                        sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
+                        parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
+        if parts:
+            category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
+
+    # Then, render 'Technical Skills' if present
     if isinstance(technical_skills_data, dict):
-        # Case 1: "Technical Skills" is a dictionary with categories
-        print("PRINT DIAGNOSTIC: Skills data is a dictionary with categories.", flush=True)
-        
-        category_lines = []
         for category, skills_list in technical_skills_data.items():
             if not (isinstance(skills_list, list) and skills_list):
-                continue # Skip empty or invalid skill lists
-
-            final_skills_str_parts = []
+                continue
+            parts = []
             for item in skills_list:
                 if isinstance(item, str):
-                    final_skills_str_parts.append(fix_latex_special_chars(item))
+                    parts.append(fix_latex_special_chars(item))
                 elif isinstance(item, dict):
                     for sub_cat, sub_skills_list in item.items():
                         if isinstance(sub_skills_list, list) and sub_skills_list:
                             sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
-                            # Bold the sub-category title
-                            final_skills_str_parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
-            
-            if final_skills_str_parts:
-                skills_str = "; ".join(final_skills_str_parts)
-                # Bold the main category title
-                category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {skills_str}")
+                            parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
+            if parts:
+                category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
 
-        if category_lines:
-            lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
-            # Join all formatted categories with a LaTeX newline
-            lines.append(r"  \item " + r" \\ ".join(category_lines))
-            lines.append(r"\end{itemize}")
-            lines.append("")
+    if category_lines:
+        lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
+        lines.append(r"  \item " + r" \\ ".join(category_lines))
+        lines.append(r"\end{itemize}")
+        lines.append("")
         
     elif isinstance(technical_skills_data, list):
         # Case 2: "Technical Skills" is a flat list

@@ -157,6 +157,8 @@ class ResumeEnhancer:
             # Merge additions into existing user-provided structure without flattening or overwriting
             existing_tech_skills = enhanced_resume["Skills"].get("Technical Skills")
 
+            # If the user has top-level categories under Skills, prefer merging into those
+            # Otherwise, merge into the 'Technical Skills' subtree
             merged_tech_skills = self._merge_technical_skills(
                 existing_tech_skills,
                 final_technical_skills
