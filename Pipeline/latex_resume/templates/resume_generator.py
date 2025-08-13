@@ -412,12 +412,16 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
     # First, render top-level categories excluding Soft Skills and Technical Skills
+    seen_categories = set()
     for category, value in skills_dict.items():
         if category in ("Technical Skills", "Soft Skills"):
             continue
         skills_list = value
         if not (isinstance(skills_list, list) and skills_list):
             continue
+        if category in seen_categories:
+            continue
+        seen_categories.add(category)
         parts = []
         for item in skills_list:
             if isinstance(item, str):
@@ -430,8 +434,8 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
         if parts:
             category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
 
-    # Then, render 'Technical Skills' if present
-    if isinstance(technical_skills_data, dict):
+    # Then, render 'Technical Skills' ONLY if no other top-level categories were rendered
+    if not category_lines and isinstance(technical_skills_data, dict):
         for category, skills_list in technical_skills_data.items():
             if not (isinstance(skills_list, list) and skills_list):
                 continue
