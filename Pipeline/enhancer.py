@@ -154,21 +154,23 @@ class ResumeEnhancer:
             if "Skills" not in enhanced_resume or not isinstance(enhanced_resume["Skills"], dict):
                 enhanced_resume["Skills"] = {} # Ensure Skills section is a dict
             
-            # The final_technical_skills is already structured as Dict[category, List[skill_names]]
-            # We want to update/replace the "Technical Skills" part under "Skills"
-            # The parsed resume might have Skills: {"Technical Skills": {"Category1": [], ...}} or 
-            # Skills: {"Technical Skills": [] (flat list)}
-            # The final_technical_skills provides the new structure for "Technical Skills"
-            
-            enhanced_resume["Skills"]["Technical Skills"] = final_technical_skills
-            logger.debug(f"Updated 'Technical Skills' in resume to: {final_technical_skills}")
+            # Merge additions into existing user-provided structure without flattening or overwriting
+            existing_tech_skills = enhanced_resume["Skills"].get("Technical Skills")
+
+            merged_tech_skills = self._merge_technical_skills(
+                existing_tech_skills,
+                final_technical_skills
+            )
+
+            enhanced_resume["Skills"]["Technical Skills"] = merged_tech_skills
+            logger.debug(f"Merged 'Technical Skills' in resume. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
 
             modifications.append({
                 "section": "Skills",
-                "type": "Technical Skills Update",
-                "original_skills_snapshot": original_skills_section_snapshot.get("Technical Skills", "Not present or not a dict"),
-                "updated_skills_structure": final_technical_skills,
-                "message": f"Technical skills section updated with {sum(len(sks) for sks in final_technical_skills.values())} skills across {len(final_technical_skills)} categories."
+                "type": "Technical Skills Merge",
+                "original_skills_snapshot": original_skills_section_snapshot.get("Technical Skills", "Not present"),
+                "updated_skills_structure": enhanced_resume["Skills"].get("Technical Skills"),
+                "message": "Technical skills merged: preserved user categories and appended new skills with de-duplication."
             })
             logger.info(f"Technical skills section updated successfully.")
         else:
@@ -180,6 +182,101 @@ class ResumeEnhancer:
 
         logger.info(f"Resume enhancement process complete. Total modifications: {total_modifications} ({bullet_mods} bullet changes, {skill_sec_mods} skills section changes).")
         return enhanced_resume, modifications
+
+    def _merge_technical_skills(
+        self,
+        existing_tech_skills: Optional[Any],
+        additions: Dict[str, List[str]]
+    ) -> Any:
+        """
+        Merge newly selected technical skills into existing user-provided technical skills
+        without overwriting user categories or flattening subcategory structures.
+
+        Behavior:
+        - If existing is a dict of categories, append new skills into the matching categories.
+          If the category list contains dict subcategories, append new skills as plain strings at
+          the top level of that category list. Do not alter subcategory structures.
+        - If existing is a flat list, append new skills not already present.
+        - If existing is None/missing, return a copy of additions.
+        - De-duplicate case-insensitively while preserving original order.
+        """
+        # If no existing, return a shallow copy of additions (dict) directly
+        if existing_tech_skills is None:
+            return {category: list(skills) for category, skills in additions.items()}
+
+        # Case 1: Existing is a dict of categories
+        if isinstance(existing_tech_skills, dict):
+            merged: Dict[str, List[Any]] = {}
+
+            # Start with a deep-ish copy preserving list items (strings or dicts)
+            for category, items in existing_tech_skills.items():
+                if isinstance(items, list):
+                    merged[category] = list(items)
+                else:
+                    # If malformed, coerce to list for safety
+                    merged[category] = [items]
+
+            # Build a set of lowercase skill names present per category (including within subcategory dicts)
+            def collect_existing_names(items: List[Any]) -> Set[str]:
+                names: Set[str] = set()
+                for it in items:
+                    if isinstance(it, str):
+                        names.add(it.strip().lower())
+                    elif isinstance(it, dict):
+                        for _, sub_list in it.items():
+                            if isinstance(sub_list, list):
+                                for s in sub_list:
+                                    if isinstance(s, str):
+                                        names.add(s.strip().lower())
+                return names
+
+            # Append additions per category with de-duplication
+            for add_category, add_skills in additions.items():
+                if not isinstance(add_skills, list) or not add_skills:
+                    continue
+
+                if add_category not in merged:
+                    merged[add_category] = []
+
+                existing_names = collect_existing_names(merged[add_category])
+
+                for skill in add_skills:
+                    if not isinstance(skill, str) or not skill.strip():
+                        continue
+                    if skill.strip().lower() in existing_names:
+                        continue
+                    # Append as a plain string to preserve existing subcategory dicts
+                    merged[add_category].append(skill)
+                    existing_names.add(skill.strip().lower())
+
+            return merged
+
+        # Case 2: Existing is a flat list of strings
+        if isinstance(existing_tech_skills, list):
+            merged_list: List[Any] = list(existing_tech_skills)
+            existing_names: Set[str] = set(
+                [it.strip().lower() for it in merged_list if isinstance(it, str)]
+            )
+
+            for add_category, add_skills in additions.items():
+                if not isinstance(add_skills, list):
+                    continue
+                for skill in add_skills:
+                    if not isinstance(skill, str) or not skill.strip():
+                        continue
+                    key = skill.strip().lower()
+                    if key in existing_names:
+                        continue
+                    merged_list.append(skill)
+                    existing_names.add(key)
+
+            return merged_list
+
+        # Fallback: unexpected type, replace cautiously with additions copy
+        logger.warning(
+            f"Unexpected 'Technical Skills' type: {type(existing_tech_skills)}. Replacing with merged additions copy."
+        )
+        return {category: list(skills) for category, skills in additions.items()}
     
     def _filter_matches_by_usage(self, 
                                matches_by_bullet: Dict[str, List[Dict[str, Any]]],

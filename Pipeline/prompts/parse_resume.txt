@@ -2,9 +2,7 @@ Parse the following resume text into a structured JSON format. Include the follo
 1. Personal Information (name, email, phone, location, website/LinkedIn)
 2. Summary/Objective
 3. Skills - categorize skills into:
-    - Preserve colon-delimited categories exactly (e.g., "Data Analysis: NumPy, Pandas"). The text before the colon is the category or subcategory; the items after the colon are a list.
-    - Do NOT emit generic buckets like "Category" or "Categories"; infer specific category names from the text, or place items directly under a meaningful category.
-    - Never repeat a category name as an item within its own list. Remove duplicates.
+    - Check for preexisting colonized categories ("Product Stretegy: AB Testing, Product Development", Product Startegy would be the category)
     - If no categories detected, then split it into:
         Technical Skills: Programming languages, tools, software, technical methodologies
         Soft Skills: Communication, leadership, teamwork, etc.
@@ -46,7 +44,7 @@ For the Skills section, if the user has not categorized it, be very careful to c
 Technical skills include specific tools, technologies, programming languages, and technical methodologies.
 Soft skills include interpersonal abilities, communication skills, character traits, and other leadership skills.
 
-Additionally, if a Skills entry includes a colon-delimited main item with sub-items (e.g., "Product Execution: Strategy & Roadmaps, 0-to-1 Development"), preserve this as a nested structure under Technical Skills by representing the text before the colon as the subcategory name and the items after the colon as a list of skills. If Technical Skills are already organized into categories, keep the existing categories and place such subcategory objects within the appropriate category. Do not flatten categories or subcategories. Avoid generic labels like "Category"; use the specific provided label.
+Additionally, if a Skills entry includes a colon-delimited main item with sub-items (e.g., "Product Execution: Strategy & Roadmaps, 0-to-1 Development"), preserve this as a nested structure under Technical Skills by representing the text before the colon as the subcategory name and the items after the colon as a list of skills. If Technical Skills are already organized into categories, keep the existing categories and place such subcategory objects within the appropriate category. Do not flatten categories or subcategories.
 
 RESUME TEXT TO PARSE:
 ---RESUME_START---
