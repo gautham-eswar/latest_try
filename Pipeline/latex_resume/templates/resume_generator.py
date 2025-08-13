@@ -226,9 +226,39 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
             additional_info_raw = edu.get("additional_info")
             relevant_coursework_raw = edu.get("relevant_coursework")
             
+            # Collect extras: any unknown fields to avoid breaking layout (e.g., "Commencement Speaker")
+            allowed_keys = {
+                "institution","university","location","degree","specialization",
+                "dates","start_date","end_date","gpa","honors","additional_info","relevant_coursework"
+            }
+            extras_items: List[str] = []
+            if isinstance(edu, dict):
+                for k, v in edu.items():
+                    if k in allowed_keys or v is None:
+                        continue
+                    values = v if isinstance(v, list) else [v]
+                    for val in values:
+                        s = str(val).strip()
+                        if not s:
+                            continue
+                        label = k.replace("_", " ").title()
+                        extras_items.append(f"{fix_latex_special_chars(label)}: {fix_latex_special_chars(s)}")
+            
             item_list_content = []
-            if additional_info_raw:
-                item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info_raw)}}}")
+            # Normalize additional_info: allow list, or softly split string by comma/semicolon
+            if isinstance(additional_info_raw, list):
+                for entry in additional_info_raw:
+                    s = str(entry).strip()
+                    if s:
+                        item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(s)}}}")
+            elif isinstance(additional_info_raw, str) and additional_info_raw.strip():
+                normalized = additional_info_raw.replace(";", ",")
+                tokens = [t.strip() for t in normalized.split(",") if t and t.strip()]
+                if tokens:
+                    for t in tokens:
+                        item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(t)}}}")
+                else:
+                    item_list_content.append(f"        \\resumeItem{{{fix_latex_special_chars(additional_info_raw)}}}")
             
             if relevant_coursework_raw and isinstance(relevant_coursework_raw, list):
                 courses_str = ", ".join(fix_latex_special_chars(c) for c in relevant_coursework_raw if c)
@@ -236,6 +266,10 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
                     item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {courses_str}}}")
             elif relevant_coursework_raw and isinstance(relevant_coursework_raw, str) and relevant_coursework_raw.strip():
                  item_list_content.append(f"        \\resumeItem{{Relevant Coursework: {fix_latex_special_chars(relevant_coursework_raw)}}}")
+            
+            # Append extras last as bullets
+            for extra in extras_items:
+                item_list_content.append(f"        \\resumeItem{{{extra}}}")
 
             if item_list_content:
                 content_lines.append(r"      \resumeItemListStart")
