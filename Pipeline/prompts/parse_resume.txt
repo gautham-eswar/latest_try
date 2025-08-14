@@ -23,7 +23,10 @@ Parse the following resume text into a structured JSON format. Include the follo
     - end_date (year or "Present")
     - gpa (if available)
     - additional_info (courses, activities, or any other relevant information that hasn't been categorized yet)
-6. Projects (title, description, technologies used) (if the description has multiple bullet points, make sure to include them all in a structured manner)
+6. Projects (title, description, technologies used)
+   - If the description has multiple bullet points, INCLUDE ALL of them in order as an array of STRING bullets.
+   - Do NOT summarize, compress, or drop details. Preserve all metrics (numbers, %), skills, tools, outcomes, and scope.
+   - The description MUST be either a single string (for one paragraph) OR an array of strings (for multiple bullets). Do NOT use objects/dicts for bullets.
 7. Certifications/Awards
 8. Languages
 9. Publications - For each publication:

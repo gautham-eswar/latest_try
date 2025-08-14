@@ -403,13 +403,13 @@ class ResumeEnhancer:
         {keyword_text}
 
         Requirements:
-        1. MUST include ALL the keywords in the enhanced bullet point
-        2. MUST preserve ALL numbers, percentages, and metrics EXACTLY as they appear
-        3. MUST maintain the original meaning, achievements, and scope of work
-        4. MUST keep the same professional tone and tense
-        5. Changes should be minimal and natural - only make changes needed to incorporate keywords
-        6. Final bullet MUST sound natural and professional
-        7. If impossible to include all keywords naturally, prioritize the ones listed first
+        1. MUST include ALL the keywords in the enhanced bullet point.
+        2. MUST preserve ALL numbers, percentages, metrics, tools, and named technologies EXACTLY as they appear.
+        3. MUST maintain the original meaning, results/outcomes, and scope of work (do NOT drop achievements).
+        4. MUST keep the same professional tone and tense.
+        5. Changes should be minimal and natural—only what is needed to incorporate keywords.
+        6. Final bullet MUST sound natural and professional (no fluff, no length inflation).
+        7. If impossible to include all keywords naturally, prioritize the ones listed first.
         8. Return ONLY the rewritten bullet text, with no labels, no prefixes, and no quotation marks.
 
         Enhanced bullet point:
