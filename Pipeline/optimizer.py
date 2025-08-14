@@ -40,6 +40,24 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
     logger.info(f"--- Stage 1/5: Fetching Original Resume ---")
     original_resume_info = fetch_resume_data(resume_id, user_id)
     original_resume_parsed = original_resume_info["data"]
+    # Capture original summary (if any) from the uploaded resume
+    def _ci_get(source: dict, *keys, default=None):
+        if not isinstance(source, dict):
+            return default
+        for key in keys:
+            if key in source:
+                return source[key]
+            for k in source.keys():
+                if isinstance(k, str) and k.lower() == str(key).lower():
+                    return source[k]
+        return default
+    original_summary_value = _ci_get(
+        original_resume_parsed,
+        "objective",
+        "summary",
+        "Summary/Objective",
+        default=None,
+    )
     logger.info(f"--- Stage 1/5: Completed ---")
 
 
@@ -101,7 +119,20 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         matches_by_bullet,
         final_technical_skills=final_technical_skills # Pass the selected skills here
     )
-    # --- Optional: Generate concise job-specific summary ---
+    # --- Summary handling per flag ---
+    # If generate_summary is False, ensure we DO NOT fabricate a new summary.
+    # Preserve the original summary if it existed; otherwise, remove any summary fields.
+    if not generate_summary:
+        try:
+            for key in ("objective", "summary", "Summary/Objective"):
+                if key in enhanced_resume_parsed:
+                    del enhanced_resume_parsed[key]
+            if isinstance(original_summary_value, str) and original_summary_value.strip():
+                enhanced_resume_parsed["objective"] = original_summary_value.strip()
+        except Exception:
+            pass
+
+    # Optional: Generate concise job-specific summary
     if generate_summary:
         try:
             # Build a compact context from enhanced content
