@@ -67,7 +67,7 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     name = fix_latex_special_chars(personal_info.get("name"))
     email = personal_info.get("email")  # Raw email, will handle special chars in href
     phone = fix_latex_special_chars(personal_info.get("phone"))
-    linkedin = fix_latex_special_chars(personal_info.get("linkedin")) # Assuming 'linkedin' key
+    raw_linkedin = personal_info.get("linkedin")  # keep raw for parsing and href
     website = fix_latex_special_chars(personal_info.get("website")) # Assuming 'website' key
     github = fix_latex_special_chars(personal_info.get("github")) # Assuming 'github' key
     location = fix_latex_special_chars(personal_info.get("location"))
@@ -85,11 +85,29 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         # Use the raw email for mailto but escape underscores properly for display
         email_display = email.replace("_", r"\_")  # Proper LaTeX escaping
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\underline{{{email_display}}}}}")
-    if linkedin: # Assuming 'linkedin' key from schema
-        linkedin_url = linkedin
-        if not linkedin.startswith("http"):
-            linkedin_url = f"https://{linkedin}" # Basic assumption
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{Linkedin: \\underline{{{linkedin}}}}}")
+    if raw_linkedin:
+        linkedin_raw = str(raw_linkedin).strip()
+        # Strip any leading label like 'LinkedIn:' (case-insensitive)
+        if linkedin_raw.lower().startswith("linkedin:"):
+            linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
+        # Build href URL
+        linkedin_url = linkedin_raw
+        if not linkedin_url.startswith("http"):
+            linkedin_url = f"https://{linkedin_url}"
+        # Derive display username/slug
+        display_username = linkedin_raw
+        if display_username.startswith("http://") or display_username.startswith("https://"):
+            display_username = display_username.split("://", 1)[1]
+        if "linkedin.com" in display_username:
+            parts = display_username.split("linkedin.com")[-1].lstrip("/")
+            segs = parts.split("/")
+            if len(segs) >= 2:
+                display_username = segs[1]
+            elif len(segs) == 1 and segs[0]:
+                display_username = segs[0]
+        if "/" in display_username:
+            display_username = display_username.rstrip("/").split("/")[-1]
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_username)}}}")
     if github: # Assuming 'github' key
         github_url = github
         if not github.startswith("http"):
@@ -646,8 +664,8 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         r"\newcommand{\resumeProjectHeading}[2]{",
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
-        r"      #1 & #2 \\",
-        r"    \end{tabular*}",
+        r"      #1 & #2 \\\",
+        r"    \\end{tabular*}",
         r"}",
         r"\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}",
         r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",

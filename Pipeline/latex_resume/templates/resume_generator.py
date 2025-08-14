@@ -140,14 +140,33 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     
     if raw_linkedin:
         # Normalize LinkedIn display and avoid double labels
-        linkedin_raw = str(raw_linkedin)
+        linkedin_raw = str(raw_linkedin).strip()
         # Strip any leading label like 'LinkedIn:' (case-insensitive)
         if linkedin_raw.lower().startswith("linkedin:"):
             linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
+        # Extract username/slug for display
+        display_username = linkedin_raw
+        # Remove protocol
+        if display_username.startswith("http://") or display_username.startswith("https://"):
+            display_username = display_username.split("://", 1)[1]
+        # Remove leading domain paths to isolate slug (e.g., linkedin.com/in/username)
+        if "linkedin.com" in display_username:
+            parts = display_username.split("linkedin.com")[-1].lstrip("/")
+            # Typical patterns: in/slug or company/slug
+            path_parts = parts.split("/")
+            if len(path_parts) >= 2:
+                display_username = path_parts[1]
+            elif len(path_parts) == 1 and path_parts[0]:
+                display_username = path_parts[0]
+        # Fallback: if it still looks like a URL path, take last segment
+        if "/" in display_username:
+            display_username = display_username.rstrip("/").split("/")[-1]
+
+        # Build full URL for href
         linkedin_url = linkedin_raw
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{linkedin_raw}}}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_username)}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking
@@ -429,9 +448,9 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     
     technical_skills_data = skills_dict.get("Technical Skills")
 
+    # Do not early-return here; render other top-level categories even if 'Technical Skills' is missing
     if not technical_skills_data:
         print("PRINT DIAGNOSTIC: No 'Technical Skills' key found in skills_dict.", flush=True)
-        return None
 
     lines.append(r"\section{Skills}") # Renamed section
 
@@ -836,7 +855,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\",
-        r"    \end{tabular*}\vspace{2pt}",
+        r"    \end{tabular*}\\\\vspace{0pt}",
         r"}",
         r"\newcommand{\resumeSubItem}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}",
         r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
