@@ -133,23 +133,41 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                                 flat_skills.extend([s for s in v if isinstance(s, str)])
 
             system_prompt = (
-                "You are a precise resume assistant. Write a concise 1–2 sentence professional summary tailored to the job description, "
-                "grounded in the candidate's enhanced resume. Be factual and high-signal. Avoid soft-skill fluff, avoid first-person, "
-                "avoid company names, avoid listing more than 3 core strengths. Max 220 characters."
+                "You are a precise resume assistant. Write a concise professional summary tailored to the job. "
+                "Requirements: 1–2 sentences; ≤ 220 characters total; factual; no first-person; no company names; "
+                "up to 3 core strengths; focus on hard skills/experiences; no fluff; output plain text only (no quotes, no labels)."
             )
-            user_prompt = (
-                "Job Description (brief excerpt):\n" + job_description_text[:800] + "\n\n" +
-                f"Candidate name: {cand_name}\n" +
-                "Representative bullets (up to 6):\n- " + "\n- ".join(sample_bullets) + "\n\n" +
-                "Representative skills (flat):\n" + ", ".join(flat_skills[:20]) + "\n\n" +
-                "Write the summary now."
+            user_prompt_lines = []
+            user_prompt_lines.append("Role: ")
+            user_prompt_lines.append("Job description (excerpt, ~800 chars):\n" + (job_description_text or "")[:800])
+            user_prompt_lines.append("")
+            user_prompt_lines.append(f"Candidate name: {cand_name}")
+            if sample_bullets:
+                user_prompt_lines.append("Candidate bullets (up to 6):")
+                for b in sample_bullets:
+                    user_prompt_lines.append(f"- {b}")
+            if flat_skills:
+                user_prompt_lines.append("")
+                user_prompt_lines.append("Candidate skills (flat, up to 20):")
+                user_prompt_lines.append(", ".join(flat_skills[:20]))
+            user_prompt_lines.append("")
+            user_prompt_lines.append(
+                "Write ONE professional summary now that: is 1–2 sentences and ≤ 220 characters total; names up to 3 core strengths most relevant to the role; "
+                "is factual, avoids soft-skill fluff and first-person; avoids company names and unverifiable claims; outputs plain text only."
             )
+            user_prompt = "\n".join(user_prompt_lines)
             generated_summary = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(generated_summary, str):
                 generated_summary = generated_summary.strip()
-                # Hard cap and cleanup
-                if len(generated_summary) > 260:
-                    generated_summary = generated_summary[:257].rstrip() + "..."
+                # Cleanup: remove surrounding quotes or labels the model might add
+                if (generated_summary.startswith('"') and generated_summary.endswith('"')) or (generated_summary.startswith("'") and generated_summary.endswith("'")):
+                    generated_summary = generated_summary[1:-1].strip()
+                for prefix in ("Summary:", "Professional Summary:"):
+                    if generated_summary.lower().startswith(prefix.lower()):
+                        generated_summary = generated_summary[len(prefix):].strip()
+                # Enforce hard cap ~220 chars
+                if len(generated_summary) > 220:
+                    generated_summary = generated_summary[:217].rstrip() + "..."
                 # Inject into enhanced resume under objective
                 if generated_summary:
                     enhanced_resume_parsed["objective"] = generated_summary
