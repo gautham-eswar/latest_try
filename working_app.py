@@ -233,11 +233,14 @@ def create_app():
             resume_id = request.form["resume_id"]
             user_id = request.form["user_id"]
             job_description = request.form["job_description"]
+            # Optional: whether to generate/include a new summary tailored to the JD
+            gen_sum_raw = request.form.get("generate_summary") or request.form.get("generate_new_summary")
+            generate_summary = str(gen_sum_raw).strip().lower() in ("1", "true", "yes", "on")
             
             # Create optimization task in supabase (for tracking purposes)
             job_id = create_optimization_job(resume_id, user_id, job_description)
 
-            response_received = enhance_resume(job_id, resume_id, user_id, job_description)
+            response_received = enhance_resume(job_id, resume_id, user_id, job_description, generate_summary=generate_summary)
             logger.info(f"[TZ] --- RESPONSE RECEIVED: {response_received} ---")
             return response_received
         

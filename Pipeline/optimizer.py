@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 diagnostic_system = get_diagnostic_system()
 
 
-def enhance_resume(job_id, resume_id, user_id, job_description_text):
+def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_summary: bool = False):
 
     logger.info(f"--- Pipeline Start: Enhance Resume for Job {job_id} ---")
     logger.info(f"Received User ID: {user_id}, Resume ID: {resume_id}")
@@ -114,6 +114,63 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
     logger.info(
         f"Attempting to save enhanced resume in Supabase table   ..."
     )
+    # Optionally inject or remove summary before saving
+    try:
+        if generate_summary:
+            # Build concise job-specific 1-2 sentence summary from existing content
+            # Use deterministic construction to avoid long generations
+            name_for_summary = (original_resume_parsed.get("Personal Information", {}) or {}).get("name") or original_resume_parsed.get("name")
+            # Extract up to a few top hard skills from matched/enhanced coverage
+            hard_terms = [kw.get("keyword") for kw in (keywords_data or {}).get("keywords", []) if isinstance(kw, dict) and kw.get("skill_type") == "hard skill" and kw.get("keyword")]
+            hard_terms = [t for t in hard_terms if isinstance(t, str)]
+            # Reuse coverage sets computed later would require refactor; compute a quick set here
+            def _collect_texts_for_summary(resume_json: dict) -> str:
+                texts = []
+                for exp in resume_json.get("Experience", []) or []:
+                    if isinstance(exp, dict):
+                        for b in exp.get("responsibilities/achievements", []) or []:
+                            if isinstance(b, str): texts.append(b)
+                for proj in resume_json.get("Projects", []) or []:
+                    if isinstance(proj, dict):
+                        desc = proj.get("description")
+                        if isinstance(desc, list): texts.extend([d for d in desc if isinstance(d, str)])
+                        elif isinstance(desc, str): texts.append(desc)
+                return "\n".join(texts).lower()
+            haystack = _collect_texts_for_summary(original_resume_parsed)
+            present = []
+            seen = set()
+            for term in hard_terms:
+                t = term.lower().strip()
+                if not t or t in seen: continue
+                if t in haystack:
+                    present.append(term)
+                    seen.add(t)
+                if len(present) >= 3:
+                    break
+            present_str = ", ".join(present) if present else "your core strengths"
+            # Use the JD to pick 1-2 salient add-ons by simple heuristic (first unseen hard terms)
+            additions = []
+            for term in hard_terms:
+                t = term.lower().strip()
+                if t and t not in seen:
+                    additions.append(term)
+                if len(additions) >= 2:
+                    break
+            add_str = ", ".join(additions) if additions else "role-specific keywords"
+            simple_one_liner = f"Experienced candidate with strengths in {present_str}; tailored for this role by emphasizing {add_str}."
+            # Insert into enhanced resume as objective (Summary header uses this)
+            if isinstance(enhanced_resume_parsed, dict):
+                enhanced_resume_parsed["objective"] = simple_one_liner
+        else:
+            # Ensure summary is omitted entirely
+            if isinstance(enhanced_resume_parsed, dict):
+                for k in ["objective", "summary", "Summary/Objective"]:
+                    if k in enhanced_resume_parsed:
+                        enhanced_resume_parsed.pop(k, None)
+    except Exception:
+        # Non-critical: if summary generation fails, proceed without it
+        pass
+
     enhanced_resume_data = upload_resume({
         "user_id": user_id,
         "data": enhanced_resume_parsed,
