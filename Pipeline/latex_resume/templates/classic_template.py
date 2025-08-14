@@ -665,7 +665,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\\",
-        r"    \\end{tabular*}\\\\vspace{0pt}",
+        r"    \\end{tabular*}\\vspace{0pt}",
         r"}"
     ])
 

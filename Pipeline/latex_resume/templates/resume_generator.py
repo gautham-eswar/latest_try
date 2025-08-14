@@ -855,7 +855,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\",
-        r"    \end{tabular*}\\\\vspace{0pt}",
+        r"    \\end{tabular*}\\vspace{0pt}",
         r"}",
         r"\newcommand{\resumeSubItem}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}",
         r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
