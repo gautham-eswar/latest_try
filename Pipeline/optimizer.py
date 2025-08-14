@@ -323,6 +323,9 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             f"Your resume already has {base_show} going for it; we made it a better fit by adding {added_show}."
         )
 
+        # Log computed analysis for verification
+        logger.info(f"Job {job_id}: Computed fit_scores={fit_scores}, fit_summary='{fit_summary}'")
+
         # Persist to optimization_jobs for direct-link page loads
         try:
             update_optimization_job(job_id, {
