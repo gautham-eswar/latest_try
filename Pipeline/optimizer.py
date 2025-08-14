@@ -244,29 +244,12 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         newly_added = sorted(list(enhanced_present - initial_present))[:6]
         top_missing = sorted(list(jd_hard - enhanced_present))[:6]
 
-        # Deterministic concise summary (fallback or cap)
+        # Deterministic one-liner summary (no GPT to keep it short and consistent)
         base_show = ", ".join(sorted(list(initial_present))[:3]) or "your existing strengths"
-        added_show = ", ".join(newly_added[:3]) or "key role-specific keywords"
-        simple_summary = (
-            f"Your resume aligns with {base_show}; we strengthened it by highlighting {added_show}."
+        added_show = ", ".join(newly_added[:3]) or "critical role keywords"
+        fit_summary = (
+            f"Your resume already has {base_show} going for it; we made it a better fit by adding {added_show}."
         )
-
-        # Brief, specific summary using a very small GPT call (best-effort)
-        system_prompt = "You are a concise resume reviewer for ATS alignment. Return 1-2 short sentences, plain text, no bullets."
-        user_prompt = (
-            "Context: scoring resume vs. job hard skills.\n"
-            f"Initial score: {initial_score}/100; Enhanced score: {enhanced_score}/100.\n"
-            f"Matched: {top_matched}\nAdded: {newly_added}\nMissing: {top_missing}\n"
-            "Write 1-2 sentences (<= 180 characters) explaining alignment and what was improved; do not exceed 180 characters."
-        )
-        try:
-            fit_summary = call_openai_api(system_prompt, user_prompt, max_retries=2)
-        except Exception:
-            fit_summary = None
-
-        # Enforce brevity and fall back to simple deterministic summary if needed
-        if not fit_summary or len(fit_summary.strip()) > 200:
-            fit_summary = simple_summary
 
         # Persist to optimization_jobs for direct-link page loads
         try:
