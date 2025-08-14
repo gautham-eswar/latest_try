@@ -19,7 +19,6 @@ from Services.utils import create_error_response
 from Pipeline.embeddings import SemanticMatcher
 from Pipeline.enhancer import ResumeEnhancer
 from Pipeline.latex_generation import proactively_generate_pdf # Added for proactive PDF generation
-from Services.openai_interface import call_openai_api
 
 # logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -240,9 +239,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         }
 
         # Build concise skill lists
-        top_matched = sorted(list(enhanced_present))[:6]
         newly_added = sorted(list(enhanced_present - initial_present))[:6]
-        top_missing = sorted(list(jd_hard - enhanced_present))[:6]
 
         # Deterministic one-liner summary (no GPT to keep it short and consistent)
         base_show = ", ".join(sorted(list(initial_present))[:3]) or "your existing strengths"
