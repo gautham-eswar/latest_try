@@ -238,10 +238,21 @@ class ResumeEnhancer:
                 if not isinstance(add_skills, list) or not add_skills:
                     continue
 
-                if add_category not in merged:
-                    merged[add_category] = []
+                # Clean up category name - remove prefixes like "Existing Category:", "New Category:"
+                clean_category = re.sub(
+                    r'^(existing\s*category:|new\s*category:)\s*',
+                    '',
+                    add_category,
+                    flags=re.IGNORECASE
+                ).strip()
+                
+                if not clean_category:
+                    clean_category = add_category  # Fallback to original if cleaning results in empty
+                
+                if clean_category not in merged:
+                    merged[clean_category] = []
 
-                existing_names = collect_existing_names(merged[add_category])
+                existing_names = collect_existing_names(merged[clean_category])
 
                 for skill in add_skills:
                     if not isinstance(skill, str) or not skill.strip():
@@ -249,7 +260,7 @@ class ResumeEnhancer:
                     if skill.strip().lower() in existing_names:
                         continue
                     # Append as a plain string to preserve existing subcategory dicts
-                    merged[add_category].append(skill)
+                    merged[clean_category].append(skill)
                     existing_names.add(skill.strip().lower())
 
             return merged
@@ -410,8 +421,9 @@ class ResumeEnhancer:
         5. Changes should be minimal and natural - only make changes needed to incorporate keywords
         6. Final bullet MUST sound natural and professional
         7. If impossible to include all keywords naturally, prioritize the ones listed first
+        8. Return ONLY the rewritten bullet text, with no labels, no quotes, and no leading words such as 'Enhanced bullet point:'
 
-        Enhanced bullet point:
+        Rewritten bullet:
         """
         
         try:
@@ -428,6 +440,14 @@ class ResumeEnhancer:
             
             # Extract the enhanced bullet
             enhanced_bullet = response.choices[0].message.content.strip()
+            
+            # Remove any leading labels the model might have added
+            enhanced_bullet = re.sub(
+                r'^(enhanced\s*bullet(\s*point)?|final\s*bullet|rewritten\s*bullet|updated\s*bullet|output)\s*:\s*',
+                '', 
+                enhanced_bullet, 
+                flags=re.IGNORECASE
+            )
             
             # Clean up the response (remove quotes if present)
             if enhanced_bullet.startswith('"') and enhanced_bullet.endswith('"'):

@@ -73,6 +73,20 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
     if not isinstance(text, str):
         text = str(text) # Ensure it's a string
 
+    # Normalize Unicode ligatures to ASCII equivalents
+    ligature_replacements = [
+        ("ﬀ", "ff"),  # U+FB00
+        ("ﬁ", "fi"),  # U+FB01
+        ("ﬂ", "fl"),  # U+FB02
+        ("ﬃ", "ffi"), # U+FB03
+        ("ﬄ", "ffl"), # U+FB04
+        ("ﬅ", "st"),  # U+FB05
+        ("ﬆ", "st"),  # U+FB06
+    ]
+    
+    for old, new in ligature_replacements:
+        text = text.replace(old, new)
+
     # Order of replacements is critical.
     # Replace backslash first, then other characters including percent.
     replacements = [
@@ -366,8 +380,20 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tec
                     formatted_desc = format_bullet_with_highlights(desc_item_raw, tech_skills, metrics)
                     content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             elif isinstance(description_raw, str) and description_raw.strip():
-                formatted_desc = format_bullet_with_highlights(description_raw, tech_skills, metrics)
-                content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
+                # Split on newlines or bullet markers to handle multi-line descriptions
+                desc_str = str(description_raw)
+                # Split on newlines, bullet points, or semicolons
+                import re
+                bullet_items = re.split(r'\n+|(?:^|\s)[-•*]\s+|;\s*(?=[A-Z])', desc_str)
+                bullet_items = [item.strip() for item in bullet_items if item.strip()]
+                
+                if len(bullet_items) > 1:
+                    for item in bullet_items:
+                        formatted_desc = format_bullet_with_highlights(item, tech_skills, metrics)
+                        content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
+                else:
+                    formatted_desc = format_bullet_with_highlights(description_raw, tech_skills, metrics)
+                    content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             content_lines.append(r"          \resumeItemListEnd")
             
     if not content_lines: return None
@@ -411,10 +437,23 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
 
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
-    # First, render top-level categories excluding Soft Skills and Technical Skills
+    # First, render top-level categories excluding soft skill categories
     seen_categories = set()
+    
+    # Expanded list of soft skill categories to exclude
+    soft_skill_categories = {
+        "Soft Skills", 
+        "Problem Solving & Analysis",
+        "Communication & Presentation Skills",
+        "Leadership",
+        "Interpersonal",
+        "Teamwork",
+        "Communication",
+        "Management"
+    }
+    
     for category, value in skills_dict.items():
-        if category in ("Technical Skills", "Soft Skills"):
+        if category == "Technical Skills" or category in soft_skill_categories:
             continue
         skills_list = value
         if not (isinstance(skills_list, list) and skills_list):

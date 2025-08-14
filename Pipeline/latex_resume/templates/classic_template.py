@@ -14,6 +14,20 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
     if not isinstance(text, str):
         text = str(text) # Ensure it's a string
 
+    # Normalize Unicode ligatures to ASCII equivalents
+    ligature_replacements = [
+        ("ﬀ", "ff"),  # U+FB00
+        ("ﬁ", "fi"),  # U+FB01
+        ("ﬂ", "fl"),  # U+FB02
+        ("ﬃ", "ffi"), # U+FB03
+        ("ﬄ", "ffl"), # U+FB04
+        ("ﬅ", "st"),  # U+FB05
+        ("ﬆ", "st"),  # U+FB06
+    ]
+    
+    for old, new in ligature_replacements:
+        text = text.replace(old, new)
+
     # Process percentage signs specially to handle common patterns like "5%" correctly
     # First, find and protect patterns like "X%" where X is a number
     protected_percentages = {}
@@ -261,9 +275,21 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> 
             lines.append(r"          \resumeItemListStart")
             if isinstance(description, list):
                 for item in description:
-                    lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
+                    if isinstance(item, str) and item.strip():
+                        lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
             else: # string
-                lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
+                # Split on newlines or bullet markers to handle multi-line descriptions
+                desc_str = str(description)
+                # Split on newlines, bullet points, or semicolons
+                import re
+                bullet_items = re.split(r'\n+|(?:^|\s)[-•*]\s+|;\s*(?=[A-Z])', desc_str)
+                bullet_items = [item.strip() for item in bullet_items if item.strip()]
+                
+                if len(bullet_items) > 1:
+                    for item in bullet_items:
+                        lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
+                else:
+                    lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
             lines.append(r"          \resumeItemListEnd")
             
     lines.append("    \\resumeSubHeadingListEnd")
@@ -280,10 +306,22 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     if not skills_dict:
         return None
 
-    lines = ["\\section{Technical Skills}"] # Default section title from sample
+    lines = ["\\section{Skills}"] # Changed from "Technical Skills" to "Skills"
     
     # Check for "Technical Skills" sub-dictionary as in Evelyn.json
     technical_skills_data = skills_dict.get("Technical Skills")
+    
+    # Expanded list of soft skill categories to exclude
+    soft_skill_categories = {
+        "Soft Skills", 
+        "Problem Solving & Analysis",
+        "Communication & Presentation Skills",
+        "Leadership",
+        "Interpersonal",
+        "Teamwork",
+        "Communication",
+        "Management"
+    }
     
     # If "Technical Skills" is not a sub-dict, assume skills_dict itself is the category->list_of_skills map
     # as per the prompt's schema definition.
@@ -291,7 +329,8 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     if isinstance(technical_skills_data, dict):
         skills_to_process = technical_skills_data
     elif isinstance(skills_dict, dict) and not technical_skills_data: # skills_dict *is* the categories
-        skills_to_process = skills_dict
+        # Filter out soft skill categories
+        skills_to_process = {k: v for k, v in skills_dict.items() if k not in soft_skill_categories}
     
     if not skills_to_process: # If still no processable skills (e.g. only "Soft Skills" or empty)
         # Try to see if there's a "Soft Skills" to list, or just output nothing.
@@ -312,8 +351,20 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     category_lines = []
     for category, skills_list in skills_to_process.items():
         if isinstance(skills_list, list) and skills_list: # Ensure it's a list and not empty
-            skills_str = ", ".join(fix_latex_special_chars(s) for s in skills_list)
-            category_lines.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
+            # Handle both strings and subcategory dictionaries
+            parts = []
+            for item in skills_list:
+                if isinstance(item, str):
+                    parts.append(fix_latex_special_chars(item))
+                elif isinstance(item, dict):
+                    # Handle subcategories
+                    for sub_cat, sub_skills_list in item.items():
+                        if isinstance(sub_skills_list, list) and sub_skills_list:
+                            sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
+                            parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
+            if parts:
+                skills_str = "; ".join(parts)
+                category_lines.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
     
     lines.append(" \\\\ ".join(category_lines)) # Join categories with LaTeX newline
     
