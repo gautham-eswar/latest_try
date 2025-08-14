@@ -136,15 +136,23 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\url{{{email}}}}}")
     
     if raw_linkedin:
-        # Normalize LinkedIn display and avoid double labels
-        linkedin_raw = str(raw_linkedin)
-        # Strip any leading label like 'LinkedIn:' (case-insensitive)
+        # Normalize LinkedIn display: show 'LinkedIn: username' but link to full URL
+        linkedin_raw = str(raw_linkedin).strip()
         if linkedin_raw.lower().startswith("linkedin:"):
             linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
+        display_user = linkedin_raw
+        # If it's a full URL, extract the username (last path segment)
+        m = re.match(r"https?://[^/]+/in/([^/?#]+)", linkedin_raw, flags=re.IGNORECASE)
+        if m:
+            display_user = m.group(1)
+        elif linkedin_raw.startswith("linkedin.com/"):
+            m2 = re.match(r"linkedin\.com/[^/]+/([^/?#]+)", linkedin_raw, flags=re.IGNORECASE)
+            if m2:
+                display_user = m2.group(1)
         linkedin_url = linkedin_raw
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{linkedin_raw}}}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_user)}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking
@@ -475,6 +483,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
                 category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
 
     if category_lines:
+        lines.append(r"\vspace{4pt}")
         lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
         lines.append(r"  \item " + r" \\ ".join(category_lines))
         lines.append(r"\end{itemize}")
@@ -820,7 +829,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\",
-        r"    \end{tabular*}\vspace{2pt}",
+        r"    \end{tabular*}\vspace{0pt}",
         r"}",
         r"\newcommand{\resumeSubItem}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}",
         r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
