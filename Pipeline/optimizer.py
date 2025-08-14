@@ -250,6 +250,15 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
             fit_summary = call_openai_api(system_prompt, user_prompt, max_retries=2)
         except Exception:
             fit_summary = None
+
+        # Persist to optimization_jobs for direct-link page loads
+        try:
+            update_optimization_job(job_id, {
+                "fit_scores": fit_scores,
+                "fit_summary": fit_summary,
+            })
+        except Exception:
+            pass
     except Exception:
         # Non-critical; proceed without scores/summary
         pass
