@@ -1,6 +1,6 @@
 Parse the following resume text into a structured JSON format. Include the following sections:
 1. Personal Information (name, email, phone, location, website/LinkedIn)
-2. Summary/Objective (only if clearly present in the text; do not invent one)
+2. Summary/Objective
 3. Skills - categorize skills into:
     - Check for preexisting colonized categories ("Product Stretegy: AB Testing, Product Development", Product Startegy would be the category)
     - If no categories detected, then split it into:
