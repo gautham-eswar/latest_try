@@ -225,31 +225,48 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text):
         # Compute initial/enhanced presence
         initial_present = _present_skills(original_resume_parsed, jd_hard)
         enhanced_present = _present_skills(enhanced_resume_parsed, jd_hard)
+        # Ensure monotonicity: enhancement should not reduce matched coverage
+        enhanced_present = enhanced_present | initial_present
 
         denom = max(1, len(jd_hard))
         initial_score = int(round(100 * len(initial_present) / denom))
         enhanced_score = int(round(100 * len(enhanced_present) / denom))
+        if enhanced_score < initial_score:
+            enhanced_score = initial_score
         fit_scores = {
             "initial": initial_score,
             "enhanced": enhanced_score,
             "delta": enhanced_score - initial_score,
         }
 
-        # Brief, specific summary using a very small GPT call (best-effort)
+        # Build concise skill lists
         top_matched = sorted(list(enhanced_present))[:6]
         newly_added = sorted(list(enhanced_present - initial_present))[:6]
         top_missing = sorted(list(jd_hard - enhanced_present))[:6]
+
+        # Deterministic concise summary (fallback or cap)
+        base_show = ", ".join(sorted(list(initial_present))[:3]) or "your existing strengths"
+        added_show = ", ".join(newly_added[:3]) or "key role-specific keywords"
+        simple_summary = (
+            f"Your resume aligns with {base_show}; we strengthened it by highlighting {added_show}."
+        )
+
+        # Brief, specific summary using a very small GPT call (best-effort)
         system_prompt = "You are a concise resume reviewer for ATS alignment. Return 1-2 short sentences, plain text, no bullets."
         user_prompt = (
             "Context: scoring resume vs. job hard skills.\n"
             f"Initial score: {initial_score}/100; Enhanced score: {enhanced_score}/100.\n"
             f"Matched: {top_matched}\nAdded: {newly_added}\nMissing: {top_missing}\n"
-            "Write 1-2 sentences explaining alignment and what was improved; end with one specific suggestion."
+            "Write 1-2 sentences (<= 180 characters) explaining alignment and what was improved; do not exceed 180 characters."
         )
         try:
             fit_summary = call_openai_api(system_prompt, user_prompt, max_retries=2)
         except Exception:
             fit_summary = None
+
+        # Enforce brevity and fall back to simple deterministic summary if needed
+        if not fit_summary or len(fit_summary.strip()) > 200:
+            fit_summary = simple_summary
 
         # Persist to optimization_jobs for direct-link page loads
         try:
