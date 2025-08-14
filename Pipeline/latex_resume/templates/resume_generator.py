@@ -371,8 +371,6 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tec
             tech_str = fix_latex_special_chars(tech_used_list)
 
         heading_title_part = f"\\textbf{{{title}}}"
-        if tech_str:
-            heading_title_part += f" $|$ \\emph{{{tech_str}}}"
 
         content_lines.append(f"      \\resumeProjectHeading{{{heading_title_part}}}{{{dates_str}}}")
         
@@ -993,6 +991,24 @@ Resume bullet points:
         tech_skills = [skill for skill in tech_skills if len(skill) >= MIN_SKILL_LEN]
         if len(tech_skills) != original_skill_count:
             print(f"AI HINT DEBUG: Filtered OpenAI skills from {original_skill_count} to {len(tech_skills)} (min length {MIN_SKILL_LEN}).", flush=True)
+        
+        # Additional tiny filter: remove soft skills present in resume's "Soft Skills" list
+        try:
+            skills_root_for_soft = resume_data.get("Skills") or resume_data.get("skills")
+            soft_skill_terms = set()
+            if isinstance(skills_root_for_soft, dict):
+                soft_list = skills_root_for_soft.get("Soft Skills")
+                if isinstance(soft_list, list):
+                    for s in soft_list:
+                        if isinstance(s, str) and s.strip():
+                            soft_skill_terms.add(s.strip().lower())
+            before_soft_filter = len(tech_skills)
+            tech_skills = [s for s in tech_skills if s.strip().lower() not in soft_skill_terms]
+            if len(tech_skills) != before_soft_filter:
+                print(f"AI HINT DEBUG: Removed {before_soft_filter - len(tech_skills)} soft-skill terms from OpenAI technical_skills via Soft Skills list.", flush=True)
+        except Exception as _:
+            # Do not fail highlighting due to filtering errors
+            pass
             
         API_CACHE[cache_key] = {"technical_skills": tech_skills, "metrics": metrics}
         print(f"AI HINT DEBUG: Parsed technical_skills from OpenAI (post-filter): {tech_skills}", flush=True)

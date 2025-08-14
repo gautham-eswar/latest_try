@@ -14,20 +14,6 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
     if not isinstance(text, str):
         text = str(text) # Ensure it's a string
 
-    # Normalize Unicode ligatures to ASCII equivalents
-    ligature_replacements = [
-        ("ﬀ", "ff"),  # U+FB00
-        ("ﬁ", "fi"),  # U+FB01
-        ("ﬂ", "fl"),  # U+FB02
-        ("ﬃ", "ffi"), # U+FB03
-        ("ﬄ", "ffl"), # U+FB04
-        ("ﬅ", "st"),  # U+FB05
-        ("ﬆ", "st"),  # U+FB06
-    ]
-    
-    for old, new in ligature_replacements:
-        text = text.replace(old, new)
-
     # Process percentage signs specially to handle common patterns like "5%" correctly
     # First, find and protect patterns like "X%" where X is a number
     protected_percentages = {}
@@ -67,7 +53,7 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     name = fix_latex_special_chars(personal_info.get("name"))
     email = personal_info.get("email")  # Raw email, will handle special chars in href
     phone = fix_latex_special_chars(personal_info.get("phone"))
-    raw_linkedin = personal_info.get("linkedin")  # keep raw for parsing and href
+    linkedin = fix_latex_special_chars(personal_info.get("linkedin")) # Assuming 'linkedin' key
     website = fix_latex_special_chars(personal_info.get("website")) # Assuming 'website' key
     github = fix_latex_special_chars(personal_info.get("github")) # Assuming 'github' key
     location = fix_latex_special_chars(personal_info.get("location"))
@@ -85,29 +71,11 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         # Use the raw email for mailto but escape underscores properly for display
         email_display = email.replace("_", r"\_")  # Proper LaTeX escaping
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\underline{{{email_display}}}}}")
-    if raw_linkedin:
-        linkedin_raw = str(raw_linkedin).strip()
-        # Strip any leading label like 'LinkedIn:' (case-insensitive)
-        if linkedin_raw.lower().startswith("linkedin:"):
-            linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
-        # Build href URL
-        linkedin_url = linkedin_raw
-        if not linkedin_url.startswith("http"):
-            linkedin_url = f"https://{linkedin_url}"
-        # Derive display username/slug
-        display_username = linkedin_raw
-        if display_username.startswith("http://") or display_username.startswith("https://"):
-            display_username = display_username.split("://", 1)[1]
-        if "linkedin.com" in display_username:
-            parts = display_username.split("linkedin.com")[-1].lstrip("/")
-            segs = parts.split("/")
-            if len(segs) >= 2:
-                display_username = segs[1]
-            elif len(segs) == 1 and segs[0]:
-                display_username = segs[0]
-        if "/" in display_username:
-            display_username = display_username.rstrip("/").split("/")[-1]
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_username)}}}")
+    if linkedin: # Assuming 'linkedin' key from schema
+        linkedin_url = linkedin
+        if not linkedin.startswith("http"):
+            linkedin_url = f"https://{linkedin}" # Basic assumption
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{Linkedin: \\underline{{{linkedin}}}}}")
     if github: # Assuming 'github' key
         github_url = github
         if not github.startswith("http"):
@@ -293,21 +261,9 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]]) -> 
             lines.append(r"          \resumeItemListStart")
             if isinstance(description, list):
                 for item in description:
-                    if isinstance(item, str) and item.strip():
-                        lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
+                    lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
             else: # string
-                # Split on newlines or bullet markers to handle multi-line descriptions
-                desc_str = str(description)
-                # Split on newlines, bullet points, or semicolons
-                import re
-                bullet_items = re.split(r'\n+|(?:^|\s)[-•*]\s+|;\s*(?=[A-Z])', desc_str)
-                bullet_items = [item.strip() for item in bullet_items if item.strip()]
-                
-                if len(bullet_items) > 1:
-                    for item in bullet_items:
-                        lines.append(f"            \\resumeItem{{{fix_latex_special_chars(item)}}}")
-                else:
-                    lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
+                lines.append(f"            \\resumeItem{{{fix_latex_special_chars(description)}}}")
             lines.append(r"          \resumeItemListEnd")
             
     lines.append("    \\resumeSubHeadingListEnd")
@@ -324,22 +280,10 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     if not skills_dict:
         return None
 
-    lines = ["\\section{Skills}"] # Changed from "Technical Skills" to "Skills"
+    lines = ["\\section{Technical Skills}"] # Default section title from sample
     
     # Check for "Technical Skills" sub-dictionary as in Evelyn.json
     technical_skills_data = skills_dict.get("Technical Skills")
-    
-    # Expanded list of soft skill categories to exclude
-    soft_skill_categories = {
-        "Soft Skills", 
-        "Problem Solving & Analysis",
-        "Communication & Presentation Skills",
-        "Leadership",
-        "Interpersonal",
-        "Teamwork",
-        "Communication",
-        "Management"
-    }
     
     # If "Technical Skills" is not a sub-dict, assume skills_dict itself is the category->list_of_skills map
     # as per the prompt's schema definition.
@@ -347,8 +291,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     if isinstance(technical_skills_data, dict):
         skills_to_process = technical_skills_data
     elif isinstance(skills_dict, dict) and not technical_skills_data: # skills_dict *is* the categories
-        # Filter out soft skill categories
-        skills_to_process = {k: v for k, v in skills_dict.items() if k not in soft_skill_categories}
+        skills_to_process = skills_dict
     
     if not skills_to_process: # If still no processable skills (e.g. only "Soft Skills" or empty)
         # Try to see if there's a "Soft Skills" to list, or just output nothing.
@@ -369,20 +312,8 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]]) -> Optional[
     category_lines = []
     for category, skills_list in skills_to_process.items():
         if isinstance(skills_list, list) and skills_list: # Ensure it's a list and not empty
-            # Handle both strings and subcategory dictionaries
-            parts = []
-            for item in skills_list:
-                if isinstance(item, str):
-                    parts.append(fix_latex_special_chars(item))
-                elif isinstance(item, dict):
-                    # Handle subcategories
-                    for sub_cat, sub_skills_list in item.items():
-                        if isinstance(sub_skills_list, list) and sub_skills_list:
-                            sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
-                            parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
-            if parts:
-                skills_str = "; ".join(parts)
-                category_lines.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
+            skills_str = ", ".join(fix_latex_special_chars(s) for s in skills_list)
+            category_lines.append(f"     \\textbf{{{fix_latex_special_chars(category)}}}{{: {skills_str}}}")
     
     lines.append(" \\\\ ".join(category_lines)) # Join categories with LaTeX newline
     
@@ -664,8 +595,16 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         r"\newcommand{\resumeProjectHeading}[2]{",
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
-        r"      #1 & #2 \\\",
-        r"    \\end{tabular*}\\vspace{0pt}",
+        r"      #1 & #2 \\",
+        r"    \end{tabular*}",
+        r"}",
+        r"\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}",
+        r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
+        r"\newcommand{\resumeSubheadingSingleLine}[2]{",
+        r"  \item",
+        r"    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}",
+        r"      \textbf{#1} & #2 \\",
+        r"    \end{tabular*}",
         r"}"
     ])
 
