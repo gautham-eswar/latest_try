@@ -433,22 +433,38 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
 
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
+    # Track seen skills across categories to avoid duplicates
+    seen_skill_texts = set()
+    # Expanded exclusion: soft/non-technical category names that often leak into skills
+    soft_category_names = {
+        "soft skills",
+        "problem solving & analysis",
+        "problem-solving & analysis",
+        "communication & presentation skills",
+        "communication",
+        "leadership",
+        "interpersonal",
+        "teamwork",
+        # Common noisy buckets that mix soft/generic concepts
+        "technical methodologies",
+    }
+    # Generic soft-ish terms to skip as individual skills
+    softish_terms = {
+        "presentation",
+        "presentations",
+        "problem solving",
+        "problem-solving",
+        "critical thinking",
+        "research",
+        "analytical skills",
+    }
     # First, render top-level categories excluding Soft Skills and Technical Skills
     seen_categories = set()
     for category, value in skills_dict.items():
         if category in ("Technical Skills", "Soft Skills"):
             continue
-        # Skip clearly non-technical soft categories
-        if isinstance(category, str) and category.strip().lower() in {
-            "soft skills",
-            "problem solving & analysis",
-            "problem-solving & analysis",
-            "communication & presentation skills",
-            "communication",
-            "leadership",
-            "interpersonal",
-            "teamwork",
-        }:
+        # Skip clearly non-technical/soft categories
+        if isinstance(category, str) and category.strip().lower() in soft_category_names:
             continue
         skills_list = value
         if not (isinstance(skills_list, list) and skills_list):
@@ -459,11 +475,30 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
         parts = []
         for item in skills_list:
             if isinstance(item, str):
+                norm = item.strip().lower()
+                if norm in softish_terms:
+                    continue
+                if norm in seen_skill_texts:
+                    continue
+                seen_skill_texts.add(norm)
                 parts.append(fix_latex_special_chars(item))
             elif isinstance(item, dict):
                 for sub_cat, sub_skills_list in item.items():
                     if isinstance(sub_skills_list, list) and sub_skills_list:
-                        sub_skills_str = ", ".join(fix_latex_special_chars(s) for s in sub_skills_list)
+                        filtered_sub = []
+                        for s in sub_skills_list:
+                            if not isinstance(s, str):
+                                continue
+                            norm = s.strip().lower()
+                            if norm in softish_terms:
+                                continue
+                            if norm in seen_skill_texts:
+                                continue
+                            seen_skill_texts.add(norm)
+                            filtered_sub.append(fix_latex_special_chars(s))
+                        if not filtered_sub:
+                            continue
+                        sub_skills_str = ", ".join(filtered_sub)
                         parts.append(f"\\textbf{{{fix_latex_special_chars(sub_cat)}}}: {sub_skills_str}")
         if parts:
             category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
