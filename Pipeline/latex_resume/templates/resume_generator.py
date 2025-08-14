@@ -73,19 +73,16 @@ def fix_latex_special_chars(text: Optional[Any]) -> str:
     if not isinstance(text, str):
         text = str(text) # Ensure it's a string
 
-    # Normalize Unicode ligatures to ASCII equivalents
-    ligature_replacements = [
-        ("ﬀ", "ff"),  # U+FB00
-        ("ﬁ", "fi"),  # U+FB01
-        ("ﬂ", "fl"),  # U+FB02
-        ("ﬃ", "ffi"), # U+FB03
-        ("ﬄ", "ffl"), # U+FB04
-        ("ﬅ", "st"),  # U+FB05
-        ("ﬆ", "st"),  # U+FB06
-    ]
-    
-    for old, new in ligature_replacements:
-        text = text.replace(old, new)
+    # Normalize common Unicode ligatures to ASCII to prevent glyph issues
+    ligature_map = {
+        "\ufb00": "ff",  # ﬀ
+        "\ufb01": "fi",  # ﬁ
+        "\ufb02": "fl",  # ﬂ
+        "\ufb03": "ffi", # ﬃ
+        "\ufb04": "ffl", # ﬄ
+    }
+    for k, v in ligature_map.items():
+        text = text.replace(k, v)
 
     # Order of replacements is critical.
     # Replace backslash first, then other characters including percent.
@@ -140,33 +137,14 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     
     if raw_linkedin:
         # Normalize LinkedIn display and avoid double labels
-        linkedin_raw = str(raw_linkedin).strip()
+        linkedin_raw = str(raw_linkedin)
         # Strip any leading label like 'LinkedIn:' (case-insensitive)
         if linkedin_raw.lower().startswith("linkedin:"):
             linkedin_raw = linkedin_raw.split(":", 1)[1].strip()
-        # Extract username/slug for display
-        display_username = linkedin_raw
-        # Remove protocol
-        if display_username.startswith("http://") or display_username.startswith("https://"):
-            display_username = display_username.split("://", 1)[1]
-        # Remove leading domain paths to isolate slug (e.g., linkedin.com/in/username)
-        if "linkedin.com" in display_username:
-            parts = display_username.split("linkedin.com")[-1].lstrip("/")
-            # Typical patterns: in/slug or company/slug
-            path_parts = parts.split("/")
-            if len(path_parts) >= 2:
-                display_username = path_parts[1]
-            elif len(path_parts) == 1 and path_parts[0]:
-                display_username = path_parts[0]
-        # Fallback: if it still looks like a URL path, take last segment
-        if "/" in display_username:
-            display_username = display_username.rstrip("/").split("/")[-1]
-
-        # Build full URL for href
         linkedin_url = linkedin_raw
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
-        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_username)}}}")
+        contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: \\url{{{linkedin_raw}}}}}")
     
     if raw_github:
         # For URLs: keep raw for both href and display, use \url{} to prevent breaking
@@ -399,20 +377,8 @@ def _generate_projects_section(project_list: Optional[List[Dict[str, Any]]], tec
                     formatted_desc = format_bullet_with_highlights(desc_item_raw, tech_skills, metrics)
                     content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             elif isinstance(description_raw, str) and description_raw.strip():
-                # Split on newlines or bullet markers to handle multi-line descriptions
-                desc_str = str(description_raw)
-                # Split on newlines, bullet points, or semicolons
-                import re
-                bullet_items = re.split(r'\n+|(?:^|\s)[-•*]\s+|;\s*(?=[A-Z])', desc_str)
-                bullet_items = [item.strip() for item in bullet_items if item.strip()]
-                
-                if len(bullet_items) > 1:
-                    for item in bullet_items:
-                        formatted_desc = format_bullet_with_highlights(item, tech_skills, metrics)
-                        content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
-                else:
-                    formatted_desc = format_bullet_with_highlights(description_raw, tech_skills, metrics)
-                    content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
+                formatted_desc = format_bullet_with_highlights(description_raw, tech_skills, metrics)
+                content_lines.append(f"            \\resumeItem{{{formatted_desc}}}")
             content_lines.append(r"          \resumeItemListEnd")
             
     if not content_lines: return None
@@ -448,29 +414,30 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     
     technical_skills_data = skills_dict.get("Technical Skills")
 
-    # Do not early-return here; render other top-level categories even if 'Technical Skills' is missing
     if not technical_skills_data:
         print("PRINT DIAGNOSTIC: No 'Technical Skills' key found in skills_dict.", flush=True)
+        return None
+
+    lines.append(r"\section{Skills}") # Renamed section
 
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
-    # First, render top-level categories excluding soft skill categories
+    # First, render top-level categories excluding Soft Skills and Technical Skills
     seen_categories = set()
-    
-    # Expanded list of soft skill categories to exclude
-    soft_skill_categories = {
-        "Soft Skills", 
-        "Problem Solving & Analysis",
-        "Communication & Presentation Skills",
-        "Leadership",
-        "Interpersonal",
-        "Teamwork",
-        "Communication",
-        "Management"
-    }
-    
     for category, value in skills_dict.items():
-        if category == "Technical Skills" or category in soft_skill_categories:
+        if category in ("Technical Skills", "Soft Skills"):
+            continue
+        # Skip clearly non-technical soft categories
+        if isinstance(category, str) and category.strip().lower() in {
+            "soft skills",
+            "problem solving & analysis",
+            "problem-solving & analysis",
+            "communication & presentation skills",
+            "communication",
+            "leadership",
+            "interpersonal",
+            "teamwork",
+        }:
             continue
         skills_list = value
         if not (isinstance(skills_list, list) and skills_list):
@@ -508,7 +475,6 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
                 category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
 
     if category_lines:
-        lines.append(r"\section{Skills}") # Add section header only if we have content
         lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
         lines.append(r"  \item " + r" \\ ".join(category_lines))
         lines.append(r"\end{itemize}")
@@ -519,7 +485,6 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
         all_skills = [s for s in technical_skills_data if isinstance(s, str) and s.strip()]
         print(f"PRINT DIAGNOSTIC: Found skills as a flat list: {all_skills}", flush=True)
         if all_skills:
-            lines.append(r"\section{Skills}") # Add section header only if we have content
             skills_str = ", ".join(fix_latex_special_chars(s) for s in all_skills)
             lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
             lines.append(r"  \item " + skills_str)
@@ -528,10 +493,10 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
 
     else:
         print(f"PRINT DIAGNOSTIC: Skills data is not a list or dict. Type: {type(technical_skills_data)}", flush=True)
-        # Don't return None here - check if we have any content first
+        return None
 
-    # Return None if no content was added
-    return "\n".join(lines) if lines else None
+    # Return None if only the section title was added
+    return "\n".join(lines) if len(lines) > 1 else None
 
 
 def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
@@ -855,7 +820,7 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\",
-        r"    \\end{tabular*}\\vspace{0pt}",
+        r"    \end{tabular*}\vspace{2pt}",
         r"}",
         r"\newcommand{\resumeSubItem}[1]{{\resumeItem{{#1}}\vspace{{-4pt}}}}",
         r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
