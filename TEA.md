@@ -1,58 +1,71 @@
-## TEA: Our Core Product Philosophy
+## TEA: Our Product Philosophy (from an AI PM’s desk)
 
-### Transparency
-- What we do with your data:
-  - We parse your resume locally, extract hard/soft skills and structured sections, and generate a LaTeX PDF. We store the original and enhanced resumes in your account and upload your final PDF to secure storage under your user scope. Logs include only operational metadata.
-  - Third-party AI usage is limited to narrow, auditable tasks (parsing, keyword extraction, bullet refinement). We minimize prompts and redact sensitive content where possible.
-- How our process works (high level):
-  - Upload → Parse → Extract JD hard skills → Semantic match → Enhance bullets + skills → Generate PDF → Return analysis and assets.
-  - Analysis now includes a concise fit score (before/after) and a one-line rationale built deterministically from the overlap with the job’s hard skills.
-- Why it matters to us:
-  - Hiring is personal and high-stakes. You deserve clarity on how your materials are processed and why specific changes are made.
-  - We favor deterministic post-processing and clear logs over opaque “magic.”
-- Future steps (Transparency):
-  - User-facing data retention controls (per-job purge, redact sections).
-  - Downloadable audit trail of what changed and why.
-  - Explicit toggles for external AI calls and in-product model cards.
+Our bar is simple: ship a product candidates can trust in high‑stakes moments. TEA is how we design, prioritize, and measure that bar.
 
-### Efficiency
-- Our non-negotiable: minimal steps to value.
-  - Single upload and one job description field get you a tailored, enhanced resume + PDF.
-  - Parallelized internals (extraction, matching, enhancement) reduce waiting time.
-  - Auto-generated PDF and direct-link retrieval avoid manual downloads.
-- Product decisions that keep it simple:
-  - We avoid unnecessary settings; smart defaults + sensible constraints.
-  - Robust LaTeX templates handle diverse inputs (skills with subcategories, variable education fields, multi-bullet projects) without breaking formatting.
-- Future steps (Efficiency):
-  - Inline editing in the final preview with instant re-render.
-  - One-click re-targeting to a new job description.
-  - Smart caching for repeated users and similar roles.
+### Transparency — show your work, own your trade‑offs
+- Principles
+  - Explainability beats mystery. If a change improves your resume, we can point to the specific job requirement and the specific edit.
+  - Data minimalism. We collect only what’s needed to produce the output you asked for, nothing ornamental.
+  - Auditable boundaries. External AI use is narrow and declared.
+- Operating mechanisms
+  - Pipeline is inspectable end‑to‑end: Upload → Parse → Extract JD hard skills → Match → Enhance → PDF → Analysis.
+  - Deterministic user‑facing summaries (no hallucinated claims); logs prefer structured facts over prose.
+  - Storage paths are scoped to the user; operational logs strip content where possible.
+- What we won’t do
+  - We won’t hide changes behind generic “AI improved this.” We always name the exact keywords and sections.
+- What we measure
+  - % of runs with complete analysis artifacts; avg time to analysis.
+  - % of users who review the change log before downloading.
+- Future steps
+  - Per‑job data retention controls and redaction toggles.
+  - Downloadable audit trail with before/after deltas and reason codes.
+  - In‑product model cards and explicit on/off for external calls.
 
-### Accuracy
-- The bar is high, because stakes are high.
-  - We prioritize hard-skill coverage and semantic relevance for the role.
-  - Monotonic fit scoring: enhancements never reduce coverage; scores are computed consistently from the same JD hard skills set.
-  - Deterministic summaries avoid hallucinated claims and keep feedback crisp.
-  - Unicode and LaTeX normalization eliminate formatting artifacts that could distract recruiters/ATS.
-- Guardrails against black-box drift:
-  - Soft skills are excluded from highlighting logic.
-  - Merging logic preserves user-defined skill categories and appends additions safely.
-  - Defensive rendering turns unrecognized education fields into bullets rather than failing.
-- Future steps (Accuracy):
-  - Side-by-side diff of bullets with reason codes tied to JD keywords.
-  - Evaluation harness with role-specific gold sets to detect regressions.
-  - Optional human-in-the-loop pass for critical applications.
+### Efficiency — shortest path to a credible resume
+- Principles
+  - Minimize decisions users must make; maximize the quality of defaults.
+  - Latency matters: if a step doesn’t move the needle, trim or parallelize it.
+- Operating mechanisms
+  - One upload + one JD field → enhanced JSON + PDF + analysis.
+  - Resilient LaTeX templates: handle nested skills, non‑standard education fields, multi‑bullet projects without manual cleanup.
+  - Monitored queues and timeouts; background PDF generation to remove perceived wait.
+- What we won’t do
+  - We won’t add settings that exist only to showcase configurability.
+- What we measure
+  - Time‑to‑first‑PDF; end‑to‑end optimize duration (p50/p95).
+  - 1‑click success rate (no remediations needed before download).
+- Future steps
+  - Inline preview edits with instant re‑render.
+  - One‑click re‑targeting to new JDs; smart caching across similar roles.
+  - Graceful offline recovery and resume of long jobs.
 
-### Posting on LinkedIn: what to highlight
-- Start with the problem: tailoring resumes is slow, error-prone, and opaque.
-- How we solve it with TEA:
-  - Transparency: clear pipeline, minimal external calls, deterministic outputs for key user-facing messages.
-  - Efficiency: upload → optimize → PDF, with resilient formatting and multi-bullet support.
-  - Accuracy: focus on hard skills, consistent scoring, and strong guardrails against AI noise.
-- Show, don’t tell:
-  - Include a quick before/after score visual (e.g., 72% → 86%) and one joined line of the deterministic summary.
-  - Mention multi-bullet projects support and improved skills rendering (categories + subcategories, without flattening).
-- Close with trust:
-  - Emphasize data handling transparency and opt-outs coming soon.
-  - Invite feedback from hiring managers and candidates; link to a live demo or waitlist.
+### Accuracy — earn trust with rigorous guardrails
+- Principles
+  - Bias toward hard skills and verifiable signals; avoid embellishment.
+  - Consistency over flash: the same input should produce the same outcome.
+- Operating mechanisms
+  - Monotonic fit scoring: enhanced ≥ original by construction; both computed on the same JD hard‑skill set and the same presence logic.
+  - Highlighting excludes soft‑skills; merging preserves user categories and adds new skills without flattening.
+  - Unicode and LaTeX normalization prevents glyph/formatting issues that harm readability and ATS parsing.
+- What we won’t do
+  - We won’t over‑optimize for a single ATS at the expense of human readability.
+- What we measure
+  - JD hard‑skill coverage (pre/post), delta magnitude, false‑highlight rate.
+  - Render failures per 1k resumes; manual correction rate post‑download.
+- Future steps
+  - Role‑specific evaluation sets with regression gates in CI.
+  - Structured diffs with per‑edit rationales; optional human‑in‑the‑loop for critical applications.
+  - Confidence signals on highlights to guide manual review.
+
+### For LinkedIn (what to say and why it’s credible)
+- Problem: tailoring resumes is slow, inconsistent, and opaque.
+- What we ship:
+  - A transparent pipeline with deterministic user‑facing analysis.
+  - A one‑step flow to an enhanced PDF that respects your original structure (skills/categories, education nuances, multi‑bullet projects).
+  - Guardrails that keep improvements honest: hard‑skill focus and monotonic scoring.
+- Proof points:
+  - Before/after fit score (e.g., 74% → 86%) and a one‑line rationale naming the actual keywords added.
+  - No soft‑skill inflation; no flattened categories.
+- Call to action:
+  - Try your resume with a role you care about; tell us where it surprised you. We will publish a public roadmap (TEA) and ship against it.
 
