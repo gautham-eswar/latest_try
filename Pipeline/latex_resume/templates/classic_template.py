@@ -665,15 +665,7 @@ def generate_latex_content(data: Dict[str, Any], page_height: Optional[float] = 
         r"    \item",
         r"    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}",
         r"      #1 & #2 \\\",
-        r"    \\end{tabular*}",
-        r"}",
-        r"\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}",
-        r"\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}",
-        r"\newcommand{\resumeSubheadingSingleLine}[2]{",
-        r"  \item",
-        r"    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}",
-        r"      \textbf{#1} & #2 \\",
-        r"    \end{tabular*}",
+        r"    \\end{tabular*}\\\\vspace{0pt}",
         r"}"
     ])
 
