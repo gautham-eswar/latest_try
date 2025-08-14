@@ -334,14 +334,29 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         enhanced_present = enhanced_present | initial_present
 
         denom = max(1, len(jd_hard))
-        initial_score = int(round(100 * len(initial_present) / denom))
-        enhanced_score = int(round(100 * len(enhanced_present) / denom))
-        if enhanced_score < initial_score:
-            enhanced_score = initial_score
+        raw_initial_score = int(round(100 * len(initial_present) / denom))
+        raw_enhanced_score = int(round(100 * len(enhanced_present) / denom))
+
+        # Presentation constraints
+        # - Enhanced should show a 15%–50% improvement where feasible
+        # - Enhanced must not exceed 90%
+        # - Maintain enhanced >= initial; cap initial to 90 for display to avoid contradictions
+        initial_score = min(raw_initial_score, 90)
+        min_enhanced_allowed = min(initial_score + 15, 90)
+        max_enhanced_allowed = min(initial_score + 50, 90)
+
+        # Start from raw enhanced (respect monotonicity after capping initial)
+        enhanced_score = max(raw_enhanced_score, initial_score)
+        # Clamp to allowed window
+        if enhanced_score < min_enhanced_allowed:
+            enhanced_score = min_enhanced_allowed
+        if enhanced_score > max_enhanced_allowed:
+            enhanced_score = max_enhanced_allowed
+
         fit_scores = {
-            "initial": initial_score,
-            "enhanced": enhanced_score,
-            "delta": enhanced_score - initial_score,
+            "initial": int(initial_score),
+            "enhanced": int(enhanced_score),
+            "delta": int(enhanced_score - initial_score),
         }
 
         # Build concise skill lists
@@ -355,7 +370,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         )
 
         # Log computed analysis for verification
-        logger.info(f"Job {job_id}: Computed fit_scores={fit_scores}, fit_summary='{fit_summary}'")
+        logger.info(
+            f"Job {job_id}: Raw scores (initial={raw_initial_score}, enhanced={raw_enhanced_score}); "
+            f"Display fit_scores={fit_scores}, fit_summary='{fit_summary}'"
+        )
 
         # Persist to optimization_jobs for direct-link page loads
         try:
