@@ -452,8 +452,6 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     if not technical_skills_data:
         print("PRINT DIAGNOSTIC: No 'Technical Skills' key found in skills_dict.", flush=True)
 
-    lines.append(r"\section{Skills}") # Renamed section
-
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
     # First, render top-level categories excluding soft skill categories
@@ -510,6 +508,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
                 category_lines.append(f"\\textbf{{{fix_latex_special_chars(category)}}}: {'; '.join(parts)}")
 
     if category_lines:
+        lines.append(r"\section{Skills}") # Add section header only if we have content
         lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
         lines.append(r"  \item " + r" \\ ".join(category_lines))
         lines.append(r"\end{itemize}")
@@ -520,6 +519,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
         all_skills = [s for s in technical_skills_data if isinstance(s, str) and s.strip()]
         print(f"PRINT DIAGNOSTIC: Found skills as a flat list: {all_skills}", flush=True)
         if all_skills:
+            lines.append(r"\section{Skills}") # Add section header only if we have content
             skills_str = ", ".join(fix_latex_special_chars(s) for s in all_skills)
             lines.append(r"\begin{itemize}[leftmargin=0.15in, label={}]")
             lines.append(r"  \item " + skills_str)
@@ -528,10 +528,10 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
 
     else:
         print(f"PRINT DIAGNOSTIC: Skills data is not a list or dict. Type: {type(technical_skills_data)}", flush=True)
-        return None
+        # Don't return None here - check if we have any content first
 
-    # Return None if only the section title was added
-    return "\n".join(lines) if len(lines) > 1 else None
+    # Return None if no content was added
+    return "\n".join(lines) if lines else None
 
 
 def _generate_languages_section(languages_list: Optional[List[Dict[str, Any]]]) -> Optional[str]:
