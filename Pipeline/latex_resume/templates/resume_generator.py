@@ -187,7 +187,12 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
 def _generate_objective_section(objective: Optional[str]) -> Optional[str]:
     if not objective: return None
     escaped_obj = fix_latex_special_chars(objective)
-    return f"\\section*{{Summary}} % Using section* for unnumbered\n  {escaped_obj}\n"
+    # Match spacing approach used after other section headings
+    return (
+        "\\section*{Summary} % Using section* for unnumbered\n"
+        "\\vspace{5pt}\n"
+        f"  {escaped_obj}\n\n"
+    )
 
 def _parse_location_dict(location_data: Any) -> str:
     """Helper function to parse a location, which can be a string or a dict."""
