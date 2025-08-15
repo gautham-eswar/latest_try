@@ -415,31 +415,49 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         initial_count = len(initial_present)
         enhanced_count = len(enhanced_present)
 
-        # Scenario-aware summaries
+        # Scenario-aware summaries (numeric short) and narrative (no numbers)
         delta = enhanced_score - initial_score
         if enhanced_score < 60:
             fit_summary = (
                 f"{initial_score}%→{enhanced_score}% (+{delta}); added {added_show}. "
                 f"Role expects {miss_show}—build these to materially improve."
             )
+            fit_summary_narrative = (
+                f"We brought core capabilities to the foreground by weaving in {added_show} while keeping your strengths in {present_show}. "
+                f"This clarifies alignment to the role; developing {miss_show} will materially raise your fit."
+            )
         elif initial_score < 40:
             fit_summary = (
                 f"{initial_score}%→{enhanced_score}% (+{delta}); improved alignment with {added_show}. "
                 f"Strong base in {present_show}; feature {miss_show} to be competitive."
+            )
+            fit_summary_narrative = (
+                f"We elevated a general profile into a role‑targeted one by emphasizing {added_show} and structuring impact around your strengths in {present_show}. "
+                f"To be competitive, highlight work that demonstrates {miss_show}."
             )
         elif initial_score < 75:
             fit_summary = (
                 f"{initial_score}%→{enhanced_score}% (+{delta}); targeted {added_show} on top of {present_show}. "
                 f"Consider highlighting {miss_show} to stand out."
             )
+            fit_summary_narrative = (
+                f"We strengthened targeting by emphasizing {added_show} on top of your existing {present_show}, making the alignment clearer to both ATS and reviewers. "
+                f"Showcasing projects with {miss_show} will help you stand out."
+            )
         else:
             fit_summary = (
                 f"{initial_score}%→{enhanced_score}% (+{delta}); polished with {added_show} for JD alignment. "
                 f"Remaining gap: {miss_show}."
             )
+            fit_summary_narrative = (
+                f"Already a strong match, this draft polishes alignment by reinforcing {added_show} where the JD emphasizes them, while keeping your strengths in {present_show} front and center. "
+                f"The primary remaining gap is {miss_show}."
+            )
 
         if len(fit_summary) > 220:
             fit_summary = fit_summary[:217].rstrip() + "..."
+        if len(fit_summary_narrative) > 420:
+            fit_summary_narrative = fit_summary_narrative[:417].rstrip() + "..."
 
         # Log computed analysis for verification
         logger.info(
@@ -452,6 +470,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             update_optimization_job(job_id, {
                 "fit_scores": fit_scores,
                 "fit_summary": fit_summary,
+                "fit_summary_narrative": fit_summary_narrative,
             })
             # Also mirror into analysis_data JSON to override any legacy long summaries
             try:
@@ -462,6 +481,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                     if isinstance(first_row.get('analysis_data'), dict):
                         current_analysis = dict(first_row.get('analysis_data') or {})
                 current_analysis['fit_summary'] = fit_summary
+                current_analysis['fit_summary_narrative'] = fit_summary_narrative
                 current_analysis['fit_scores'] = fit_scores
                 update_optimization_job(job_id, {"analysis_data": current_analysis})
             except Exception:
