@@ -424,6 +424,12 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     lines = []
     
     technical_skills_data = skills_dict.get("Technical Skills")
+    # If original resume did not have subcategories, avoid rendering subcategories we may have added
+    had_subcats_flag = False
+    try:
+        had_subcats_flag = bool(skills_dict.get("_had_subcategories", False))
+    except Exception:
+        had_subcats_flag = False
 
     if not technical_skills_data:
         print("PRINT DIAGNOSTIC: No 'Technical Skills' key found in skills_dict.", flush=True)
@@ -483,6 +489,23 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
                 seen_skill_texts.add(norm)
                 parts.append(fix_latex_special_chars(item))
             elif isinstance(item, dict):
+                if not had_subcats_flag:
+                    # Skip showing subcategory structure if original resume did not have any
+                    # Flatten subcategory skills into this category
+                    flat_sub = []
+                    for sub_cat, sub_skills_list in item.items():
+                        if isinstance(sub_skills_list, list) and sub_skills_list:
+                            for s in sub_skills_list:
+                                if not isinstance(s, str):
+                                    continue
+                                norm = s.strip().lower()
+                                if norm in softish_terms or norm in seen_skill_texts:
+                                    continue
+                                seen_skill_texts.add(norm)
+                                flat_sub.append(fix_latex_special_chars(s))
+                    if flat_sub:
+                        parts.append(", ".join(flat_sub))
+                    continue
                 for sub_cat, sub_skills_list in item.items():
                     if isinstance(sub_skills_list, list) and sub_skills_list:
                         filtered_sub = []

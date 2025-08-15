@@ -119,6 +119,24 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         matches_by_bullet,
         final_technical_skills=final_technical_skills # Pass the selected skills here
     )
+
+    # Record whether the original resume used subcategories in Skills; renderer will respect this
+    try:
+        def _skills_have_subcategories(skills_obj: dict) -> bool:
+            if not isinstance(skills_obj, dict):
+                return False
+            for _cat, items in skills_obj.items():
+                if isinstance(items, list):
+                    for it in items:
+                        if isinstance(it, dict):
+                            return True
+            return False
+        original_skills = original_resume_parsed.get("Skills") or {}
+        had_subcats = _skills_have_subcategories(original_skills)
+        if isinstance(enhanced_resume_parsed.get("Skills"), dict):
+            enhanced_resume_parsed["Skills"]["_had_subcategories"] = bool(had_subcats)
+    except Exception:
+        pass
     # --- Summary handling per flag ---
     # If generate_summary is False, ensure we DO NOT fabricate a new summary.
     # Preserve the original summary if it existed; otherwise, remove any summary fields.
