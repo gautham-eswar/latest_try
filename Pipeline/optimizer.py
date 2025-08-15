@@ -377,7 +377,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             "delta": int(enhanced_score - initial_score),
         }
 
-        # Build concise, numeric summary with specific skills (filter generic terms)
+        # Build concise, scenario-aware summary with specific skills (filter generic terms)
         softish_terms = {
             "presentation", "presentations", "problem solving", "problem-solving",
             "critical thinking", "research", "analytical skills"
@@ -393,18 +393,53 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
 
         added_list = _filter_terms(enhanced_present - initial_present)
         present_list = _filter_terms(initial_present)
+        missing_list = _filter_terms(jd_hard - enhanced_present)
+
+        # Prefer ordering of JD keywords if available to pick top missing by relevance/order
+        jd_order: dict[str, int] = {}
+        try:
+            kw_list = (keywords_data or {}).get("keywords", [])
+            for idx, kw in enumerate(kw_list):
+                if isinstance(kw, dict) and kw.get("skill_type") == "hard skill" and kw.get("keyword"):
+                    jd_order[kw["keyword"].strip().lower()] = idx
+        except Exception:
+            pass
+        def _sort_by_jd_order(terms: list[str]) -> list[str]:
+            return sorted(terms, key=lambda t: jd_order.get(t.strip().lower(), 1_000_000))
+        missing_list = _sort_by_jd_order(missing_list)
 
         added_show = ", ".join(added_list[:2]) if added_list else "key role keywords"
         present_show = ", ".join(present_list[:2]) if present_list else "core strengths"
+        miss_show = ", ".join(missing_list[:2]) if missing_list else "minor gaps"
 
         initial_count = len(initial_present)
         enhanced_count = len(enhanced_present)
 
-        # Compose tight, numeric one-liner (<= ~220 chars)
-        fit_summary = (
-            f"{initial_score}%→{enhanced_score}% (+{enhanced_score - initial_score}); "
-            f"coverage {enhanced_count}/{denom}; added {added_show}; strong in {present_show}."
-        )
+        # Scenario-aware summaries
+        delta = enhanced_score - initial_score
+        if enhanced_score < 60:
+            fit_summary = (
+                f"{initial_score}%→{enhanced_score}% (+{delta}); added {added_show}. "
+                f"Role expects {miss_show}—build these to materially improve."
+            )
+        elif initial_score < 40:
+            fit_summary = (
+                f"{initial_score}%→{enhanced_score}% (+{delta}); improved alignment with {added_show}. "
+                f"Strong base in {present_show}; feature {miss_show} to be competitive."
+            )
+        elif initial_score < 75:
+            fit_summary = (
+                f"{initial_score}%→{enhanced_score}% (+{delta}); targeted {added_show} on top of {present_show}. "
+                f"Consider highlighting {miss_show} to stand out."
+            )
+        else:
+            fit_summary = (
+                f"{initial_score}%→{enhanced_score}% (+{delta}); polished with {added_show} for JD alignment. "
+                f"Remaining gap: {miss_show}."
+            )
+
+        if len(fit_summary) > 220:
+            fit_summary = fit_summary[:217].rstrip() + "..."
 
         # Log computed analysis for verification
         logger.info(
