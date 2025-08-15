@@ -377,14 +377,33 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             "delta": int(enhanced_score - initial_score),
         }
 
-        # Build concise skill lists
-        newly_added = sorted(list(enhanced_present - initial_present))[:6]
+        # Build concise, numeric summary with specific skills (filter generic terms)
+        softish_terms = {
+            "presentation", "presentations", "problem solving", "problem-solving",
+            "critical thinking", "research", "analytical skills"
+        }
+        def _filter_terms(terms: set) -> list:
+            cleaned = []
+            for t in sorted(list(terms)):
+                norm = t.strip().lower()
+                if not norm or norm in softish_terms:
+                    continue
+                cleaned.append(t)
+            return cleaned
 
-        # Deterministic one-liner summary (no GPT to keep it short and consistent)
-        base_show = ", ".join(sorted(list(initial_present))[:3]) or "your existing strengths"
-        added_show = ", ".join(newly_added[:3]) or "critical role keywords"
+        added_list = _filter_terms(enhanced_present - initial_present)
+        present_list = _filter_terms(initial_present)
+
+        added_show = ", ".join(added_list[:2]) if added_list else "key role keywords"
+        present_show = ", ".join(present_list[:2]) if present_list else "core strengths"
+
+        initial_count = len(initial_present)
+        enhanced_count = len(enhanced_present)
+
+        # Compose tight, numeric one-liner (<= ~220 chars)
         fit_summary = (
-            f"Your resume already has {base_show} going for it; we made it a better fit by adding {added_show}."
+            f"{initial_score}%→{enhanced_score}% (+{enhanced_score - initial_score}); "
+            f"coverage {enhanced_count}/{denom}; added {added_show}; strong in {present_show}."
         )
 
         # Log computed analysis for verification
