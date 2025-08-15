@@ -459,6 +459,48 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         if len(fit_summary_narrative) > 420:
             fit_summary_narrative = fit_summary_narrative[:417].rstrip() + "..."
 
+        # Optional: Generate a more insightful narrative with GPT (no numbers), with paragraph breaks
+        try:
+            system_prompt = (
+                "You are a sharp, concise resume coach. Write 2-3 sentences (1-2 short paragraphs, separated by a blank line). "
+                "Be specific and honest. Avoid buzzwords. Do not include numeric scores or percentages. "
+                "Explain what the candidate already had, what we emphasized or added for this role, and one concrete next step."
+            )
+            # Build JD focus and skill context to inform the narrative without numbers
+            jd_excerpt = (job_description_text or "")[:600]
+            added_for_prompt = ", ".join(added_list[:3]) or "—"
+            present_for_prompt = ", ".join(present_list[:3]) or "—"
+            missing_for_prompt = ", ".join(missing_list[:2]) or "—"
+            fit_level = (
+                "limited match" if enhanced_score < 60 else
+                ("solid match" if initial_score < 75 else "strong match")
+            )
+            user_prompt = (
+                "Role focus (excerpt):\n" + jd_excerpt + "\n\n" +
+                "Candidate strengths:\n" + present_for_prompt + "\n" +
+                "Emphasized/added for this role:\n" + added_for_prompt + "\n" +
+                "Top missing to pursue:\n" + missing_for_prompt + "\n\n" +
+                "Context band (do not output this literally): " + fit_level + "\n\n" +
+                "Write 2-3 sentences (1-2 short paragraphs separated by a blank line) that: "
+                "acknowledge the existing strengths in plain language, explain why the added items matter for this role, "
+                "and give one specific next step referencing the missing item(s). Avoid corporate jargon. No numbers."
+            )
+            gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
+            if isinstance(gpt_narrative, str) and gpt_narrative.strip():
+                narrative = gpt_narrative.strip()
+                # Normalize quotes/labels and enforce length
+                if (narrative.startswith('"') and narrative.endswith('"')) or (narrative.startswith("'") and narrative.endswith("'")):
+                    narrative = narrative[1:-1].strip()
+                narrative = narrative.replace("\r\n", "\n").strip()
+                # Ensure at most one blank line between paragraphs
+                narrative = "\n\n".join(part.strip() for part in narrative.split("\n\n") if part.strip())
+                if len(narrative) > 500:
+                    narrative = narrative[:497].rstrip() + "..."
+                fit_summary_narrative = narrative
+        except Exception:
+            # Keep deterministic narrative if GPT is unavailable
+            pass
+
         # Log computed analysis for verification
         logger.info(
             f"Job {job_id}: Raw scores (initial={raw_initial_score}, enhanced={raw_enhanced_score}); "
