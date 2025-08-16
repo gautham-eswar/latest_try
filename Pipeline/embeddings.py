@@ -640,12 +640,18 @@ class SemanticMatcher:
                 category_response = response.choices[0].message.content.strip()
                 logger.debug(f"OpenAI category response for '{skill_name}': '{category_response}'")
 
-                assigned_category = category_response
+                # Normalize noisy prefixes from model outputs
+                normalized = category_response
+                for prefix in ("Existing Category:", "Category:"):
+                    if normalized.startswith(prefix):
+                        normalized = normalized.replace(prefix, "", 1).strip()
+
+                assigned_category = normalized
                 if category_response.startswith("New Category:"):
                     assigned_category = category_response.replace("New Category:", "").strip()
                     if not assigned_category: # Handle empty new category name
                         assigned_category = f"New - {skill_name}" # Default if AI gives empty new cat name
-                elif category_response not in resume_categories: # If AI hallucinates a category not in the list and not 'New Category:'
+                elif assigned_category not in resume_categories: # If AI hallucinates a category not in the list and not 'New Category:'
                     logger.warning(f"OpenAI suggested category '{category_response}' for skill '{skill_name}' which is not in existing resume categories or a 'New Category' format. Treating as a new category: '{category_response}'.")
                     # Decide if we want to force it into an existing one, or accept it as new. For now, accept.
                     # To be stricter, we might map it to the most similar existing one or a generic "Other New Skills"
@@ -684,6 +690,9 @@ class SemanticMatcher:
             "category_processing_order": []
         }
         
+        # 0. Drop generic/soft-ish items from JD side to avoid noise
+        denylist = {"problem-solving", "data analysis", "statistical analysis", "dashboarding tools", "communication"}
+
         # 1. Consolidate skills by category
         consolidated_skills = {} # category_name -> list of skill_dicts {'skill': str, 'embedding': [], 'relevance': float, 'is_original': bool, 'jd_context': str/None}
         
@@ -705,6 +714,9 @@ class SemanticMatcher:
             category = jd_skill_info.get("assigned_category", "Uncategorized JD Skills")
             if category not in consolidated_skills:
                 consolidated_skills[category] = []
+            jd_skill_name = jd_skill_info["keyword"]
+            if jd_skill_name.strip().lower() in denylist:
+                continue
             consolidated_skills[category].append({
                 "skill": jd_skill_info["keyword"],
                 "embedding": jd_skill_info["embedding"],
@@ -715,7 +727,7 @@ class SemanticMatcher:
         
         logger.debug(f"Consolidated skills by category: { {cat: len(sks) for cat, sks in consolidated_skills.items()} }")
 
-        # 2. Deduplicate within each category
+        # 2. Deduplicate within each category (prefer JD wording when close and at least as relevant)
         for category, skills_list in consolidated_skills.items():
             deduplicated_for_category = []
             processed_indices = set()
@@ -734,14 +746,18 @@ class SemanticMatcher:
                     if s1_norm == s2_norm or self.cosine_similarity(s1["embedding"], s2["embedding"]) > self.skill_similarity_threshold :
                         duplicates_found.append(s2)
                         processed_indices.add(j)
-                        # Prefer original, then higher relevance for duplicates
-                        if s2["is_original"] and not current_best_skill["is_original"]:
-                            current_best_skill = s2
-                        elif s2["relevance"] > current_best_skill["relevance"] and not current_best_skill["is_original"]:
-                             current_best_skill = s2
-                        # if both original, or both not, keep the one with higher relevance
-                        elif s2["is_original"] == current_best_skill["is_original"] and s2["relevance"] > current_best_skill["relevance"]:
-                            current_best_skill = s2
+                        # Preference: keep JD wording when close if its relevance >= original
+                        if s2["is_original"] != current_best_skill["is_original"]:
+                            jd_candidate = s2 if not s2["is_original"] else current_best_skill
+                            orig_candidate = s2 if s2["is_original"] else current_best_skill
+                            if jd_candidate["relevance"] >= orig_candidate["relevance"]:
+                                current_best_skill = jd_candidate
+                            else:
+                                current_best_skill = orig_candidate
+                        else:
+                            # If both original, or both JD-added, keep the more relevant wording
+                            if s2["relevance"] > current_best_skill["relevance"]:
+                                current_best_skill = s2
 
 
                 deduplicated_for_category.append(current_best_skill)
@@ -822,6 +838,22 @@ class SemanticMatcher:
         logger.info(f"Selected final {current_total_skills} technical skills across {len(final_skills_by_category_dict)} categories.")
         logger.debug(f"Final skills structure: {final_skills_by_category_dict}")
         
+        # Compute new-only additions for frontend visibility
+        try:
+            original_lower = set()
+            for cat, data in resume_skills_structured.items():
+                for si in data.get('skills', []):
+                    if isinstance(si.get('skill'), str):
+                        original_lower.add(si['skill'].strip().lower())
+            jd_added_by_cat: Dict[str, List[str]] = {}
+            for cat, lst in final_skills_by_category_dict.items():
+                for s in lst:
+                    if s.strip().lower() not in original_lower:
+                        jd_added_by_cat.setdefault(cat, []).append(s)
+            log_details["jd_added_skills_by_category"] = jd_added_by_cat
+        except Exception:
+            log_details["jd_added_skills_by_category"] = {}
+
         return final_skills_by_category_dict, log_details
 
     def get_embedding(self, text: str) -> List[float]:

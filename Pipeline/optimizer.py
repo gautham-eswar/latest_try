@@ -88,6 +88,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
     matches_by_bullet = match_results.get("matches_by_bullet", {})
     final_technical_skills = match_results.get("final_technical_skills", {})
     skill_selection_log = match_results.get("skill_selection_process_log", {})
+    jd_added_by_category = skill_selection_log.get("jd_added_skills_by_category", {})
 
     bullets_matched_count = len(matches_by_bullet)
     final_skills_count = sum(len(sks) for sks in final_technical_skills.values())
@@ -101,7 +102,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         "status": "Resume Enhancement",
         "match_count": bullets_matched_count,
         "match_details": matches_by_bullet, # Contains keywords for bullets
-        "new_skills_section": final_technical_skills, # The new skills section structure
+        "new_skills_section": final_technical_skills, # Backward-compat merged selection
+        "jd_added_skills_by_category": jd_added_by_category, # New-only additions for frontend
         "skills_selection_log": skill_selection_log
     })
     logger.info(f"--- Stage 3/5: Completed ---")
