@@ -167,6 +167,45 @@ class ResumeEnhancer:
             enhanced_resume["Skills"]["Technical Skills"] = merged_tech_skills
             logger.debug(f"Merged 'Technical Skills' in resume. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
 
+            # Enhancer-side visibility: append genuinely new JD skills into existing top-level categories
+            try:
+                top_level_categories = [k for k, v in original_skills_section_snapshot.items() if isinstance(v, list)]
+                if top_level_categories:
+                    # Build dedupe set across all existing skills (case-insensitive)
+                    existing_lower = set()
+                    for cat, items in original_skills_section_snapshot.items():
+                        if not isinstance(items, list):
+                            continue
+                        for it in items:
+                            if isinstance(it, str):
+                                existing_lower.add(it.strip().lower())
+                            elif isinstance(it, dict):
+                                for _sub, sub_list in it.items():
+                                    if isinstance(sub_list, list):
+                                        for s in sub_list:
+                                            if isinstance(s, str):
+                                                existing_lower.add(s.strip().lower())
+
+                    # Flatten final_technical_skills to category->list[str]
+                    for add_cat, add_list in final_technical_skills.items():
+                        if not isinstance(add_list, list):
+                            continue
+                        # Ensure the category exists at top level
+                        if add_cat not in enhanced_resume["Skills"] or not isinstance(enhanced_resume["Skills"][add_cat], list):
+                            enhanced_resume["Skills"][add_cat] = []
+                        target_list = enhanced_resume["Skills"][add_cat]
+                        for s in add_list:
+                            if not isinstance(s, str) or not s.strip():
+                                continue
+                            key = s.strip().lower()
+                            if key in existing_lower:
+                                continue
+                            # Append as plain string (do not create new subcategory structures)
+                            target_list.append(s)
+                            existing_lower.add(key)
+            except Exception as e:
+                logger.warning(f"Top-level skills merge (visibility) skipped due to error: {e}")
+
             modifications.append({
                 "section": "Skills",
                 "type": "Technical Skills Merge",
