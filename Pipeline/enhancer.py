@@ -383,22 +383,26 @@ class ResumeEnhancer:
                     if len(hard_skills) >= 2:
                         break
             
-            # Then, add soft skills up to limit
+            # Then, add soft skills sparingly (only to ~20% of bullets)
             soft_skills = []
-            for match in matches:
-                if match["skill_type"] == "soft skill":
-                    keyword = match["keyword"].lower()
-                    
-                    # Check if usage limit reached
-                    if keyword_usage.get(keyword, 0) >= max_keyword_usage:
-                        continue
+            # Use a deterministic hash to decide if this bullet gets soft skills
+            # This ensures consistency across runs
+            bullet_hash = hash(bullet) % 10
+            if bullet_hash < 2:  # Only 20% of bullets get soft skills
+                for match in matches:
+                    if match["skill_type"] == "soft skill":
+                        keyword = match["keyword"].lower()
                         
-                    soft_skills.append(match)
-                    keyword_usage[keyword] = keyword_usage.get(keyword, 0) + 1
-                    
-                    # Limit to 1 soft skill per bullet
-                    if len(soft_skills) >= 1:
-                        break
+                        # Check if usage limit reached
+                        if keyword_usage.get(keyword, 0) >= max_keyword_usage:
+                            continue
+                            
+                        soft_skills.append(match)
+                        keyword_usage[keyword] = keyword_usage.get(keyword, 0) + 1
+                        
+                        # Limit to 1 soft skill per bullet when we do add them
+                        if len(soft_skills) >= 1:
+                            break
             
             # Combine hard and soft skills
             filtered_matches[bullet] = hard_skills + soft_skills
