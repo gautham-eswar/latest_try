@@ -103,9 +103,21 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         "match_count": bullets_matched_count,
         "match_details": matches_by_bullet, # Contains keywords for bullets
         "new_skills_section": final_technical_skills, # Backward-compat merged selection
-        "jd_added_skills_by_category": jd_added_by_category, # New-only additions for frontend
         "skills_selection_log": skill_selection_log
     })
+
+    # Persist new-only additions safely under analysis_data to avoid schema issues
+    try:
+        job_sel_added = db.table('optimization_jobs').select('analysis_data').eq('id', job_id).execute()
+        current_analysis_added = {}
+        if hasattr(job_sel_added, 'data') and job_sel_added.data:
+            first_row_added = job_sel_added.data[0] or {}
+            if isinstance(first_row_added.get('analysis_data'), dict):
+                current_analysis_added = dict(first_row_added.get('analysis_data') or {})
+        current_analysis_added['jd_added_skills_by_category'] = jd_added_by_category
+        update_optimization_job(job_id, {"analysis_data": current_analysis_added})
+    except Exception:
+        pass
     logger.info(f"--- Stage 3/5: Completed ---")
 
     # --- Stage: Resume Enhancement ---
