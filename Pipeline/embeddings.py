@@ -697,6 +697,39 @@ class SemanticMatcher:
             "analytical", "presentation", "project management", "communication skills", "detail-oriented", "teamwork"
         }
 
+        # Prepare helper to score how relevant an original resume skill is to the JD
+        jd_for_relevance: List[Dict[str, Any]] = []
+        try:
+            for jd_si in categorized_jd_hard_skills:
+                if isinstance(jd_si.get("embedding"), list):
+                    jd_for_relevance.append({
+                        "embedding": jd_si["embedding"],
+                        "relevance": float(jd_si.get("relevance_score", 0.5)),
+                        "keyword": jd_si.get("keyword", "")
+                    })
+        except Exception:
+            jd_for_relevance = []
+
+        def _score_resume_skill_relevance(resume_emb: List[float]) -> float:
+            """Return a JD-aligned relevance for an original resume skill.
+            Uses max cosine similarity to JD hard skills, weighted by JD relevance.
+            Returns value in [0,1]. Falls back to 0.55 if JD list empty.
+            """
+            try:
+                if not jd_for_relevance:
+                    return 0.55
+                best = 0.0
+                for jd_si in jd_for_relevance:
+                    sim = self.cosine_similarity(resume_emb, jd_si["embedding"])  # [0,1]
+                    # Weight by JD importance (0.5..1.0 multiplier)
+                    weighted = sim * (0.5 + 0.5 * jd_si["relevance"])  # keep in [0,1]
+                    if weighted > best:
+                        best = weighted
+                # Provide a mild floor so originals are not zeroed out
+                return max(best, 0.55)
+            except Exception:
+                return 0.55
+
         # 1. Consolidate skills by category
         consolidated_skills = {} # category_name -> list of skill_dicts {'skill': str, 'embedding': [], 'relevance': float, 'is_original': bool, 'jd_context': str/None}
         
@@ -705,10 +738,11 @@ class SemanticMatcher:
             if category not in consolidated_skills:
                 consolidated_skills[category] = []
             for skill_info in data.get('skills', []):
+                resume_rel = _score_resume_skill_relevance(skill_info["embedding"])  # scaled 0.55..1.0
                 consolidated_skills[category].append({
                     "skill": skill_info["skill"],
                     "embedding": skill_info["embedding"],
-                    "relevance": 1.0, # Original skills get high relevance
+                    "relevance": float(resume_rel),
                     "is_original": True,
                     "jd_context": None
                 })
@@ -804,7 +838,7 @@ class SemanticMatcher:
         for category in consolidated_skills:
             consolidated_skills[category].sort(key=lambda x: (x['relevance'], x['is_original']), reverse=True)
 
-        # 3. Round-robin selection to fill final skills
+        # 3. Round-robin selection to fill final skills (guarantee JD presence per category)
         final_skills_by_category_dict = {} # Dict[str, List[str]]
         selected_skill_names_globally = set()
         current_total_skills = 0
@@ -823,6 +857,20 @@ class SemanticMatcher:
         )
         log_details["category_processing_order"] = all_category_keys_ordered
         
+        # For each category, if there exists any JD-added skill, promote the top JD item to the front
+        for cat_name, items in consolidated_skills.items():
+            try:
+                jd_items = [it for it in items if not it.get('is_original')]
+                if jd_items:
+                    # Highest relevance JD-first
+                    jd_items.sort(key=lambda x: (x['relevance']), reverse=True)
+                    # Remove all JD items from list, then insert the best one at position 0 (if not already there)
+                    non_jd = [it for it in items if it.get('is_original')]
+                    best_jd = jd_items[0]
+                    consolidated_skills[cat_name] = [best_jd] + non_jd + jd_items[1:]
+            except Exception:
+                pass
+
         # Round-robin selection loop
         while current_total_skills < overall_skill_limit:
             skill_added_this_round = False
