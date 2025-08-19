@@ -89,6 +89,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
     final_technical_skills = match_results.get("final_technical_skills", {})
     skill_selection_log = match_results.get("skill_selection_process_log", {})
     jd_added_by_category = skill_selection_log.get("jd_added_skills_by_category", {})
+    jd_reinforced_by_category = skill_selection_log.get("jd_reinforced_skills_by_category", {})
 
     bullets_matched_count = len(matches_by_bullet)
     final_skills_count = sum(len(sks) for sks in final_technical_skills.values())
@@ -114,7 +115,18 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             first_row_added = job_sel_added.data[0] or {}
             if isinstance(first_row_added.get('analysis_data'), dict):
                 current_analysis_added = dict(first_row_added.get('analysis_data') or {})
+        jd_added_by_category = skill_selection_log.get("jd_added_skills_by_category", {})
+        jd_reinforced_by_category = skill_selection_log.get("jd_reinforced_skills_by_category", {})
+        
+        # Extract all hard skills from the JD for frontend highlighting
+        jd_hard_skills_for_highlighting = [
+            kw.get("keyword") for kw in (keywords_data or {}).get("keywords", [])
+            if isinstance(kw, dict) and kw.get("skill_type") == "hard skill" and kw.get("keyword")
+        ]
+
         current_analysis_added['jd_added_skills_by_category'] = jd_added_by_category
+        current_analysis_added['jd_reinforced_skills_by_category'] = jd_reinforced_by_category
+        current_analysis_added['jd_hard_skills_for_highlighting'] = jd_hard_skills_for_highlighting
         update_optimization_job(job_id, {"analysis_data": current_analysis_added})
     except Exception:
         pass

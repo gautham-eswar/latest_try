@@ -931,21 +931,31 @@ class SemanticMatcher:
         logger.info(f"Selected final {current_total_skills} technical skills across {len(final_skills_by_category_dict)} categories.")
         logger.debug(f"Final skills structure: {final_skills_by_category_dict}")
         
-        # Compute new-only additions for frontend visibility
+        # Compute new-only and reinforced additions for frontend visibility
         try:
             original_lower = set()
             for cat, data in resume_skills_structured.items():
                 for si in data.get('skills', []):
                     if isinstance(si.get('skill'), str):
                         original_lower.add(si['skill'].strip().lower())
+            
             jd_added_by_cat: Dict[str, List[str]] = {}
+            jd_reinforced_by_cat: Dict[str, List[str]] = {}
+            
             for cat, lst in final_skills_by_category_dict.items():
                 for s in lst:
-                    if s.strip().lower() not in original_lower:
+                    s_lower = s.strip().lower()
+                    if s_lower not in original_lower:
                         jd_added_by_cat.setdefault(cat, []).append(s)
+                    else:
+                        jd_reinforced_by_cat.setdefault(cat, []).append(s)
+                        
             log_details["jd_added_skills_by_category"] = jd_added_by_cat
+            log_details["jd_reinforced_skills_by_category"] = jd_reinforced_by_cat
+            
         except Exception:
             log_details["jd_added_skills_by_category"] = {}
+            log_details["jd_reinforced_skills_by_category"] = {}
 
         return final_skills_by_category_dict, log_details
 
