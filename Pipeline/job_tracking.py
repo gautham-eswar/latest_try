@@ -39,15 +39,33 @@ def update_optimization_job(job_id, data:dict):
     if not job_id:
         return
     
-    response = db.table('optimization_jobs')\
-        .update(data).eq("id", job_id).execute()
-    
-    if not (hasattr(response, "data") and response.data):
-        error_text = getattr(response, "error", "Unknown error")
-        logger.warning(
-            f"Error updating optimization job: {error_text}",
-            exc_info=True,
-        )
+    # Make updates resilient to transient Supabase outages (e.g., 502 gateway errors)
+    max_attempts = 3
+    backoff_seconds = [0.5, 1.0, 2.0]
+    last_error_text = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = db.table('optimization_jobs')\
+                .update(data).eq("id", job_id).execute()
+            if hasattr(response, "data") and response.data:
+                return
+            # If no data returned, log and retry if attempts remain
+            last_error_text = getattr(response, "error", "Unknown error")
+            logger.warning(
+                f"Attempt {attempt}/{max_attempts} to update optimization_jobs failed: {last_error_text}"
+            )
+        except Exception as e:
+            last_error_text = str(e)
+            logger.warning(
+                f"Attempt {attempt}/{max_attempts} raised exception updating optimization_jobs: {last_error_text}",
+                exc_info=False,
+            )
+        if attempt < max_attempts:
+            time.sleep(backoff_seconds[attempt - 1])
+    # Give up after retries; do not crash the pipeline
+    logger.error(
+        f"Failed to update optimization_jobs after {max_attempts} attempts (job_id={job_id}). Last error: {last_error_text}"
+    )
 
 
 def post_optimization_job(job):
