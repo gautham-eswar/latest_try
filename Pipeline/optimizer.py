@@ -118,15 +118,14 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         jd_added_by_category = skill_selection_log.get("jd_added_skills_by_category", {})
         jd_reinforced_by_category = skill_selection_log.get("jd_reinforced_skills_by_category", {})
         
-        # Extract all hard skills from the JD for frontend highlighting
-        jd_hard_skills_for_highlighting = [
-            kw.get("keyword") for kw in (keywords_data or {}).get("keywords", [])
-            if isinstance(kw, dict) and kw.get("skill_type") == "hard skill" and kw.get("keyword")
-        ]
+        # Create a flat list of skills to highlight, combining new and reinforced skills.
+        added_skills = [skill for skills_list in jd_added_by_category.values() for skill in skills_list]
+        reinforced_skills = [skill for skills_list in jd_reinforced_by_category.values() for skill in skills_list]
+        skills_for_highlighting = sorted(list(set(added_skills + reinforced_skills)))
 
         current_analysis_added['jd_added_skills_by_category'] = jd_added_by_category
         current_analysis_added['jd_reinforced_skills_by_category'] = jd_reinforced_by_category
-        current_analysis_added['jd_hard_skills_for_highlighting'] = jd_hard_skills_for_highlighting
+        current_analysis_added['skills_for_highlighting'] = skills_for_highlighting
         update_optimization_job(job_id, {"analysis_data": current_analysis_added})
     except Exception:
         pass
