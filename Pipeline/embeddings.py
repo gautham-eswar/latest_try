@@ -685,13 +685,17 @@ class SemanticMatcher:
             "input_jd_skill_count": len(categorized_jd_hard_skills),
             "overall_skill_limit": overall_skill_limit,
             "deduplication_info": [],
+            "skill_decisions": [], # New field for audit trail
             "category_skill_counts_before_limit": {},
             "final_skill_counts_by_category": {},
             "category_processing_order": []
         }
         
         # 0. Drop generic/soft-ish items from JD side to avoid noise
-        denylist = {"problem-solving", "data analysis", "statistical analysis", "dashboarding tools", "communication"}
+        denylist = {
+            "problem-solving", "data analysis", "statistical analysis", "dashboarding tools", "communication",
+            "analytical", "presentation", "project management", "communication skills", "detail-oriented", "teamwork"
+        }
 
         # 1. Consolidate skills by category
         consolidated_skills = {} # category_name -> list of skill_dicts {'skill': str, 'embedding': [], 'relevance': float, 'is_original': bool, 'jd_context': str/None}
@@ -716,6 +720,10 @@ class SemanticMatcher:
                 consolidated_skills[category] = []
             jd_skill_name = jd_skill_info["keyword"]
             if jd_skill_name.strip().lower() in denylist:
+                log_details["skill_decisions"].append({
+                    "skill": jd_skill_name,
+                    "decision": "Discarded - Denylisted generic term"
+                })
                 continue
             consolidated_skills[category].append({
                 "skill": jd_skill_info["keyword"],
@@ -751,13 +759,30 @@ class SemanticMatcher:
                             jd_candidate = s2 if not s2["is_original"] else current_best_skill
                             orig_candidate = s2 if s2["is_original"] else current_best_skill
                             if jd_candidate["relevance"] >= orig_candidate["relevance"]:
+                                log_details["skill_decisions"].append({
+                                    "skill": current_best_skill["skill"],
+                                    "decision": f"Discarded - Duplicate of '{jd_candidate['skill']}' (Relevance tie-break)"
+                                })
                                 current_best_skill = jd_candidate
                             else:
+                                log_details["skill_decisions"].append({
+                                    "skill": jd_candidate["skill"],
+                                    "decision": f"Discarded - Duplicate of '{orig_candidate['skill']}' (Relevance tie-break)"
+                                })
                                 current_best_skill = orig_candidate
                         else:
                             # If both original, or both JD-added, keep the more relevant wording
                             if s2["relevance"] > current_best_skill["relevance"]:
+                                log_details["skill_decisions"].append({
+                                    "skill": current_best_skill["skill"],
+                                    "decision": f"Discarded - Duplicate of '{s2['skill']}' (Higher relevance)"
+                                })
                                 current_best_skill = s2
+                            else:
+                                log_details["skill_decisions"].append({
+                                    "skill": s2["skill"],
+                                    "decision": f"Discarded - Duplicate of '{current_best_skill['skill']}' (Higher relevance)"
+                                })
 
 
                 deduplicated_for_category.append(current_best_skill)
@@ -775,9 +800,9 @@ class SemanticMatcher:
 
         log_details["category_skill_counts_before_limit"] = {cat: len(sks) for cat, sks in consolidated_skills.items()}
 
-        # 2. Sort skills within each category (prioritize original, then relevance)
+        # 2. Sort skills within each category primarily by relevance, with a tie-breaker for original skills
         for category in consolidated_skills:
-            consolidated_skills[category].sort(key=lambda x: (x['is_original'], x['relevance']), reverse=True)
+            consolidated_skills[category].sort(key=lambda x: (x['relevance'], x['is_original']), reverse=True)
 
         # 3. Round-robin selection to fill final skills
         final_skills_by_category_dict = {} # Dict[str, List[str]]
@@ -818,8 +843,19 @@ class SemanticMatcher:
                         
                         final_skills_by_category_dict[category_name].append(skill_name)
                         selected_skill_names_globally.add(skill_name.lower())
+                        log_details["skill_decisions"].append({
+                            "skill": skill_name,
+                            "decision": "Added as new skill" if not skill_to_add["is_original"] else "Kept as original skill",
+                            "category": category_name,
+                            "relevance": skill_to_add["relevance"]
+                        })
                         current_total_skills += 1
                         skill_added_this_round = True
+                    else:
+                        log_details["skill_decisions"].append({
+                            "skill": skill_name,
+                            "decision": "Discarded - Already selected in another category"
+                        })
                     
                     skill_pointers[category_name] = current_pointer + 1 # Advance pointer regardless of global duplicate
                     
@@ -828,6 +864,15 @@ class SemanticMatcher:
             
             if not skill_added_this_round or current_total_skills >= overall_skill_limit:
                 # Break from outer while loop if no skills were added in a full round, or if limit is met
+                # Log remaining skills as not selected
+                for cat_name, pointer in skill_pointers.items():
+                    if cat_name in consolidated_skills:
+                        for i in range(pointer, len(consolidated_skills[cat_name])):
+                            skill_info = consolidated_skills[cat_name][i]
+                            log_details["skill_decisions"].append({
+                                "skill": skill_info["skill"],
+                                "decision": f"Discarded - Did not rank high enough for selection in '{cat_name}' category"
+                            })
                 break
         
         log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in final_skills_by_category_dict.items()}
