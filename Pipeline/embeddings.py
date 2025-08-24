@@ -486,115 +486,48 @@ class SemanticMatcher:
     
     def extract_resume_technical_skills(self, resume_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
-        Extracts technical skills from the resume, preserving categories if they exist.
-        Generates embeddings for each skill.
-
-        Args:
-            resume_data: Parsed resume JSON.
-
-        Returns:
-            Dict[str, Dict[str, Any]]: 
-                { 
-                    "CategoryName": {
-                        "skills": [{"skill": "SkillName", "embedding": [...]}, ...],
-                        "is_original": True 
-                    }, ...
-                }
-                If skills are not categorized, uses a default category like "_DEFAULT_TECHNICAL_SKILLS_".
+        Extracts technical skills from the resume, preserving nested categories and handling various formats.
         """
         logger.debug("Extracting technical skills from resume_data.")
         skills_section = resume_data.get("Skills", {})
-        if not isinstance(skills_section, dict): # Handle cases where Skills might be a list or other type
-            logger.warning(f"Resume 'Skills' section is not a dictionary as expected, but type {type(skills_section)}. Treating as empty.")
-            skills_section = {}
-
-        technical_skills_data = skills_section.get("Technical Skills", []) # Default to empty list
+        if not isinstance(skills_section, dict):
+            logger.warning(f"Resume 'Skills' section is not a dictionary. Treating as empty.")
+            return {}
 
         structured_skills = {}
 
-        if isinstance(technical_skills_data, dict): # Skills are already categorized
-            logger.debug("Resume technical skills appear to be categorized (under 'Technical Skills').")
-            for category, skills_in_category in technical_skills_data.items():
-                if isinstance(skills_in_category, list):
-                    embedded_skills = []
-                    for skill_name in skills_in_category:
-                        if isinstance(skill_name, str) and skill_name.strip():
-                            try:
-                                embedding = self.get_embedding(skill_name)
-                                embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
-                            except Exception as e:
-                                logger.error(f"Failed to generate embedding for resume skill '{skill_name}' in category '{category}': {e}")
-                        else:
-                            logger.warning(f"Invalid skill item '{skill_name}' in category '{category}', skipping.")
-                    if embedded_skills:
-                        structured_skills[category] = {"skills": embedded_skills, "is_original": True}
-                elif isinstance(skills_in_category, dict):
-                    # Subcategory map: {"Subcat": [skills...]}
-                    aggregated = []
-                    for subcat, sub_list in skills_in_category.items():
-                        if isinstance(sub_list, list):
-                            for skill_name in sub_list:
-                                if isinstance(skill_name, str) and skill_name.strip():
-                                    try:
-                                        embedding = self.get_embedding(skill_name)
-                                        aggregated.append({"skill": skill_name.strip(), "embedding": embedding})
-                                    except Exception as e:
-                                        logger.error(f"Failed to embed skill '{skill_name}' in '{category}->{subcat}': {e}")
-                    if aggregated:
-                        structured_skills[category] = {"skills": aggregated, "is_original": True}
-                else:
-                    logger.warning(f"Category '{category}' in Technical Skills not a list/dict, skipping.")
-        elif isinstance(technical_skills_data, list): # Skills are a flat list
-            logger.debug("Resume technical skills appear to be a flat list. Using default category.")
-            embedded_skills = []
-            for skill_name in technical_skills_data:
-                if isinstance(skill_name, str) and skill_name.strip():
-                    try:
-                        embedding = self.get_embedding(skill_name)
-                        embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
-                    except Exception as e:
-                        logger.error(f"Failed to generate embedding for resume skill '{skill_name}' (flat list): {e}")
-                else:
-                     logger.warning(f"Invalid skill item '{skill_name}' in flat list of technical skills, skipping.")
-            if embedded_skills:
-                structured_skills["_DEFAULT_TECHNICAL_SKILLS_"] = {"skills": embedded_skills, "is_original": True}
-        else:
-            # No valid 'Technical Skills' key; we'll scan other categories below
-            pass
+        # This function will recursively parse skill entries.
+        def parse_skills(data, category_name):
+            if isinstance(data, list):
+                skill_list = []
+                for item in data:
+                    if isinstance(item, str) and item.strip():
+                        try:
+                            embedding = self.get_embedding(item)
+                            skill_list.append({"skill": item.strip(), "embedding": embedding})
+                        except Exception as e:
+                            logger.error(f"Failed to get embedding for skill '{item}': {e}")
+                    elif isinstance(item, dict):
+                        # Handle cases where a list might contain dicts, e.g., [{"name": "Python"}]
+                        # This part can be expanded if more complex structures are found.
+                        pass
+                if skill_list:
+                    if category_name not in structured_skills:
+                        structured_skills[category_name] = {"skills": [], "is_original": True}
+                    structured_skills[category_name]["skills"].extend(skill_list)
+            elif isinstance(data, dict):
+                for sub_category, sub_data in data.items():
+                    parse_skills(sub_data, sub_category)
 
-        # Regardless of the state of 'Technical Skills', also scan other top-level categories
-        if isinstance(skills_section, dict) and skills_section:
-            for category_name, category_value in skills_section.items():
-                if isinstance(category_name, str) and category_name.strip() in {"Technical Skills", "Soft Skills"}:
-                    continue
-                if isinstance(category_value, list):
-                    embedded_skills = []
-                    for skill_name in category_value:
-                        if isinstance(skill_name, str) and skill_name.strip():
-                            try:
-                                embedding = self.get_embedding(skill_name)
-                                embedded_skills.append({"skill": skill_name.strip(), "embedding": embedding})
-                            except Exception as e:
-                                logger.error(f"Failed to generate embedding for resume skill '{skill_name}' in category '{category_name}': {e}")
-                    if embedded_skills:
-                        structured_skills[category_name] = {"skills": embedded_skills, "is_original": True}
-                elif isinstance(category_value, dict):
-                    aggregated = []
-                    for subcat, sub_list in category_value.items():
-                        if isinstance(sub_list, list):
-                            for skill_name in sub_list:
-                                if isinstance(skill_name, str) and skill_name.strip():
-                                    try:
-                                        embedding = self.get_embedding(skill_name)
-                                        aggregated.append({"skill": skill_name.strip(), "embedding": embedding})
-                                    except Exception as e:
-                                        logger.error(f"Failed embedding for '{skill_name}' in '{category_name}->{subcat}': {e}")
-                    if aggregated:
-                        structured_skills[category_name] = {"skills": aggregated, "is_original": True}
-
-        if not structured_skills:
-            logger.warning(f"No technical skills extracted from resume skills section (type: {type(technical_skills_data)}).")
-
+        # Start parsing from the top-level "Skills" section
+        for main_category, main_data in skills_section.items():
+            # We handle "Technical Skills" as a special case to dive into, but also iterate others
+            if main_category.lower() == "technical skills" and isinstance(main_data, dict):
+                for sub_category, sub_data in main_data.items():
+                    parse_skills(sub_data, sub_category)
+            else:
+                parse_skills(main_data, main_category)
+                
         total_extracted = sum(len(cat_data['skills']) for cat_data in structured_skills.values())
         logger.info(f"Extracted and embedded {total_extracted} technical skills from {len(structured_skills)} resume categories.")
         return structured_skills
