@@ -672,292 +672,70 @@ class SemanticMatcher:
     def select_final_technical_skills(self,
                                      resume_skills_structured: Dict[str, Dict[str, Any]],
                                      categorized_jd_hard_skills: List[Dict[str, Any]],
-                                     overall_skill_limit: int = 15) -> Tuple[Dict[str, List[str]], Dict[str, Any]]:
+                                     overall_skill_limit: int = 35) -> Tuple[Dict[str, List[str]], Dict[str, Any]]:
         """
-        Selects the final list of technical skills, combining resume and JD skills,
-        respecting categories, deduplicating, and applying an overall limit.
-        Uses a round-robin approach to fill categories.
-        Outputs a dictionary of category names to lists of skill strings.
+        Selects the final list of technical skills by preserving the original resume's skills
+        and appending new, non-duplicate skills from the job description.
         """
         log_details = {
+            "message": "Using additive skill merge strategy: Preserve original skills and append new.",
             "input_resume_categories": list(resume_skills_structured.keys()),
             "input_resume_skill_counts": {cat: len(data['skills']) for cat, data in resume_skills_structured.items()},
             "input_jd_skill_count": len(categorized_jd_hard_skills),
             "overall_skill_limit": overall_skill_limit,
-            "deduplication_info": [],
-            "skill_decisions": [], # New field for audit trail
-            "category_skill_counts_before_limit": {},
-            "final_skill_counts_by_category": {},
-            "category_processing_order": []
-        }
-        
-        # 0. Drop generic/soft-ish items from JD side to avoid noise
-        denylist = {
-            "problem-solving", "data analysis", "statistical analysis", "dashboarding tools", "communication",
-            "analytical", "presentation", "project management", "communication skills", "detail-oriented", "teamwork"
+            "skill_decisions": [],
         }
 
-        # Prepare helper to score how relevant an original resume skill is to the JD
-        jd_for_relevance: List[Dict[str, Any]] = []
-        try:
-            for jd_si in categorized_jd_hard_skills:
-                if isinstance(jd_si.get("embedding"), list):
-                    jd_for_relevance.append({
-                        "embedding": jd_si["embedding"],
-                        "relevance": float(jd_si.get("relevance_score", 0.5)),
-                        "keyword": jd_si.get("keyword", "")
-                    })
-        except Exception:
-            jd_for_relevance = []
+        # 1. Start with a deep copy of the original skills, keeping only the skill names.
+        final_skills_by_category = {}
+        original_skill_names_lower = set()
 
-        def _score_resume_skill_relevance(resume_emb: List[float]) -> float:
-            """Return a JD-aligned relevance for an original resume skill.
-            Uses max cosine similarity to JD hard skills, weighted by JD relevance.
-            Returns value in [0,1]. Falls back to 0.55 if JD list empty.
-            """
-            try:
-                if not jd_for_relevance:
-                    return 0.55
-                best = 0.0
-                for jd_si in jd_for_relevance:
-                    sim = self.cosine_similarity(resume_emb, jd_si["embedding"])  # [0,1]
-                    # Weight by JD importance (0.5..1.0 multiplier)
-                    weighted = sim * (0.5 + 0.5 * jd_si["relevance"])  # keep in [0,1]
-                    if weighted > best:
-                        best = weighted
-                # Provide a mild floor so originals are not zeroed out
-                return max(best, 0.55)
-            except Exception:
-                return 0.55
-
-        # 1. Consolidate skills by category
-        consolidated_skills = {} # category_name -> list of skill_dicts {'skill': str, 'embedding': [], 'relevance': float, 'is_original': bool, 'jd_context': str/None}
-        
-        # Add resume skills
         for category, data in resume_skills_structured.items():
-            if category not in consolidated_skills:
-                consolidated_skills[category] = []
+            if category not in final_skills_by_category:
+                final_skills_by_category[category] = []
             for skill_info in data.get('skills', []):
-                resume_rel = _score_resume_skill_relevance(skill_info["embedding"])  # scaled 0.55..1.0
-                consolidated_skills[category].append({
-                    "skill": skill_info["skill"],
-                    "embedding": skill_info["embedding"],
-                    "relevance": float(resume_rel),
-                    "is_original": True,
-                    "jd_context": None
-                })
+                skill_name = skill_info["skill"]
+                final_skills_by_category[category].append(skill_name)
+                original_skill_names_lower.add(skill_name.strip().lower())
 
-        # Add categorized JD skills
-        for jd_skill_info in categorized_jd_hard_skills:
-            category = jd_skill_info.get("assigned_category", "Uncategorized JD Skills")
-            if category not in consolidated_skills:
-                consolidated_skills[category] = []
-            jd_skill_name = jd_skill_info["keyword"]
-            if jd_skill_name.strip().lower() in denylist:
+        # 2. Identify new skills from the JD that are not already in the resume.
+        new_skills_to_add = []
+        for jd_skill in categorized_jd_hard_skills:
+            jd_skill_name = jd_skill["keyword"]
+            if jd_skill_name.strip().lower() not in original_skill_names_lower:
+                new_skills_to_add.append(jd_skill)
                 log_details["skill_decisions"].append({
                     "skill": jd_skill_name,
-                    "decision": "Discarded - Denylisted generic term"
+                    "decision": "Identified as new skill to be added.",
+                    "category_suggestion": jd_skill.get("assigned_category")
                 })
-                continue
-            consolidated_skills[category].append({
-                "skill": jd_skill_info["keyword"],
-                "embedding": jd_skill_info["embedding"],
-                "relevance": jd_skill_info.get("relevance_score", 0.5),
-                "is_original": False,
-                "jd_context": jd_skill_info.get("context")
+
+        # 3. Append the new skills to their assigned categories.
+        for new_skill in new_skills_to_add:
+            skill_name = new_skill["keyword"]
+            category = new_skill.get("assigned_category", "New Skills")
+            
+            if category not in final_skills_by_category:
+                final_skills_by_category[category] = []
+            
+            final_skills_by_category[category].append(skill_name)
+            log_details["skill_decisions"].append({
+                "skill": skill_name,
+                "decision": f"Appended to category '{category}'.",
             })
-        
-        logger.debug(f"Consolidated skills by category: { {cat: len(sks) for cat, sks in consolidated_skills.items()} }")
 
-        # 2. Deduplicate within each category (prefer JD wording when close and at least as relevant)
-        for category, skills_list in consolidated_skills.items():
-            deduplicated_for_category = []
-            processed_indices = set()
-            for i, s1 in enumerate(skills_list):
-                if i in processed_indices:
-                    continue
-                current_best_skill = s1
-                duplicates_found = []
-                for j in range(i + 1, len(skills_list)):
-                    if j in processed_indices:
-                        continue
-                    s2 = skills_list[j]
-                    # Check text similarity (case-insensitive, strip spaces)
-                    s1_norm = s1["skill"].strip().lower()
-                    s2_norm = s2["skill"].strip().lower()
-                    if s1_norm == s2_norm or self.cosine_similarity(s1["embedding"], s2["embedding"]) > self.skill_similarity_threshold :
-                        duplicates_found.append(s2)
-                        processed_indices.add(j)
-                        # Preference: keep JD wording when close if its relevance >= original
-                        if s2["is_original"] != current_best_skill["is_original"]:
-                            jd_candidate = s2 if not s2["is_original"] else current_best_skill
-                            orig_candidate = s2 if s2["is_original"] else current_best_skill
-                            if jd_candidate["relevance"] >= orig_candidate["relevance"]:
-                                log_details["skill_decisions"].append({
-                                    "skill": current_best_skill["skill"],
-                                    "decision": f"Discarded - Duplicate of '{jd_candidate['skill']}' (Relevance tie-break)"
-                                })
-                                current_best_skill = jd_candidate
-                            else:
-                                log_details["skill_decisions"].append({
-                                    "skill": jd_candidate["skill"],
-                                    "decision": f"Discarded - Duplicate of '{orig_candidate['skill']}' (Relevance tie-break)"
-                                })
-                                current_best_skill = orig_candidate
-                        else:
-                            # If both original, or both JD-added, keep the more relevant wording
-                            if s2["relevance"] > current_best_skill["relevance"]:
-                                log_details["skill_decisions"].append({
-                                    "skill": current_best_skill["skill"],
-                                    "decision": f"Discarded - Duplicate of '{s2['skill']}' (Higher relevance)"
-                                })
-                                current_best_skill = s2
-                            else:
-                                log_details["skill_decisions"].append({
-                                    "skill": s2["skill"],
-                                    "decision": f"Discarded - Duplicate of '{current_best_skill['skill']}' (Higher relevance)"
-                                })
+        # (Optional) Apply a simple cap to prevent excessive skill additions
+        total_skills = sum(len(skills) for skills in final_skills_by_category.values())
+        if total_skills > overall_skill_limit:
+            # This part could be enhanced with a more sophisticated trimming logic if needed,
+            # but for now, we'll just log it. A simple implementation could trim from the largest categories.
+            log_details["warning"] = f"Total skills ({total_skills}) exceeds limit ({overall_skill_limit}). Consider implementing trimming logic."
 
 
-                deduplicated_for_category.append(current_best_skill)
-                if duplicates_found:
-                    log_details["deduplication_info"].append({
-                        "category": category,
-                        "kept": current_best_skill["skill"],
-                        "discarded_duplicates": [d["skill"] for d in duplicates_found]
-                    })
-            consolidated_skills[category] = deduplicated_for_category
-        
-        logger.debug(f"Skills after deduplication: { {cat: len(sks) for cat, sks in consolidated_skills.items()} }")
-        # Storing the objects post-deduplication for logging if needed, but log_details["deduplication_info"] captures changes.
-        # log_details["deduplication_log"] = copy.deepcopy(consolidated_skills) # Be careful with deepcopy if embeddings are large
+        # Final logging
+        log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in final_skills_by_category.items()}
 
-        log_details["category_skill_counts_before_limit"] = {cat: len(sks) for cat, sks in consolidated_skills.items()}
-
-        # 2. Sort skills within each category primarily by relevance, with a tie-breaker for original skills
-        for category in consolidated_skills:
-            consolidated_skills[category].sort(key=lambda x: (x['relevance'], x['is_original']), reverse=True)
-
-        # 3. Round-robin selection to fill final skills (guarantee JD presence per category)
-        final_skills_by_category_dict = {} # Dict[str, List[str]]
-        selected_skill_names_globally = set()
-        current_total_skills = 0
-        
-        # Pointers for iterating through each category's sorted skill list
-        skill_pointers = {category: 0 for category in consolidated_skills}
-        
-        # Determine category processing order (original categories first, then new ones alphabetically)
-        original_category_keys = set(resume_skills_structured.keys()) # Use set for faster lookups
-        
-        # Sort all category keys: original ones first (sorted alphabetically among themselves), 
-        # then new ones (also sorted alphabetically among themselves)
-        all_category_keys_ordered = sorted(
-            consolidated_skills.keys(),
-            key=lambda c: (c not in original_category_keys, c) # False (original) comes before True (new), then alphabetically by c
-        )
-        log_details["category_processing_order"] = all_category_keys_ordered
-        
-        # For each category, if there exists any JD-added skill, promote the top JD item to the front
-        for cat_name, items in consolidated_skills.items():
-            try:
-                jd_items = [it for it in items if not it.get('is_original')]
-                if jd_items:
-                    # Highest relevance JD-first
-                    jd_items.sort(key=lambda x: (x['relevance']), reverse=True)
-                    # Remove all JD items from list, then insert the best one at position 0 (if not already there)
-                    non_jd = [it for it in items if it.get('is_original')]
-                    best_jd = jd_items[0]
-                    consolidated_skills[cat_name] = [best_jd] + non_jd + jd_items[1:]
-            except Exception:
-                pass
-
-        # Round-robin selection loop
-        while current_total_skills < overall_skill_limit:
-            skill_added_this_round = False
-            for category_name in all_category_keys_ordered:
-                if category_name not in consolidated_skills: # Should not happen if all_category_keys_ordered from consolidated_skills
-                    continue
-
-                skills_in_this_category = consolidated_skills[category_name]
-                current_pointer = skill_pointers.get(category_name, 0)
-
-                if current_pointer < len(skills_in_this_category):
-                    skill_to_add = skills_in_this_category[current_pointer]
-                    skill_name = skill_to_add["skill"]
-
-                    if skill_name.lower() not in selected_skill_names_globally:
-                        if category_name not in final_skills_by_category_dict:
-                            final_skills_by_category_dict[category_name] = []
-                        
-                        final_skills_by_category_dict[category_name].append(skill_name)
-                        selected_skill_names_globally.add(skill_name.lower())
-                        log_details["skill_decisions"].append({
-                            "skill": skill_name,
-                            "decision": "Added as new skill" if not skill_to_add["is_original"] else "Kept as original skill",
-                            "category": category_name,
-                            "relevance": skill_to_add["relevance"]
-                        })
-                        current_total_skills += 1
-                        skill_added_this_round = True
-                    else:
-                        log_details["skill_decisions"].append({
-                            "skill": skill_name,
-                            "decision": "Discarded - Already selected in another category"
-                        })
-                    
-                    skill_pointers[category_name] = current_pointer + 1 # Advance pointer regardless of global duplicate
-                    
-                    if current_total_skills >= overall_skill_limit:
-                        break # Break from inner category loop (finished filling overall limit)
-            
-            if not skill_added_this_round or current_total_skills >= overall_skill_limit:
-                # Break from outer while loop if no skills were added in a full round, or if limit is met
-                # Log remaining skills as not selected
-                for cat_name, pointer in skill_pointers.items():
-                    if cat_name in consolidated_skills:
-                        for i in range(pointer, len(consolidated_skills[cat_name])):
-                            skill_info = consolidated_skills[cat_name][i]
-                            log_details["skill_decisions"].append({
-                                "skill": skill_info["skill"],
-                                "decision": f"Discarded - Did not rank high enough for selection in '{cat_name}' category"
-                            })
-                break
-        
-        log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in final_skills_by_category_dict.items()}
-        
-        # Clean up empty categories that might have resulted
-        final_skills_by_category_dict = {k: v for k, v in final_skills_by_category_dict.items() if v}
-
-        logger.info(f"Selected final {current_total_skills} technical skills across {len(final_skills_by_category_dict)} categories.")
-        logger.debug(f"Final skills structure: {final_skills_by_category_dict}")
-        
-        # Compute new-only and reinforced additions for frontend visibility
-        try:
-            original_lower = set()
-            for cat, data in resume_skills_structured.items():
-                for si in data.get('skills', []):
-                    if isinstance(si.get('skill'), str):
-                        original_lower.add(si['skill'].strip().lower())
-            
-            jd_added_by_cat: Dict[str, List[str]] = {}
-            jd_reinforced_by_cat: Dict[str, List[str]] = {}
-            
-            for cat, lst in final_skills_by_category_dict.items():
-                for s in lst:
-                    s_lower = s.strip().lower()
-                    if s_lower not in original_lower:
-                        jd_added_by_cat.setdefault(cat, []).append(s)
-                    else:
-                        jd_reinforced_by_cat.setdefault(cat, []).append(s)
-                        
-            log_details["jd_added_skills_by_category"] = jd_added_by_cat
-            log_details["jd_reinforced_skills_by_category"] = jd_reinforced_by_cat
-            
-        except Exception:
-            log_details["jd_added_skills_by_category"] = {}
-            log_details["jd_reinforced_skills_by_category"] = {}
-
-        return final_skills_by_category_dict, log_details
+        return final_skills_by_category, log_details
 
     def get_embedding(self, text: str) -> List[float]:
         """

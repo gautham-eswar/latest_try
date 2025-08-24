@@ -118,11 +118,23 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         jd_added_by_category = skill_selection_log.get("jd_added_skills_by_category", {})
         jd_reinforced_by_category = skill_selection_log.get("jd_reinforced_skills_by_category", {})
         
-        # Create a flat list of skills to highlight, combining new and reinforced skills.
-        added_skills = [skill for skills_list in jd_added_by_category.values() for skill in skills_list]
-        reinforced_skills = [skill for skills_list in jd_reinforced_by_category.values() for skill in skills_list]
-        skills_for_highlighting = sorted(list(set(added_skills + reinforced_skills)))
+        # Create a flat list of skills to highlight, using JD hard skills that are present in the final resume's skills section.
+        jd_hard_skills_set = {
+            kw.get("keyword").strip().lower()
+            for kw in (keywords_data or {}).get("keywords", [])
+            if kw.get("skill_type") == "hard skill" and kw.get("keyword")
+        }
+        
+        final_resume_skills_set = set()
+        if isinstance(final_technical_skills, dict):
+            for category_skills in final_technical_skills.values():
+                if isinstance(category_skills, list):
+                    for skill in category_skills:
+                        if isinstance(skill, str):
+                            final_resume_skills_set.add(skill.strip().lower())
 
+        skills_for_highlighting = sorted(list(jd_hard_skills_set.intersection(final_resume_skills_set)))
+        
         current_analysis_added['jd_added_skills_by_category'] = jd_added_by_category
         current_analysis_added['jd_reinforced_skills_by_category'] = jd_reinforced_by_category
         current_analysis_added['skills_for_highlighting'] = skills_for_highlighting
