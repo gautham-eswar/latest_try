@@ -111,7 +111,16 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
         return None
     
     name = fix_latex_special_chars(personal_info.get("name"))
-    email = personal_info.get("email")  # Keep raw for href, but we need special display handling
+    # Sanitize and minimally validate email
+    email = None
+    email_raw = personal_info.get("email")
+    if email_raw:
+        try:
+            candidate = str(email_raw).strip().lower().replace(" ", "")
+            if re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", candidate):
+                email = candidate
+        except Exception:
+            email = None
     phone = fix_latex_special_chars(personal_info.get("phone"))
     
     # Get raw values for URLs, with a fallback for LinkedIn
@@ -131,8 +140,8 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
     if phone:
         contact_parts.append(phone)
     if email:
-        # For emails: use raw email in href, but escape only underscores for display
-        # Use \url{} to prevent line breaking in emails
+        # For emails: use sanitized lower-cased email for both href and display
+        # Ensure no spaces in mailto
         contact_parts.append(f"\\href{{mailto:{email}}}{{\\url{{{email}}}}}")
     
     if raw_linkedin:
@@ -149,24 +158,24 @@ def _generate_header_section(personal_info: Optional[Dict[str, Any]]) -> Optiona
             m2 = re.match(r"linkedin\.com/[^/]+/([^/?#]+)", linkedin_raw, flags=re.IGNORECASE)
             if m2:
                 display_user = m2.group(1)
-        linkedin_url = linkedin_raw
+        linkedin_url = linkedin_raw.replace(" ", "")
         if not linkedin_url.startswith("http"):
             linkedin_url = f"https://{linkedin_url}"
         contact_parts.append(f"\\href{{{linkedin_url}}}{{LinkedIn: {fix_latex_special_chars(display_user)}}}")
     
     if raw_github:
-        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
-        github_url = raw_github # Use raw value for URL
+        # For URLs: sanitize, ensure scheme, and use sanitized in display
+        github_url = str(raw_github).strip().replace(" ", "")
         if not github_url.startswith("http"):
             github_url = f"https://{github_url}"
-        contact_parts.append(f"\\href{{{github_url}}}{{\\url{{{raw_github}}}}}")
+        contact_parts.append(f"\\href{{{github_url}}}{{\\url{{{github_url}}}}}")
         
     if raw_website:
-        # For URLs: keep raw for both href and display, use \url{} to prevent breaking
-        website_url = raw_website # Use raw value for URL
+        # For URLs: sanitize, ensure scheme, and use sanitized in display
+        website_url = str(raw_website).strip().replace(" ", "")
         if not website_url.startswith("http"): # Basic check for protocol
              website_url = f"http://{website_url}"
-        contact_parts.append(f"\\href{{{website_url}}}{{\\url{{{raw_website}}}}}")
+        contact_parts.append(f"\\href{{{website_url}}}{{\\url{{{website_url}}}}}")
 
     # Add location to contact_parts if it exists
     if location:
