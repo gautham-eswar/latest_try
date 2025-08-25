@@ -522,20 +522,23 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         initial_count = len(initial_present)
         enhanced_count = len(enhanced_present)
 
-        # Unified factual narrative (one paragraph) without character limits
+        # Unified factual narrative (two short paragraphs) without character limits
         delta = enhanced_score - initial_score
         fit_summary = (
             f"Fit improved from {initial_score} to {enhanced_score} (+{delta}). "
-            f"Emphasized: {added_show}. Existing strengths: {present_show}. Remaining gaps: {miss_show}."
+            f"Emphasized: {added_show}. Existing strengths: {present_show}. Remaining gaps: {miss_show}." \
+            + "\n\n" +
+            f"Next step: prioritize credible evidence for {miss_show} (e.g., a concrete project, metric, or phrasing that maps to the JD)."
         )
         fit_summary_narrative = fit_summary
 
         # Optional: Generate a more insightful narrative with GPT (two short paragraphs, no numbers)
         try:
             system_prompt = (
-                "You are a precise evaluator. Write one factual paragraph that compares the original and enhanced resume against the job description. "
-                "Include the initial and enhanced fit scores (0–100) and explain in plain language: (1) what strengths already existed, (2) what was emphasized/added and why it matters for this role, and (3) the top remaining gap with a concrete next step. "
-                "Avoid fluff, avoid corporate jargon, no bullet points, no markdown."
+                "You are a precise evaluator. Write exactly TWO short paragraphs (3–5 sentences each) comparing the original and enhanced resume to the job description. "
+                "Use the scores to ground the assessment. In P1, synthesize how the resume aligns with JD priorities across skills, experience scope/seniority, domain, and measurable impact—be specific and factual. "
+                "In P2, identify the top 1–2 gaps that still limit fit and give one concrete next step (project, metric, or phrasing) that would close the gap. "
+                "Avoid fluff and corporate jargon. No bullet points, no markdown."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -578,7 +581,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Write ONE concise paragraph (4–6 sentences) that is factual and insightful, using the scores, explaining changes and the remaining gap with a concrete next step."
+                "Output: exactly TWO short paragraphs (3–5 sentences each), separated by one blank line."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():
@@ -587,11 +590,16 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 if (narrative.startswith('"') and narrative.endswith('"')) or (narrative.startswith("'") and narrative.endswith("'")):
                     narrative = narrative[1:-1].strip()
                 narrative = narrative.replace("\r\n", "\n").strip()
-                # Collapse to single paragraph
+                # Keep at most two paragraphs, separated by one blank line
                 paragraphs = [p.strip() for p in narrative.split("\n\n") if p.strip()]
-                narrative_one = " ".join(paragraphs) if paragraphs else narrative
-                fit_summary = narrative_one
-                fit_summary_narrative = narrative_one
+                if len(paragraphs) >= 2:
+                    narrative_two = paragraphs[0] + "\n\n" + paragraphs[1]
+                elif len(paragraphs) == 1:
+                    narrative_two = paragraphs[0]
+                else:
+                    narrative_two = narrative
+                fit_summary = narrative_two
+                fit_summary_narrative = narrative_two
         except Exception:
             # Keep deterministic narrative if GPT is unavailable
             pass
