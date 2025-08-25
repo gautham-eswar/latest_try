@@ -431,11 +431,7 @@ def _generate_skills_section(skills_dict: Optional[Dict[str, Any]], tech_skills:
     except Exception:
         had_subcats_flag = False
 
-    if not technical_skills_data:
-        print("PRINT DIAGNOSTIC: No 'Technical Skills' key found in skills_dict.", flush=True)
-        return None
-
-    lines.append(r"\section{Skills}") # Renamed section
+    lines.append(r"\section{Skills}")
 
     # Render all categories under Skills, not just 'Technical Skills'
     category_lines = []
