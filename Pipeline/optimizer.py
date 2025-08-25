@@ -414,15 +414,32 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             system_prompt = (
                 "You are a rigorous recruiter evaluating resume-job fit. "
                 "Evaluate TWO resumes (original vs enhanced) against the same job description. "
-                "Return ONLY a compact JSON object with integer scores 0-100: {\n"
-                "  \"initial\": <int>, \n  \"enhanced\": <int>, \n  \"rationale\": \"<=180 chars, key drivers of the difference\"\n} "
-                "Penalize irrelevant content and unverifiable claims. Reward direct evidence of role-relevant impact, scope, and tools."
+                "For EACH resume, do all scoring within the prompt as follows: "
+                "(1) For each category, assign a score 0–10, multiply by the fixed weight, compute the weighted contribution, and give a 1–2 sentence justification. "
+                "(2) Categories & Weights:\n"
+                "- Skills Match — Technical and hard skills (tools, methods, platforms). Score × 3.0 → max 30 pts.\n"
+                "- Experience Relevance — Similarity in roles, seniority, domain. Score × 2.5 → max 25 pts.\n"
+                "- Impact & Metrics — Quantified outcomes, business or product impact. Score × 2.0 → max 20 pts.\n"
+                "- Education & Certifications — Fit with required/preferred background. Score × 1.5 → max 15 pts.\n"
+                "- Soft Skills & Alignment — Collaboration, leadership, ownership signals. Score × 1.0 → max 10 pts.\n"
+                "(3) Compute the total weighted score out of 100. "
+                "(4) Provide a final summary judgment for each resume based on the total score range. "
+                "Return ONLY strict JSON with these top-level keys and types: {\n"
+                "  \"initial\": <int 0-100>,\n"
+                "  \"enhanced\": <int 0-100>,\n"
+                "  \"rationale\": \"1–2 sentence comparison explaining the difference\",\n"
+                "  \"initial_breakdown\": [ { \"category\": <string>, \"score\": <int 0-10>, \"weight\": <number>, \"weighted\": <number>, \"explanation\": <string> }, ... ],\n"
+                "  \"enhanced_breakdown\": [ { \"category\": <string>, \"score\": <int 0-10>, \"weight\": <number>, \"weighted\": <number>, \"explanation\": <string> }, ... ],\n"
+                "  \"initial_judgment\": <string>,\n"
+                "  \"enhanced_judgment\": <string>\n"
+                "} "
+                "Top-level \"initial\" and \"enhanced\" must be the total weighted scores (0–100) as integers. Penalize unverifiable claims; reward concrete, role-relevant evidence."
             )
             user_prompt = (
                 "JOB_DESCRIPTION:\n" + jd_excerpt + "\n\n" +
                 "ORIGINAL_RESUME_JSON:\n" + json.dumps(_shrink_resume(original_resume_parsed), ensure_ascii=False) + "\n\n" +
                 "ENHANCED_RESUME_JSON:\n" + json.dumps(_shrink_resume(enhanced_resume_parsed), ensure_ascii=False) + "\n\n" +
-                "Output constraints: Strict JSON, no markdown or commentary. Keys: initial, enhanced, rationale."
+                "Scoring rules are fixed as specified. Output constraints: Strict JSON only, no markdown, no code fences."
             )
             gpt_resp = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_resp, str):
