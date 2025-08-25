@@ -82,7 +82,23 @@ def extract_keywords(
             logger.info(
                 f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords (initial parse)."
             )
-            return parsed_data
+            # Enforce literal-substring filter: keep only items whose context
+            # appears verbatim in the JD.
+            jd_text_lower = job_description_text.lower()
+            filtered_keywords: List[Dict[str, Any]] = []
+            for kw in parsed_data["keywords"]:
+                try:
+                    context = str(kw.get("context", "")).strip()
+                    if context and context.lower() in jd_text_lower:
+                        filtered_keywords.append(kw)
+                except Exception:
+                    # Skip malformed entries silently
+                    continue
+            if len(filtered_keywords) != len(parsed_data["keywords"]):
+                logger.info(
+                    f"Literal-substring filter: kept {len(filtered_keywords)}/{len(parsed_data['keywords'])} keywords."
+                )
+            return {"keywords": filtered_keywords}
         else:
             logger.error(f"Parsed keyword JSON has incorrect structure (initial parse): {parsed_data}")
             # If structure is wrong even if JSON is valid, trigger repair attempt
@@ -139,8 +155,20 @@ def extract_keywords(
         if repaired_keywords:
             parsed_data = {"keywords": repaired_keywords}
             logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
-            # Return the successfully repaired data
-            return parsed_data
+            # Apply the same literal-substring filter for repaired results
+            jd_text_lower = job_description_text.lower()
+            filtered_keywords: List[Dict[str, Any]] = []
+            for kw in parsed_data["keywords"]:
+                try:
+                    context = str(kw.get("context", "")).strip()
+                    if context and context.lower() in jd_text_lower:
+                        filtered_keywords.append(kw)
+                except Exception:
+                    continue
+            logger.info(
+                f"Literal-substring filter (repaired): kept {len(filtered_keywords)}/{len(parsed_data['keywords'])} keywords."
+            )
+            return {"keywords": filtered_keywords}
         else:
             # If repair fails, raise the original error message for clarity, including raw data snippet
             logger.error(f"JSON repair failed. Could not salvage any valid keyword objects from raw data: {structured_data_str[:500]}...")

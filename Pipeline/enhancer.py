@@ -160,12 +160,13 @@ class ResumeEnhancer:
             
             # Prefer merging into top-level categories if present; otherwise use 'Technical Skills' subtree
             try:
-                top_level_categories = [k for k, v in original_skills_section_snapshot.items() if isinstance(v, list)]
-                if top_level_categories:
+                # Check for list-based categories at the top level of the original skills section
+                top_level_categories_exist = any(isinstance(v, list) for k, v in original_skills_section_snapshot.items() if not k.startswith('_'))
+
+                if top_level_categories_exist:
                     # JD-first merge into top-level categories
                     logger.debug("Top-level categories detected. Merging new skills into existing top-level lists with JD-first ordering.")
 
-                    # Prepare existing lowercased sets per category
                     existing_lower_by_cat: Dict[str, Set[str]] = {}
                     for cat, items in enhanced_resume["Skills"].items():
                         if isinstance(items, list):
@@ -179,10 +180,10 @@ class ResumeEnhancer:
                         if add_cat not in enhanced_resume["Skills"] or not isinstance(enhanced_resume["Skills"][add_cat], list):
                             enhanced_resume["Skills"][add_cat] = []
                             existing_lower_by_cat[add_cat] = set()
+                        
                         target_list = enhanced_resume["Skills"][add_cat]
                         existing_lower = existing_lower_by_cat.get(add_cat, set())
 
-                        # Collect new items not already present
                         new_items: List[str] = []
                         for s in add_list:
                             if not isinstance(s, str) or not s.strip():
@@ -192,23 +193,24 @@ class ResumeEnhancer:
                                 continue
                             new_items.append(s)
                             existing_lower.add(key)
+                        
                         if new_items:
-                            # JD-first ordering: prepend
                             enhanced_resume["Skills"][add_cat] = new_items + target_list
                 else:
-                    # No top-level lists: merge into 'Technical Skills' subtree using structured merge (JD-first inside helper)
+                    # No top-level lists: merge into 'Technical Skills' subtree
                     existing_tech_skills = enhanced_resume["Skills"].get("Technical Skills")
                     merged_tech_skills = self._merge_technical_skills(
                         existing_tech_skills,
                         final_technical_skills
                     )
                     enhanced_resume["Skills"]["Technical Skills"] = merged_tech_skills
-                    logger.debug(f"Merged 'Technical Skills' in resume. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
+                    logger.debug(f"Merged into 'Technical Skills' subtree. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
+            
             except Exception as e:
                 logger.warning(f"Skills merge skipped due to error: {e}")
 
             # Record modification summary
-            mod_message = "JD-first merge into top-level categories" if top_level_categories else "Merged into 'Technical Skills' subtree"
+            mod_message = "JD-first merge into top-level categories" if top_level_categories_exist else "Merged into 'Technical Skills' subtree"
             modifications.append({
                 "section": "Skills",
                 "type": "Skills Merge",
