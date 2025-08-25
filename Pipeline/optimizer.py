@@ -536,8 +536,9 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         try:
             system_prompt = (
                 "You are a precise evaluator. Write exactly TWO short paragraphs (3–5 sentences each) comparing the original and enhanced resume to the job description. "
-                "Use the scores to ground the assessment. In P1, synthesize how the resume aligns with JD priorities across skills, experience scope/seniority, domain, and measurable impact—be specific and factual. "
-                "In P2, identify the top 1–2 gaps that still limit fit and give one concrete next step (project, metric, or phrasing) that would close the gap. "
+                "Use the scores to ground the assessment. In P1, synthesize alignment to JD priorities across skills, scope/seniority, domain, and measurable impact—be specific and factual. "
+                "In P2, state the top 1–2 remaining gaps and one concrete next step (project, metric, or phrasing) to close them. "
+                "Critically: DO NOT mention instructions, prompts, paragraphs, formatting, keyword highlighting, themes, ATS, or meta-process. Focus only on content about the candidate and the role. "
                 "Avoid fluff and corporate jargon. No bullet points, no markdown."
             )
 
