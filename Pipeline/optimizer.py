@@ -382,31 +382,149 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                     present.add(term)
             return present
 
-        # Compute initial/enhanced presence
-        initial_present = _present_skills(original_resume_parsed, jd_hard)
-        enhanced_present = _present_skills(enhanced_resume_parsed, jd_hard)
-        # Ensure monotonicity: enhancement should not reduce matched coverage
-        enhanced_present = enhanced_present | initial_present
+        # Helper: LLM-based fit scoring (fast call, JSON-only)
+        def _score_resume_via_llm(resume_json: dict, jd_text: str) -> tuple[int, dict]:
+            """Returns (weighted_score_0_100, raw_llm_json) using a single fast chat call.
+            On failure, raises to allow fallback."""
+            # Build a compact, structured snapshot of the resume for scoring
+            snapshot = {
+                "experience": [],
+                "projects": [],
+                "skills": [],
+                "education": []
+            }
+            try:
+                for exp in (resume_json.get("Experience") or []):
+                    if isinstance(exp, dict):
+                        entry = {
+                            "title": exp.get("title") or exp.get("position"),
+                            "company": exp.get("company"),
+                            "bullets": [b for b in (exp.get("responsibilities/achievements") or exp.get("responsibilities") or exp.get("achievements") or []) if isinstance(b, str)]
+                        }
+                        snapshot["experience"].append(entry)
+            except Exception:
+                pass
+            try:
+                for proj in (resume_json.get("Projects") or []):
+                    if isinstance(proj, dict):
+                        entry = {
+                            "title": proj.get("title"),
+                            "description": proj.get("description")
+                        }
+                        snapshot["projects"].append(entry)
+            except Exception:
+                pass
+            try:
+                skills_root = resume_json.get("Skills") or {}
+                if isinstance(skills_root, dict):
+                    for v in skills_root.values():
+                        if isinstance(v, list):
+                            for item in v:
+                                if isinstance(item, str):
+                                    snapshot["skills"].append(item)
+                                elif isinstance(item, dict):
+                                    for _k, _list in item.items():
+                                        if isinstance(_list, list):
+                                            snapshot["skills"].extend([s for s in _list if isinstance(s, str)])
+                        elif isinstance(v, dict):
+                            for _k, _list in v.items():
+                                if isinstance(_list, list):
+                                    snapshot["skills"].extend([s for s in _list if isinstance(s, str)])
+            except Exception:
+                pass
+            try:
+                for edu in (resume_json.get("Education") or []):
+                    if isinstance(edu, dict):
+                        snapshot["education"].append({
+                            "degree": edu.get("degree"),
+                            "field": edu.get("specialization"),
+                            "institution": edu.get("university") or edu.get("institution")
+                        })
+            except Exception:
+                pass
 
-        denom = max(1, len(jd_hard))
-        raw_initial_score = int(round(100 * len(initial_present) / denom))
-        raw_enhanced_score = int(round(100 * len(enhanced_present) / denom))
+            # Scoring prompt (JSON-only)
+            scoring_instructions = (
+                "Given a resume and a job description, your task is to assign raw scores (0–10) across five defined categories that determine job fit. "
+                "Use only the scoring definitions below. Do not compute a final score; only provide the sub-scores and justifications.\n\n"
+                "Assign a score from 0 to 10 for each category:\n\n"
+                "1. Skills Match (10 pts)\n"
+                "10 = Nearly all must-have skills are explicitly and recently covered.\n"
+                "5 = Some core skills present, others missing or outdated.\n"
+                "0 = Very little or no overlap in technical skillset.\n\n"
+                "2. Experience Relevance (10 pts)\n"
+                "10 = Strong match in role, level, and domain.\n"
+                "5 = Moderate relevance; partial match in function or industry.\n"
+                "0 = Roles are mostly unrelated to the job description.\n\n"
+                "3. Impact & Metrics (10 pts)\n"
+                "10 = Strong use of metrics tied to business, product, or user outcomes.\n"
+                "5 = Some impact is evident but vague or infrequent.\n"
+                "0 = No evidence of quantifiable results or outcomes.\n\n"
+                "4. Education & Certifications (10 pts)\n"
+                "10 = Matches or exceeds required/preferred credentials.\n"
+                "5 = Somewhat relevant (e.g., adjacent field or missing optional certs).\n"
+                "0 = Unrelated or missing academic background.\n\n"
+                "5. Soft Skills & Alignment (10 pts)\n"
+                "10 = Strong evidence (e.g., cross-functional work, stakeholder alignment).\n"
+                "5 = Implicit soft skills; not clearly emphasized.\n"
+                "0 = Resume is purely executional or isolated.\n\n"
+                "Output Format (JSON only)\n"
+                "{\n"
+                "  \"scores\": {\n"
+                "    \"skills\": 0-10,\n"
+                "    \"experience\": 0-10,\n"
+                "    \"impact\": 0-10,\n"
+                "    \"education\": 0-10,\n"
+                "    \"soft_skills\": 0-10\n"
+                "  },\n"
+                "  \"explanations\": {\n"
+                "    \"skills\": \"Brief explanation here.\",\n"
+                "    \"experience\": \"Brief explanation here.\",\n"
+                "    \"impact\": \"Brief explanation here.\",\n"
+                "    \"education\": \"Brief explanation here.\",\n"
+                "    \"soft_skills\": \"Brief explanation here.\"\n"
+                "  }\n"
+                "}\n\n"
+                "Do not compute the total score. Do not include any content from the resume or job description directly. "
+                "Explanations must be 1–2 sentences and justify the score."
+            )
 
-        # Presentation constraints
-        # - Enhanced should show a 15%–50% improvement where feasible
-        # - Enhanced must not exceed 90%
-        # - Maintain enhanced >= initial; cap initial to 90 for display to avoid contradictions
-        initial_score = min(raw_initial_score, 90)
-        min_enhanced_allowed = min(initial_score + 15, 90)
-        max_enhanced_allowed = min(initial_score + 50, 90)
+            # Build prompts
+            system_prompt = "You are a fast, deterministic evaluator. Return strictly valid JSON only."
+            jd_excerpt = (jd_text or "")[:2000]
+            user_payload = {
+                "job_description": jd_excerpt,
+                "resume": snapshot
+            }
+            user_prompt = scoring_instructions + "\n\nContext (JSON):\n" + json.dumps(user_payload, ensure_ascii=False)
 
-        # Start from raw enhanced (respect monotonicity after capping initial)
-        enhanced_score = max(raw_enhanced_score, initial_score)
-        # Clamp to allowed window
-        if enhanced_score < min_enhanced_allowed:
-            enhanced_score = min_enhanced_allowed
-        if enhanced_score > max_enhanced_allowed:
-            enhanced_score = max_enhanced_allowed
+            from Services.openai_interface import call_openai_api as _gpt
+            content = _gpt(system_prompt, user_prompt, max_retries=2)
+            parsed = json.loads(content)
+            scores = parsed.get("scores", {}) if isinstance(parsed, dict) else {}
+            # Coerce and clamp 0-10
+            def _g(v):
+                try:
+                    x = float(v)
+                except Exception:
+                    return 0.0
+                return max(0.0, min(10.0, x))
+            s_sk = _g(scores.get("skills"))
+            s_ex = _g(scores.get("experience"))
+            s_im = _g(scores.get("impact"))
+            s_ed = _g(scores.get("education"))
+            s_sf = _g(scores.get("soft_skills"))
+            weights = {"skills": 3.0, "experience": 2.5, "impact": 2.0, "education": 1.5, "soft_skills": 1.0}
+            weighted = s_sk*weights["skills"] + s_ex*weights["experience"] + s_im*weights["impact"] + s_ed*weights["education"] + s_sf*weights["soft_skills"]
+            return int(round(weighted)), parsed
+
+        # Try LLM-based scoring; on failure, fall back to keyword-coverage heuristic
+        llm_initial_score, _raw_initial = _score_resume_via_llm(original_resume_parsed, job_description_text)
+        llm_enhanced_score, _raw_enhanced = _score_resume_via_llm(enhanced_resume_parsed, job_description_text)
+
+        # Maintain monotonicity for display semantics
+        initial_score = int(llm_initial_score)
+        enhanced_score = int(max(llm_enhanced_score, initial_score))
 
         fit_scores = {
             "initial": int(initial_score),
