@@ -505,57 +505,20 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         initial_count = len(initial_present)
         enhanced_count = len(enhanced_present)
 
-        # Scenario-aware summaries (numeric short) and narrative (no numbers)
+        # Unified factual narrative (one paragraph) without character limits
         delta = enhanced_score - initial_score
-        if enhanced_score < 60:
-            fit_summary = (
-                f"{initial_score}%→{enhanced_score}% (+{delta}); added {added_show}. "
-                f"Role expects {miss_show}—build these to materially improve."
-            )
-            fit_summary_narrative = (
-                f"We brought core capabilities to the foreground by weaving in {added_show} while keeping your strengths in {present_show}. "
-                f"This clarifies alignment to the role; developing {miss_show} will materially raise your fit."
-            )
-        elif initial_score < 40:
-            fit_summary = (
-                f"{initial_score}%→{enhanced_score}% (+{delta}); improved alignment with {added_show}. "
-                f"Strong base in {present_show}; feature {miss_show} to be competitive."
-            )
-            fit_summary_narrative = (
-                f"We elevated a general profile into a role‑targeted one by emphasizing {added_show} and structuring impact around your strengths in {present_show}. "
-                f"To be competitive, highlight work that demonstrates {miss_show}."
-            )
-        elif initial_score < 75:
-            fit_summary = (
-                f"{initial_score}%→{enhanced_score}% (+{delta}); targeted {added_show} on top of {present_show}. "
-                f"Consider highlighting {miss_show} to stand out."
-            )
-            fit_summary_narrative = (
-                f"We strengthened targeting by emphasizing {added_show} on top of your existing {present_show}, making the alignment clearer to both ATS and reviewers. "
-                f"Showcasing projects with {miss_show} will help you stand out."
-            )
-        else:
-            fit_summary = (
-                f"{initial_score}%→{enhanced_score}% (+{delta}); polished with {added_show} for JD alignment. "
-                f"Remaining gap: {miss_show}."
-            )
-            fit_summary_narrative = (
-                f"Already a strong match, this draft polishes alignment by reinforcing {added_show} where the JD emphasizes them, while keeping your strengths in {present_show} front and center. "
-                f"The primary remaining gap is {miss_show}."
-            )
-
-        if len(fit_summary) > 220:
-            fit_summary = fit_summary[:217].rstrip() + "..."
-        if len(fit_summary_narrative) > 420:
-            fit_summary_narrative = fit_summary_narrative[:417].rstrip() + "..."
+        fit_summary = (
+            f"Fit improved from {initial_score} to {enhanced_score} (+{delta}). "
+            f"Emphasized: {added_show}. Existing strengths: {present_show}. Remaining gaps: {miss_show}."
+        )
+        fit_summary_narrative = fit_summary
 
         # Optional: Generate a more insightful narrative with GPT (two short paragraphs, no numbers)
         try:
             system_prompt = (
-                "You are a precise, high-signal resume coach. "
-                "Write exactly two short paragraphs, each 2–3 sentences. "
-                "Be specific and honest. Avoid buzzwords and corporate fluff. Do not include numeric scores or percentages. "
-                "Explain what the candidate already had, what we emphasized or added for this role, and one concrete next step."
+                "You are a precise evaluator. Write one factual paragraph that compares the original and enhanced resume against the job description. "
+                "Include the initial and enhanced fit scores (0–100) and explain in plain language: (1) what strengths already existed, (2) what was emphasized/added and why it matters for this role, and (3) the top remaining gap with a concrete next step. "
+                "Avoid fluff, avoid corporate jargon, no bullet points, no markdown."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -589,32 +552,29 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 keywords_added_for_prompt = "—"
 
             user_prompt = (
-                "Role focus (excerpt):\n" + jd_excerpt + "\n\n" +
-                "Candidate strengths:\n" + present_for_prompt + "\n" +
-                "Emphasized/added for this role:\n" + added_for_prompt + "\n" +
-                "Top missing to pursue:\n" + missing_for_prompt + "\n" +
-                "New skills added by category (from JD):\n" + jd_added_json + "\n" +
-                "Keywords incorporated into bullets:\n" + keywords_added_for_prompt + "\n\n" +
-                "Context band (do not output this literally): " + fit_level + "\n\n" +
-                "Write exactly two short paragraphs, each 2–3 sentences, that: "
-                "acknowledge existing strengths in plain language; explain why the emphasized/added items matter for this role; "
-                "and give one specific next step referencing the missing item(s). Do not use numbers. Avoid corporate jargon."
+                "JOB DESCRIPTION (excerpt):\n" + jd_excerpt + "\n\n" +
+                "INITIAL_SCORE: " + str(initial_score) + "/100\n" +
+                "ENHANCED_SCORE: " + str(enhanced_score) + "/100\n\n" +
+                "CANDIDATE_STRENGTHS_PRESENT: " + present_for_prompt + "\n" +
+                "EMPHASIZED_OR_ADDED: " + added_for_prompt + "\n" +
+                "TOP_MISSING: " + missing_for_prompt + "\n" +
+                "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
+                "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
+                "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
+                "Write ONE concise paragraph (4–6 sentences) that is factual and insightful, using the scores, explaining changes and the remaining gap with a concrete next step."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():
                 narrative = gpt_narrative.strip()
-                # Normalize quotes/labels and enforce length
+                # Normalize quotes/labels; no character limit enforcement
                 if (narrative.startswith('"') and narrative.endswith('"')) or (narrative.startswith("'") and narrative.endswith("'")):
                     narrative = narrative[1:-1].strip()
                 narrative = narrative.replace("\r\n", "\n").strip()
-                # Ensure at most one blank line between paragraphs
-                parts = [p.strip() for p in narrative.split("\n\n") if p.strip()]
-                if len(parts) > 2:
-                    parts = parts[:2]
-                narrative = "\n\n".join(parts)
-                if len(narrative) > 500:
-                    narrative = narrative[:497].rstrip() + "..."
-                fit_summary_narrative = narrative
+                # Collapse to single paragraph
+                paragraphs = [p.strip() for p in narrative.split("\n\n") if p.strip()]
+                narrative_one = " ".join(paragraphs) if paragraphs else narrative
+                fit_summary = narrative_one
+                fit_summary_narrative = narrative_one
         except Exception:
             # Keep deterministic narrative if GPT is unavailable
             pass
