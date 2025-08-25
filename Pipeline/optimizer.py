@@ -83,7 +83,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # TODO: Consider making similarity_threshold, relevance_threshold, overall_skill_limit configurable per job or globally
         similarity_threshold=0.75, # For bullet matching
         relevance_threshold=0.35,  # Lowered to allow more JD skills into consideration
-        overall_skill_limit=25     # Slightly higher cap to include more high-signal additions
+        overall_skill_limit=45     # Slightly higher cap to include more high-signal additions
     )
     matches_by_bullet = match_results.get("matches_by_bullet", {})
     final_technical_skills = match_results.get("final_technical_skills", {})

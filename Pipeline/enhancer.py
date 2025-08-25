@@ -116,7 +116,11 @@ class ResumeEnhancer:
                         continue
                     
                     # Enhance the bullet with the keywords
-                    enhanced_bullet = self._enhance_bullet_with_keywords(bullet, keywords_for_bullet)
+                    enhanced_bullet = self._enhance_bullet_with_keywords(
+                        bullet, 
+                        keywords_for_bullet,
+                        experience, # Pass the whole experience dict for context
+                    )
                     
                     # Validate the enhancement
                     if self._validate_enhancement(bullet, enhanced_bullet, [kw["keyword"] for kw in keywords_for_bullet]):
@@ -431,41 +435,42 @@ class ResumeEnhancer:
         
         return filtered_matches
     
-    def _enhance_bullet_with_keywords(self, bullet: str, keywords: List[Dict[str, Any]]) -> str:
+    def _enhance_bullet_with_keywords(self, bullet: str, keywords: List[Dict[str, Any]], experience: Dict[str, Any]) -> str:
         """
-        Enhance a bullet point with multiple keywords.
+        Enhance a bullet point with multiple keywords using a context-aware, domain-agnostic approach.
         
         Args:
             bullet: Original bullet text
-            keywords: Keywords to incorporate
+            keywords: Keywords to incorporate (including their context from the JD)
+            experience: The experience entry (dict) containing the bullet, for role context.
             
         Returns:
             str: Enhanced bullet text
         """
-        # Prepare keyword information for prompt
+        # Prepare keyword information for prompt, including context
         keyword_text = ""
         for idx, kw in enumerate(keywords):
-            keyword_text += f"{idx+1}. {kw['keyword']}\\n   Context from job description: {kw['context']}\\n"
+            keyword_text += f"{idx+1}. Keyword: \"{kw['keyword']}\" (from JD context: \"{kw['context']}\")\n"
         
-        # Create prompt for bullet enhancement
-        prompt = f"""
-        Task: Enhance the following resume bullet point by naturally incorporating the specified keywords.
+        job_title = experience.get("title", "their previous role")
 
-        Original bullet point:
+        # Create a more intelligent, context-aware prompt
+        prompt = f"""
+        Task: Subtly enhance the following resume bullet to highlight skills relevant to a new job description.
+
+        Original resume bullet (from their role as a "{job_title}"):
         "{bullet}"
 
-        Keywords to incorporate naturally:
+        Keywords to incorporate (extracted from the target job description):
         {keyword_text}
 
         Requirements:
-        1. MUST include ALL the keywords in the enhanced bullet point.
-        2. MUST preserve ALL numbers, percentages, metrics, tools, and named technologies EXACTLY as they appear.
-        3. MUST maintain the original meaning, results/outcomes, and scope of work (do NOT drop achievements).
-        4. MUST keep the same professional tone and tense.
-        5. Changes should be minimal and natural—only what is needed to incorporate keywords.
-        6. Final bullet MUST sound natural and professional (no fluff, no length inflation).
-        7. If impossible to include all keywords naturally, prioritize the ones listed first.
-        8. Return ONLY the rewritten bullet text, with no labels, no prefixes, and no quotation marks.
+        1. Rewrite the bullet to demonstrate how the candidate's past achievement is relevant to the new job's needs, using the provided keywords and their context as a guide.
+        2. Do NOT just mechanically insert keywords. The goal is a natural, achievement-oriented bullet that implicitly shows the desired skill.
+        3. MUST preserve all original numbers, percentages, and metrics EXACTLY.
+        4. MUST maintain the original core achievement and professional tone.
+        5. The final bullet MUST sound authentic and be written from the candidate's perspective.
+        6. Return ONLY the single, rewritten bullet text, with no extra labels, prefixes, or quotation marks.
 
         Enhanced bullet point:
         """
