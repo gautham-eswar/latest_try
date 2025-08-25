@@ -154,64 +154,63 @@ class ResumeEnhancer:
             if "Skills" not in enhanced_resume or not isinstance(enhanced_resume["Skills"], dict):
                 enhanced_resume["Skills"] = {} # Ensure Skills section is a dict
             
-            # Merge additions into existing user-provided structure without flattening or overwriting
-            existing_tech_skills = enhanced_resume["Skills"].get("Technical Skills")
-
-            # If the user has top-level categories under Skills, prefer merging into those
-            # Otherwise, merge into the 'Technical Skills' subtree
-            merged_tech_skills = self._merge_technical_skills(
-                existing_tech_skills,
-                final_technical_skills
-            )
-
-            enhanced_resume["Skills"]["Technical Skills"] = merged_tech_skills
-            logger.debug(f"Merged 'Technical Skills' in resume. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
-
-            # Enhancer-side visibility: append genuinely new JD skills into existing top-level categories
+            # Prefer merging into top-level categories if present; otherwise use 'Technical Skills' subtree
             try:
                 top_level_categories = [k for k, v in original_skills_section_snapshot.items() if isinstance(v, list)]
                 if top_level_categories:
-                    # Build dedupe set across all existing skills (case-insensitive)
-                    existing_lower = set()
-                    for cat, items in original_skills_section_snapshot.items():
-                        if not isinstance(items, list):
-                            continue
-                        for it in items:
-                            if isinstance(it, str):
-                                existing_lower.add(it.strip().lower())
-                            elif isinstance(it, dict):
-                                for _sub, sub_list in it.items():
-                                    if isinstance(sub_list, list):
-                                        for s in sub_list:
-                                            if isinstance(s, str):
-                                                existing_lower.add(s.strip().lower())
+                    # JD-first merge into top-level categories
+                    logger.debug("Top-level categories detected. Merging new skills into existing top-level lists with JD-first ordering.")
 
-                    # Flatten final_technical_skills to category->list[str]
+                    # Prepare existing lowercased sets per category
+                    existing_lower_by_cat: Dict[str, Set[str]] = {}
+                    for cat, items in enhanced_resume["Skills"].items():
+                        if isinstance(items, list):
+                            existing_lower_by_cat[cat] = set(
+                                [it.strip().lower() for it in items if isinstance(it, str)]
+                            )
+
                     for add_cat, add_list in final_technical_skills.items():
-                        if not isinstance(add_list, list):
+                        if not isinstance(add_list, list) or not add_list:
                             continue
-                        # Ensure the category exists at top level
                         if add_cat not in enhanced_resume["Skills"] or not isinstance(enhanced_resume["Skills"][add_cat], list):
                             enhanced_resume["Skills"][add_cat] = []
+                            existing_lower_by_cat[add_cat] = set()
                         target_list = enhanced_resume["Skills"][add_cat]
+                        existing_lower = existing_lower_by_cat.get(add_cat, set())
+
+                        # Collect new items not already present
+                        new_items: List[str] = []
                         for s in add_list:
                             if not isinstance(s, str) or not s.strip():
                                 continue
                             key = s.strip().lower()
                             if key in existing_lower:
                                 continue
-                            # Append as plain string (do not create new subcategory structures)
-                            target_list.append(s)
+                            new_items.append(s)
                             existing_lower.add(key)
+                        if new_items:
+                            # JD-first ordering: prepend
+                            enhanced_resume["Skills"][add_cat] = new_items + target_list
+                else:
+                    # No top-level lists: merge into 'Technical Skills' subtree using structured merge (JD-first inside helper)
+                    existing_tech_skills = enhanced_resume["Skills"].get("Technical Skills")
+                    merged_tech_skills = self._merge_technical_skills(
+                        existing_tech_skills,
+                        final_technical_skills
+                    )
+                    enhanced_resume["Skills"]["Technical Skills"] = merged_tech_skills
+                    logger.debug(f"Merged 'Technical Skills' in resume. Categories: {list(merged_tech_skills.keys()) if isinstance(merged_tech_skills, dict) else 'flat list'}")
             except Exception as e:
-                logger.warning(f"Top-level skills merge (visibility) skipped due to error: {e}")
+                logger.warning(f"Skills merge skipped due to error: {e}")
 
+            # Record modification summary
+            mod_message = "JD-first merge into top-level categories" if top_level_categories else "Merged into 'Technical Skills' subtree"
             modifications.append({
                 "section": "Skills",
-                "type": "Technical Skills Merge",
-                "original_skills_snapshot": original_skills_section_snapshot.get("Technical Skills", "Not present"),
-                "updated_skills_structure": enhanced_resume["Skills"].get("Technical Skills"),
-                "message": "Technical skills merged: preserved user categories and appended new skills with de-duplication."
+                "type": "Skills Merge",
+                "original_skills_snapshot": original_skills_section_snapshot,
+                "updated_skills_structure": enhanced_resume.get("Skills"),
+                "message": f"Technical skills merged: preserved structure; {mod_message}."
             })
             logger.info(f"Technical skills section updated successfully.")
         else:
@@ -235,12 +234,13 @@ class ResumeEnhancer:
         without overwriting user categories or flattening subcategory structures.
 
         Behavior:
-        - If existing is a dict of categories, append new skills into the matching categories.
-          If the category list contains dict subcategories, append new skills as plain strings at
-          the top level of that category list. Do not alter subcategory structures.
-        - If existing is a flat list, append new skills not already present.
+        - If existing is a dict of categories, place newly detected JD skills FIRST within the matching
+          categories (JD-first ordering). If the category list contains dict subcategories, insert new
+          skills as plain strings at the top level of that category list. Do not alter subcategory structures.
+        - If existing is a flat list, place new skills FIRST (JD-first ordering) and keep originals after.
         - If existing is None/missing, return a copy of additions.
-        - De-duplicate case-insensitively while preserving original order.
+        - De-duplicate case-insensitively while preserving the relative order of originals and the order
+          of new items among themselves.
         """
         # If no existing, return a shallow copy of additions (dict) directly
         if existing_tech_skills is None:
@@ -272,7 +272,7 @@ class ResumeEnhancer:
                                         names.add(s.strip().lower())
                 return names
 
-            # Append additions per category with de-duplication
+            # Prepare JD-first insertion per category with de-duplication
             for add_category, add_skills in additions.items():
                 if not isinstance(add_skills, list) or not add_skills:
                     continue
@@ -282,14 +282,20 @@ class ResumeEnhancer:
 
                 existing_names = collect_existing_names(merged[add_category])
 
+                # Collect new items (in given order) that are not present, then prepend
+                new_items: List[str] = []
                 for skill in add_skills:
                     if not isinstance(skill, str) or not skill.strip():
                         continue
-                    if skill.strip().lower() in existing_names:
+                    key = skill.strip().lower()
+                    if key in existing_names:
                         continue
-                    # Append as a plain string to preserve existing subcategory dicts
-                    merged[add_category].append(skill)
-                    existing_names.add(skill.strip().lower())
+                    new_items.append(skill)
+                    existing_names.add(key)
+
+                if new_items:
+                    # JD-first ordering: place new items before existing items
+                    merged[add_category] = new_items + merged[add_category]
 
             return merged
 
@@ -300,6 +306,9 @@ class ResumeEnhancer:
                 [it.strip().lower() for it in merged_list if isinstance(it, str)]
             )
 
+            # Gather unique new items maintaining their order across categories
+            jd_new_items: List[str] = []
+            seen_new: Set[str] = set()
             for add_category, add_skills in additions.items():
                 if not isinstance(add_skills, list):
                     continue
@@ -307,11 +316,14 @@ class ResumeEnhancer:
                     if not isinstance(skill, str) or not skill.strip():
                         continue
                     key = skill.strip().lower()
-                    if key in existing_names:
+                    if key in existing_names or key in seen_new:
                         continue
-                    merged_list.append(skill)
-                    existing_names.add(key)
+                    jd_new_items.append(skill)
+                    seen_new.add(key)
 
+            if jd_new_items:
+                # JD-first ordering: place new items before existing list
+                return jd_new_items + merged_list
             return merged_list
 
         # Fallback: unexpected type, replace cautiously with additions copy
