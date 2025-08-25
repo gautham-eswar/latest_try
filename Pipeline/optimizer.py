@@ -691,27 +691,29 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             f"Display fit_scores={fit_scores}, fit_summary='{fit_summary}'"
         )
 
-        # Persist to optimization_jobs for direct-link page loads
+        # Persist to optimization_jobs and mirror into analysis_data in a single safe flow
         try:
-            update_optimization_job(job_id, {
-                "fit_scores": fit_scores,
-                "fit_summary": fit_summary,
-                "fit_summary_narrative": fit_summary_narrative,
-            })
-            # Also mirror into analysis_data JSON to override any legacy long summaries
+            # Fetch current analysis_data once
+            current_analysis = {}
             try:
                 job_sel = db.table('optimization_jobs').select('analysis_data').eq('id', job_id).execute()
-                current_analysis = {}
                 if hasattr(job_sel, 'data') and job_sel.data:
                     first_row = job_sel.data[0] or {}
                     if isinstance(first_row.get('analysis_data'), dict):
                         current_analysis = dict(first_row.get('analysis_data') or {})
-                current_analysis['fit_summary'] = fit_summary
-                current_analysis['fit_summary_narrative'] = fit_summary_narrative
-                current_analysis['fit_scores'] = fit_scores
-                update_optimization_job(job_id, {"analysis_data": current_analysis})
             except Exception:
-                pass
+                current_analysis = {}
+
+            current_analysis['fit_summary'] = fit_summary
+            current_analysis['fit_summary_narrative'] = fit_summary_narrative
+            current_analysis['fit_scores'] = fit_scores
+
+            update_optimization_job(job_id, {
+                "fit_scores": fit_scores,
+                "fit_summary": fit_summary,
+                "fit_summary_narrative": fit_summary_narrative,
+                "analysis_data": current_analysis
+            })
         except Exception:
             pass
     except Exception:
