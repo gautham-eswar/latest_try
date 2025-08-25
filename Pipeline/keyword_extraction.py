@@ -11,13 +11,6 @@ from Services.openai_interface import call_openai_api
 logger = logging.getLogger(__name__)
 
 
-def _normalize_for_match(text: str) -> str:
-    """Normalize text for fuzzy matching by lowercasing and removing non-alphanumeric chars."""
-    if not isinstance(text, str):
-        return ""
-    return re.sub(r'[^a-z0-9]', '', text.lower())
-
-
 def extract_keywords(
     job_description_text: str, max_retries=3
 ) -> Dict[str, Any]:
@@ -89,23 +82,7 @@ def extract_keywords(
             logger.info(
                 f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords (initial parse)."
             )
-            # Enforce literal-substring filter: keep only items whose context
-            # appears verbatim in the JD.
-            jd_text_normalized = _normalize_for_match(job_description_text)
-            filtered_keywords: List[Dict[str, Any]] = []
-            for kw in parsed_data["keywords"]:
-                try:
-                    context = str(kw.get("context", "")).strip()
-                    if context and _normalize_for_match(context) in jd_text_normalized:
-                        filtered_keywords.append(kw)
-                except Exception:
-                    # Skip malformed entries silently
-                    continue
-            if len(filtered_keywords) != len(parsed_data["keywords"]):
-                logger.info(
-                    f"Literal-substring filter: kept {len(filtered_keywords)}/{len(parsed_data['keywords'])} keywords."
-                )
-            return {"keywords": filtered_keywords}
+            return parsed_data
         else:
             logger.error(f"Parsed keyword JSON has incorrect structure (initial parse): {parsed_data}")
             # If structure is wrong even if JSON is valid, trigger repair attempt
@@ -162,20 +139,8 @@ def extract_keywords(
         if repaired_keywords:
             parsed_data = {"keywords": repaired_keywords}
             logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
-            # Apply the same literal-substring filter for repaired results
-            jd_text_normalized = _normalize_for_match(job_description_text)
-            filtered_keywords: List[Dict[str, Any]] = []
-            for kw in parsed_data["keywords"]:
-                try:
-                    context = str(kw.get("context", "")).strip()
-                    if context and _normalize_for_match(context) in jd_text_normalized:
-                        filtered_keywords.append(kw)
-                except Exception:
-                    continue
-            logger.info(
-                f"Literal-substring filter (repaired): kept {len(filtered_keywords)}/{len(parsed_data['keywords'])} keywords."
-            )
-            return {"keywords": filtered_keywords}
+            # Return the successfully repaired data
+            return parsed_data
         else:
             # If repair fails, raise the original error message for clarity, including raw data snippet
             logger.error(f"JSON repair failed. Could not salvage any valid keyword objects from raw data: {structured_data_str[:500]}...")
