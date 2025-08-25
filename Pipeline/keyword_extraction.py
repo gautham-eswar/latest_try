@@ -11,6 +11,13 @@ from Services.openai_interface import call_openai_api
 logger = logging.getLogger(__name__)
 
 
+def _normalize_for_match(text: str) -> str:
+    """Normalize text for fuzzy matching by lowercasing and removing non-alphanumeric chars."""
+    if not isinstance(text, str):
+        return ""
+    return re.sub(r'[^a-z0-9]', '', text.lower())
+
+
 def extract_keywords(
     job_description_text: str, max_retries=3
 ) -> Dict[str, Any]:
@@ -84,12 +91,12 @@ def extract_keywords(
             )
             # Enforce literal-substring filter: keep only items whose context
             # appears verbatim in the JD.
-            jd_text_lower = job_description_text.lower()
+            jd_text_normalized = _normalize_for_match(job_description_text)
             filtered_keywords: List[Dict[str, Any]] = []
             for kw in parsed_data["keywords"]:
                 try:
                     context = str(kw.get("context", "")).strip()
-                    if context and context.lower() in jd_text_lower:
+                    if context and _normalize_for_match(context) in jd_text_normalized:
                         filtered_keywords.append(kw)
                 except Exception:
                     # Skip malformed entries silently
@@ -156,12 +163,12 @@ def extract_keywords(
             parsed_data = {"keywords": repaired_keywords}
             logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
             # Apply the same literal-substring filter for repaired results
-            jd_text_lower = job_description_text.lower()
+            jd_text_normalized = _normalize_for_match(job_description_text)
             filtered_keywords: List[Dict[str, Any]] = []
             for kw in parsed_data["keywords"]:
                 try:
                     context = str(kw.get("context", "")).strip()
-                    if context and context.lower() in jd_text_lower:
+                    if context and _normalize_for_match(context) in jd_text_normalized:
                         filtered_keywords.append(kw)
                 except Exception:
                     continue
