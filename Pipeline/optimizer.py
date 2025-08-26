@@ -535,14 +535,17 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         fit_summary = fit_summary.replace("\n\n", _BR)
         fit_summary_narrative = fit_summary
 
-        # Optional: Generate a more insightful narrative with GPT (two short paragraphs, no numbers)
+        # Optional: Generate a concise 3-line report narrative with GPT
         try:
             system_prompt = (
-                "You are a precise evaluator. Write exactly TWO short paragraphs (3–5 sentences each) comparing the original and enhanced resume to the job description. "
-                "Use the scores to ground the assessment. In P1, synthesize alignment to JD priorities across skills, scope/seniority, domain, and measurable impact—be specific and factual. "
-                "In P2, state the top 1–2 remaining gaps and one concrete next step (project, metric, or phrasing) to close them. "
-                "Critically: DO NOT mention instructions, prompts, paragraphs, formatting, keyword highlighting, themes, ATS, or meta-process. Focus only on content about the candidate and the role. "
-                "Avoid fluff and corporate jargon. No bullet points, no markdown."
+                "You are a precise evaluator. Produce a concise three-line report about job fit. "
+                "Follow this EXACT format with NO extra text, NO labels, NO quotes, NO markdown, NO bullets, and NO meta commentary:\n"
+                "Line 1: This role{ at <Company>}{ for <Role>} needs <top 2–3 requirements>.\n"
+                "Line 2: Original scored <INITIAL_SCORE>/100 because <3 short, specific reasons seen in the resume>.\n"
+                "Line 3: Enhanced scored <ENHANCED_SCORE>/100 because <3 short, concrete changes made that improved fit>.\n"
+                "Rules: If company or role are clearly named in the job description, include them in braces above; otherwise omit them and say 'This role needs ...'. "
+                "Use concise, factual language (avoid fluff). Prefer concrete skills, domains, scope, and measurable impact. 12–18 words per line. "
+                "Separate the lines with ONE blank line between each line (i.e., a single empty line)."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -585,7 +588,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Output: exactly TWO short paragraphs (3–5 sentences each), separated by one blank line."
+                "Output exactly THREE lines in the specified format, with ONE blank line between lines. No other text."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():
