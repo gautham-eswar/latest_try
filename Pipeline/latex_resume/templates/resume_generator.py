@@ -256,8 +256,9 @@ def _generate_education_section(education_list: Optional[List[Dict[str, Any]]]) 
                 honors_str = fix_latex_special_chars(honors_raw)
 
             if gpa_str or honors_str:
-                # Using concatenation for safety, if one is empty, it's fine for LaTeX.
-                line = "    \\resumeSubSubheading{{{{" + gpa_str + "}}}}{{{{" + honors_str + "}}}}"
+                # Place GPA and Honors both on the left; keep right column empty so only date/location are right-aligned elsewhere
+                left_detail = ", ".join([s for s in [gpa_str, honors_str] if s])
+                line = "    \\resumeSubSubheading{{{{" + left_detail + "}}}}{{{{" + "" + "}}}}"
                 content_lines.append(line)
 
             additional_info_raw = edu.get("additional_info")
