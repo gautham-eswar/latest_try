@@ -535,22 +535,17 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         fit_summary = fit_summary.replace("\n\n", _BR)
         fit_summary_narrative = fit_summary
 
-        # Optional: Generate a concise 3-line report narrative with GPT
+        # Optional: Generate a genuine multi-paragraph narrative with GPT
         try:
             system_prompt = (
-                "You are a precise evaluator. Produce a concise three-line report with friendly, professional, factual tone and crisp, evidence-based insight. "
-                "Follow this EXACT format with NO extra text, NO labels, NO quotes, NO markdown, NO bullets, and NO meta commentary:\n"
-                "Line 1: This role{ at <Company>}{ for <Role>} needs <top 2–3 requirements with specificity>.\n"
-                "Line 2: Original scored <INITIAL_SCORE>/100 because <3 evidence-based reasons citing concrete skills/tools/projects/domains/metrics>.\n"
-                "Line 3: Enhanced scored <ENHANCED_SCORE>/100 because <3 concrete improvements added (skills, bullet changes, metrics) and their effect>.\n"
-                "Content rules: Be specific. Prefer named tools (e.g., Snowflake SQL, scikit-learn, GA4), domains (e.g., fintech risk), scope/seniority (e.g., led A/B tests), and measurable impact (e.g., CTR +12%). If metrics are absent, cite tangible artifacts (dashboards, experiments, deployments). "
-                "A slightly conversational, supportive tone is welcome, but keep it tight and factual. Do not add fluff.")
-            
-            # Guidance on spacing/length kept but softened for natural phrasing
-            system_prompt += (
-                " Tie reasons to Skills/Experience/Impact when natural (do not write the category names). "
-                "If company or role are not clearly named in the job description, omit them and start with 'This role needs ...'. "
-                "Aim for ~14–24 words per line. Separate lines with ONE blank line (a single empty line)."
+                "You are a precise resume-to-JD evaluator. Write a genuine, useful summary in 2–3 short paragraphs. "
+                "Tone: friendly, direct, and evidence-based; avoid fluff, cliches, and generic phrasing. "
+                "Constraints: do not use headings, labels, bullets, quotes, or markdown. Output only plain text. "
+                "Structure: \n"
+                "Paragraph 1 — What this role really requires (2–3 concrete needs with specificity: tools, domains, scope).\n"
+                "Paragraph 2 — What the candidate already proves that maps to those needs (skills/tools/projects/metrics).\n"
+                "Paragraph 3 (optional) — Actionable next steps to close the most important gaps (be specific and credible).\n"
+                "Use one blank line between paragraphs. 80–140 words total. Prefer named tools (e.g., Vertex AI, GA4, Snowflake SQL), domains, scope/seniority, and measurable impact."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -593,8 +588,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Output exactly THREE lines as specified, each 14–22 words, using concrete evidence (skills/tools, projects, domains, metrics). "
-                "One blank line between lines. No other text."
+                "Return 2 or 3 short paragraphs, separated by a SINGLE blank line. "
+                "No headings, bullets, labels, or markdown. Use concrete evidence (skills/tools, projects, domains, metrics). Only output the paragraphs."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():
@@ -603,19 +598,20 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 if (narrative.startswith('"') and narrative.endswith('"')) or (narrative.startswith("'") and narrative.endswith("'")):
                     narrative = narrative[1:-1].strip()
                 narrative = narrative.replace("\r\n", "\n").strip()
-                # Keep at most two paragraphs, separated by one blank line
+                # Preserve up to three paragraphs, then render breaks for front end
                 paragraphs = [p.strip() for p in narrative.split("\n\n") if p.strip()]
-                if len(paragraphs) >= 2:
-                    narrative_two = paragraphs[0] + "\n\n" + paragraphs[1]
+                if len(paragraphs) >= 3:
+                    narrative_out = paragraphs[0] + "\n\n" + paragraphs[1] + "\n\n" + paragraphs[2]
+                elif len(paragraphs) == 2:
+                    narrative_out = paragraphs[0] + "\n\n" + paragraphs[1]
                 elif len(paragraphs) == 1:
-                    narrative_two = paragraphs[0]
+                    narrative_out = paragraphs[0]
                 else:
-                    narrative_two = narrative
-                # Ensure paragraph break renders on the front end
+                    narrative_out = narrative
                 _BR = "<br/><br/>"
-                narrative_two = narrative_two.replace("\n\n", _BR)
-                fit_summary = narrative_two
-                fit_summary_narrative = narrative_two
+                narrative_out = narrative_out.replace("\n\n", _BR)
+                fit_summary = narrative_out
+                fit_summary_narrative = narrative_out
         except Exception:
             # Keep deterministic narrative if GPT is unavailable
             pass
