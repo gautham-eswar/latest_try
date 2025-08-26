@@ -538,14 +538,15 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # Optional: Generate a concise 3-line report narrative with GPT
         try:
             system_prompt = (
-                "You are a precise evaluator. Produce a concise three-line report about job fit. "
+                "You are a precise evaluator. Produce a concise three-line report with crisp, evidence-based insight. "
                 "Follow this EXACT format with NO extra text, NO labels, NO quotes, NO markdown, NO bullets, and NO meta commentary:\n"
-                "Line 1: This role{ at <Company>}{ for <Role>} needs <top 2–3 requirements>.\n"
-                "Line 2: Original scored <INITIAL_SCORE>/100 because <3 short, specific reasons seen in the resume>.\n"
-                "Line 3: Enhanced scored <ENHANCED_SCORE>/100 because <3 short, concrete changes made that improved fit>.\n"
-                "Rules: If company or role are clearly named in the job description, include them in braces above; otherwise omit them and say 'This role needs ...'. "
-                "Use concise, factual language (avoid fluff). Prefer concrete skills, domains, scope, and measurable impact. 12–18 words per line. "
-                "Separate the lines with ONE blank line between each line (i.e., a single empty line)."
+                "Line 1: This role{ at <Company>}{ for <Role>} needs <top 2–3 requirements with specificity>.\n"
+                "Line 2: Original scored <INITIAL_SCORE>/100 because <3 evidence-based reasons citing concrete skills/tools/projects/domains/metrics>.\n"
+                "Line 3: Enhanced scored <ENHANCED_SCORE>/100 because <3 concrete improvements added (skills, bullet changes, metrics) and their effect>.\n"
+                "Content rules: Be specific. Prefer named tools (e.g., Snowflake SQL, scikit-learn, GA4), domains (e.g., fintech risk), scope/seniority (e.g., led A/B tests), and measurable impact (e.g., CTR +12%). If metrics are absent, cite tangible artifacts (dashboards, experiments, deployments). "
+                "Tie reasons to the categories Skills/Experience/Impact when natural, but do not write the category names. "
+                "If company or role are not clearly named in the job description, omit them and start with 'This role needs ...'. "
+                "Use concise, factual language. Target 14–22 words per line. Separate lines with ONE blank line (a single empty line)."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -588,7 +589,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Output exactly THREE lines in the specified format, with ONE blank line between lines. No other text."
+                "Output exactly THREE lines as specified, each 14–22 words, using concrete evidence (skills/tools, projects, domains, metrics). "
+                "One blank line between lines. No other text."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():
