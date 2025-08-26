@@ -538,15 +538,19 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # Optional: Generate a concise 3-line report narrative with GPT
         try:
             system_prompt = (
-                "You are a precise evaluator. Produce a concise three-line report with crisp, evidence-based insight. "
+                "You are a precise evaluator. Produce a concise three-line report with friendly, professional, factual tone and crisp, evidence-based insight. "
                 "Follow this EXACT format with NO extra text, NO labels, NO quotes, NO markdown, NO bullets, and NO meta commentary:\n"
                 "Line 1: This role{ at <Company>}{ for <Role>} needs <top 2–3 requirements with specificity>.\n"
                 "Line 2: Original scored <INITIAL_SCORE>/100 because <3 evidence-based reasons citing concrete skills/tools/projects/domains/metrics>.\n"
                 "Line 3: Enhanced scored <ENHANCED_SCORE>/100 because <3 concrete improvements added (skills, bullet changes, metrics) and their effect>.\n"
                 "Content rules: Be specific. Prefer named tools (e.g., Snowflake SQL, scikit-learn, GA4), domains (e.g., fintech risk), scope/seniority (e.g., led A/B tests), and measurable impact (e.g., CTR +12%). If metrics are absent, cite tangible artifacts (dashboards, experiments, deployments). "
-                "Tie reasons to the categories Skills/Experience/Impact when natural, but do not write the category names. "
+                "A slightly conversational, supportive tone is welcome, but keep it tight and factual. Do not add fluff.")
+            
+            # Guidance on spacing/length kept but softened for natural phrasing
+            system_prompt += (
+                " Tie reasons to Skills/Experience/Impact when natural (do not write the category names). "
                 "If company or role are not clearly named in the job description, omit them and start with 'This role needs ...'. "
-                "Use concise, factual language. Target 14–22 words per line. Separate lines with ONE blank line (a single empty line)."
+                "Aim for ~14–24 words per line. Separate lines with ONE blank line (a single empty line)."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
