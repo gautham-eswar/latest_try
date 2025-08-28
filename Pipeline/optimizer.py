@@ -574,13 +574,13 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # Optional: Generate a genuine multi-paragraph narrative with GPT
         try:
             system_prompt = (
-                "You are a precise resume-to-JD evaluator. Write a genuine, helpful summary in exactly 2 short paragraphs. "
-                "Tone: friendly, direct, and evidence-based; avoid fluff and generic phrasing. "
+                "You are an executive-caliber resume reviewer. Write a polished, luxury-style evaluation in 2 short paragraphs totaling 3–4 sentences. "
+                "Tone: confident, concise, and evidence-based; avoid fluff, filler, and generic phrasing. "
                 "Constraints: no headings, labels, bullets, quotes, or markdown. Output only plain text. "
                 "Structure: \n"
-                "Paragraph 1 — What this role really requires (2–3 concrete needs with specificity: tools, domains, scope).\n"
-                "Paragraph 2 — Why the candidate fits (1–2 specific strengths that map to those needs) and the single most impactful next step to improve fit (concise and credible).\n"
-                "Use one blank line between paragraphs. 70–110 words total. Prefer named tools (e.g., Vertex AI, GA4, Snowflake SQL), domains, scope/seniority, and measurable impact."
+                "Paragraph 1 — Where they stand and what the role demands: include the fit score context (e.g., Fit: X/100, or improvement) and 1–2 concrete role requirements (tools, domains, scope).\n"
+                "Paragraph 2 — How we helped and what to do next: state 1–2 specific strengths that map to the role and what we emphasized/added, then one crisp, credible next step to raise fit.\n"
+                "Use exactly one blank line between paragraphs. Target 70–110 words. Prefer named tools (e.g., Vertex AI, GA4, Snowflake SQL), domains, scope/seniority, and measurable impact."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -623,7 +623,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Return EXACTLY 2 short paragraphs separated by ONE blank line. "
+                "Return 2 short paragraphs totaling 3–4 sentences, separated by ONE blank line. "
                 "No headings, bullets, labels, or markdown. Use concrete evidence (skills/tools, projects, domains, metrics). Only output the two paragraphs."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
