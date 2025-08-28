@@ -218,8 +218,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             for key in ("objective", "summary", "Summary/Objective"):
                 if key in enhanced_resume_parsed:
                     del enhanced_resume_parsed[key]
-            if isinstance(original_summary_value, str) and original_summary_value.strip():
-                enhanced_resume_parsed["objective"] = original_summary_value.strip()
+            # When unchecked, we now REMOVE the summary section entirely, not preserve the original.
+            pass # No-op: the summary has been deleted and we will not add it back.
         except Exception:
             pass
 
@@ -445,10 +445,10 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 return keep or r
 
             system_prompt = (
-                "You are a rigorous recruiter evaluating resume-job fit. "
+                "You are an expert, insightful recruiter evaluating resume-job fit. Your goal is to identify potential, not just exact keyword matches. "
                 "Evaluate TWO resumes (original vs enhanced) against the same job description. "
                 "For EACH resume, do all scoring within the prompt as follows: "
-                "(1) For each category, assign a score 0–10, multiply by the fixed weight, compute the weighted contribution, and give a 1–2 sentence justification. "
+                "(1) For each category, assign a score 0–10, multiply by the fixed weight, compute the weighted contribution, and give a 1–2 sentence justification. Be generous in your scoring, especially for Experience Relevance, rewarding transferable skills and relevant project work. "
                 "(2) Categories & Weights:\n"
                 "- Skills Match — Technical and hard skills (tools, methods, platforms). Score × 3.0 → max 30 pts.\n"
                 "- Experience Relevance — Similarity in roles, seniority, domain. Score × 2.5 → max 25 pts.\n"
@@ -466,7 +466,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "  \"initial_judgment\": <string>,\n"
                 "  \"enhanced_judgment\": <string>\n"
                 "} "
-                "Top-level \"initial\" and \"enhanced\" must be the total weighted scores (0–100) as integers. Penalize unverifiable claims; reward concrete, role-relevant evidence. "
+                "Top-level \"initial\" and \"enhanced\" must be the total weighted scores (0–100) as integers. Reward concrete, role-relevant evidence, but avoid overly penalizing for lack of exact keyword matches if the underlying experience is strong. "
                 "Before returning, take a holistic read of the JD and each resume; if your holistic estimate for either total differs by more than ±10 from your computed total, adjust that total within ±10 and then return JSON."
             )
             user_prompt = (
