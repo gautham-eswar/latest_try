@@ -574,14 +574,13 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # Optional: Generate a genuine multi-paragraph narrative with GPT
         try:
             system_prompt = (
-                "You are a precise resume-to-JD evaluator. Write a genuine, useful summary in 2–3 short paragraphs. "
-                "Tone: friendly, direct, and evidence-based; avoid fluff, cliches, and generic phrasing. "
-                "Constraints: do not use headings, labels, bullets, quotes, or markdown. Output only plain text. "
+                "You are a precise resume-to-JD evaluator. Write a genuine, helpful summary in exactly 2 short paragraphs. "
+                "Tone: friendly, direct, and evidence-based; avoid fluff and generic phrasing. "
+                "Constraints: no headings, labels, bullets, quotes, or markdown. Output only plain text. "
                 "Structure: \n"
                 "Paragraph 1 — What this role really requires (2–3 concrete needs with specificity: tools, domains, scope).\n"
-                "Paragraph 2 — What the candidate already proves that maps to those needs (skills/tools/projects/metrics).\n"
-                "Paragraph 3 (optional) — Actionable next steps to close the most important gaps (be specific and credible).\n"
-                "Use one blank line between paragraphs. 80–140 words total. Prefer named tools (e.g., Vertex AI, GA4, Snowflake SQL), domains, scope/seniority, and measurable impact."
+                "Paragraph 2 — Why the candidate fits (1–2 specific strengths that map to those needs) and the single most impactful next step to improve fit (concise and credible).\n"
+                "Use one blank line between paragraphs. 70–110 words total. Prefer named tools (e.g., Vertex AI, GA4, Snowflake SQL), domains, scope/seniority, and measurable impact."
             )
 
             # Build JD focus and skill context to inform the narrative without numbers
@@ -624,8 +623,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "JD_ADDED_BY_CATEGORY: " + jd_added_json + "\n" +
                 "KEYWORDS_ADDED_IN_BULLETS: " + keywords_added_for_prompt + "\n" +
                 "FIT_LEVEL_HINT: " + fit_level + "\n\n" +
-                "Return 2 or 3 short paragraphs, separated by a SINGLE blank line. "
-                "No headings, bullets, labels, or markdown. Use concrete evidence (skills/tools, projects, domains, metrics). Only output the paragraphs."
+                "Return EXACTLY 2 short paragraphs separated by ONE blank line. "
+                "No headings, bullets, labels, or markdown. Use concrete evidence (skills/tools, projects, domains, metrics). Only output the two paragraphs."
             )
             gpt_narrative = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_narrative, str) and gpt_narrative.strip():

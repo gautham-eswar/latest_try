@@ -19,6 +19,7 @@ Your task is to perform a **comprehensive and thorough** extraction of all relev
    - **"context"**: The EXACT, VERBATIM sentence from the job description where the keyword appears. Do NOT paraphrase, shorten, or use ellipses (`...`).
    - The context sentence MUST contain the keyword string verbatim.
    - **"relevance_score"**: A float from 0.1 to 1.0, where 1.0 is a mandatory requirement.
+   - Assign 1.0 only when the JD explicitly signals priority (e.g., “must”, “required”, appears in the job title, or is clearly central/repeated in responsibilities).
    - **"skill_type"**: Strictly "hard skill" (for teachable abilities, tools, domains) or "soft skill" (for interpersonal traits).
    - Soft skill examples: problem solving, written/verbal communication, presentation skills, attention to detail
 
