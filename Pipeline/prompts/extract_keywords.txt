@@ -8,6 +8,7 @@ Your task is to perform a **comprehensive and thorough** extraction of all relev
 **Step 2: Comprehensive Keyword Extraction**
 - Perform an exhaustive scan of the entire job description. Pay extremely close attention to sections like **"What You’ll Do," "Responsibilities," "What You’ll Bring,"** and **"Qualifications."**
 - Your goal is to achieve **high recall**, extracting every distinct skill, tool, methodology, process, and qualification mentioned.
+- Aim to extract 12–20 distinct keywords when present. If you have fewer than 8, re-scan ‘Responsibilities’, ‘Qualifications’, and ‘About’ sections for domain/industry and function terms and add any missing items.
 
 **Step 3: Review for Completeness**
 - After your initial scan, re-read the "Responsibilities" and "Qualifications" sections one more time. Ask yourself: "Have I missed any skills required for this role?" Add any that were missed.
@@ -16,8 +17,12 @@ Your task is to perform a **comprehensive and thorough** extraction of all relev
 - For EACH extracted keyword, provide the following fields:
    - **"keyword"**: The most specific, canonical form of the skill (e.g., "Customer Onboarding," "Relationship Management"). Max 5 words.
    - **"context"**: The EXACT, VERBATIM sentence from the job description where the keyword appears. Do NOT paraphrase, shorten, or use ellipses (`...`).
+   - The context sentence MUST contain the keyword string verbatim.
    - **"relevance_score"**: A float from 0.1 to 1.0, where 1.0 is a mandatory requirement.
    - **"skill_type"**: Strictly "hard skill" (for teachable abilities, tools, domains) or "soft skill" (for interpersonal traits).
+   - Soft skill examples: problem solving, written/verbal communication, presentation skills, attention to detail
+
+- When a sentence lists items (comma-separated, colon-led, or in parentheses/‘including’/‘such as’), extract each specific item as a separate keyword with the same context.
 
 **Example of What to Do:**
 - If the text says, "...an expert in customer retention, lawyer management, and Ontra’s Contract Automation solution," you should extract `customer retention`, `lawyer management`, and `Contract Automation` as separate keywords, each with that full sentence as their context.
