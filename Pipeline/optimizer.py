@@ -70,6 +70,18 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
     })
+    # Mirror keywords into analysis_data for consumers that only read analysis_data
+    try:
+        job_sel_kw = db.table('optimization_jobs').select('analysis_data').eq('id', job_id).execute()
+        current_analysis_kw = {}
+        if hasattr(job_sel_kw, 'data') and job_sel_kw.data:
+            first_row_kw = job_sel_kw.data[0] or {}
+            if isinstance(first_row_kw.get('analysis_data'), dict):
+                current_analysis_kw = dict(first_row_kw.get('analysis_data') or {})
+        current_analysis_kw['keywords_extracted'] = keywords_data
+        update_optimization_job(job_id, {"analysis_data": current_analysis_kw})
+    except Exception:
+        pass
     logger.info(f"--- Stage 2/5: Completed ---")
 
     # --- Stage: Semantic Matching ---
