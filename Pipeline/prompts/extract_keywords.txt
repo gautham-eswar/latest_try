@@ -9,7 +9,10 @@ Extract relevant professional keywords from the job description. Follow these in
 
 2) For EACH extracted keyword include these fields:
    - "keyword": The most specific form (prefer multi-word phrases; max 5 words)
-   - "context": The EXACT sentence or minimal fragment directly from the JD where it appears
+   - "context": The EXACT sentence directly from the JD where it appears. COPY VERBATIM.
+     - Do NOT paraphrase, truncate, or summarize.
+     - Do NOT use ellipses ("..." or "…").
+     - Prefer full sentence boundaries; if a short fragment is unavoidable, it must still be verbatim.
    - "relevance_score": Importance on 0.1–1.0 scale (keep numeric float). Mapping:
        1.0 = explicitly required/essential; 0.8–0.9 = clearly important; 0.6–0.7 = mentioned and relevant; 0.4–0.5 = nice-to-have; 0.1–0.3 = marginal
    - "skill_type": "hard skill" for tools/technical knowledge/methodologies; "soft skill" for interpersonal/traits

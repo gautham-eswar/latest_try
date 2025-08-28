@@ -76,6 +76,9 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             kw = str(item.get("keyword", "")).strip()
             if not ctx:
                 continue
+            # Drop paraphrased/truncated contexts (ellipsis characters)
+            if "..." in ctx or "…" in ctx:
+                continue
             if ctx.lower() in jd_lower:
                 # Optionally ensure keyword string is evidenced somewhere in JD
                 if not kw or kw.lower() in jd_lower or kw.lower() in ctx.lower():
