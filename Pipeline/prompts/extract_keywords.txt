@@ -1,32 +1,42 @@
-Analyze the job description provided below. Extract key requirements.
-For each requirement, identify:
-1.  `keyword`: The core skill, tool, qualification, or concept (1-5 words).
-2.  `context`: A short snippet from the job description where the keyword appears.
-3.  `relevance_score`: Estimate importance on a scale of 0.1 to 1.0 (e.g., 1.0 for required, 0.7 for preferred, 0.5 for mentioned).
-4.  `skill_type`: Classify strictly as 'hard skill' or 'soft skill'.
+Extract relevant professional keywords from the job description. Follow these instructions EXACTLY:
 
-**Classification Rules:**
--   **Hard Skill**: Specific, quantifiable, teachable abilities. MUST be used for:
-    -   Programming languages (Python, Java), libraries (pandas, React), and databases (SQL).
-    -   Software tools and platforms (Excel, Power BI, Tableau, Salesforce, Jira, AWS, GCP).
-    -   Technical methodologies (statistical analysis, market research, SEO).
--   **Soft Skill**: Interpersonal traits. MUST be used for:
-    -   Communication, teamwork, problem-solving, leadership, detail-oriented.
--   **Qualifications and responsibilities**: Degrees, years of experience, or general duties are NOT skills. Do NOT extract them.
+1) Identify terms across these categories (for guidance only; output is a flat list):
+   - Technical skills: tools, languages, platforms, frameworks (e.g., Python, SQL, Vertex AI, React, AWS)
+   - Domain knowledge: industry-specific concepts and primitives (e.g., zero-knowledge proofs, DeFi, on-chain analytics)
+   - Methodologies/processes: approaches and practices (e.g., A/B testing, agile, model evaluation)
+   - Job functions: specific product/technical activities (e.g., roadmap ownership, developer onboarding) — ONLY if phrased as skill/competency, not generic duties
+   - Qualifications: certifications or concrete credentials (e.g., PMP, CISSP). Exclude degrees/years of experience.
 
-Return ONLY a JSON object with a key "keywords", which is a list of objects.
-Example Format:
+2) For EACH extracted keyword include these fields:
+   - "keyword": The most specific form (prefer multi-word phrases; max 5 words)
+   - "context": The EXACT sentence or minimal fragment directly from the JD where it appears
+   - "relevance_score": Importance on 0.1–1.0 scale (keep numeric float). Mapping:
+       1.0 = explicitly required/essential; 0.8–0.9 = clearly important; 0.6–0.7 = mentioned and relevant; 0.4–0.5 = nice-to-have; 0.1–0.3 = marginal
+   - "skill_type": "hard skill" for tools/technical knowledge/methodologies; "soft skill" for interpersonal/traits
+
+3) Expansion rules (apply strictly when present in the text):
+   - If a phrase includes parentheses or follows "including"/"such as", extract both the parent concept and each specific item.
+     Example: "cloud environments (AWS/Azure/GCP)" → "cloud environments", "AWS", "Azure", "GCP".
+     Example: "tools such as JIRA, Confluence" → "JIRA", "Confluence".
+
+4) Specificity rules:
+   - Prefer the most specific noun phrase (e.g., "zero-knowledge proofs" over "proofs").
+   - Keep acronyms and their expanded forms if both appear (e.g., ZK, ZKP, zero-knowledge proofs).
+
+5) Evidence rule:
+   - Every keyword MUST have direct textual evidence in "context". Do NOT infer terms not present in the JD.
+
+6) Noise control:
+   - Avoid generic soft skills unless explicitly emphasized as requirements.
+   - Do NOT include degrees or years of experience; certifications are allowed.
+
+Return ONLY valid JSON with this shape:
 {
   "keywords": [
-    { "keyword": "Python", "context": "Experience with Python for scripting...", "relevance_score": 0.9, "skill_type": "hard skill" },
-    { "keyword": "Tableau", "context": "Experience with Power BI or Tableau for data visualization...", "relevance_score": 0.8, "skill_type": "hard skill" },
-    { "keyword": "Team Collaboration", "context": "...strong ability for team collaboration.", "relevance_score": 0.8, "skill_type": "soft skill" }
+    { "keyword": "Python", "context": "Experience with Python for...", "relevance_score": 0.9, "skill_type": "hard skill" }
   ]
 }
-Ensure the context snippet is directly from the provided text.
-IMPORTANT: The entire output MUST be valid JSON. If no keywords are found, return `{"keywords": []}`.
+If no keywords are found, return {"keywords": []}.
 
-Go through all job requirements, nice-to-haves, and responsibilities, and extract all relevant skills as described above.
-
-Here's the job description:
+JOB DESCRIPTION:
 @job_description_text
