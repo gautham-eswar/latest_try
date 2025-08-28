@@ -68,6 +68,63 @@ def extract_keywords(
         logger.info("Extracted JSON object from within markdown block.")
 
 
+    def _verify_and_filter_keywords(obj: Dict[str, Any], jd_text: str) -> Dict[str, Any]:
+        """Post-process to remove hallucinations and enforce evidence-based outputs.
+        - Keep items only if 'context' is an exact substring of jd_text (case-insensitive).
+        - Keep items only if 'keyword' appears in the 'context' (case-insensitive).
+        - Clamp relevance_score to [0.1, 1.0].
+        - Normalize skill_type to 'hard skill' or 'soft skill'.
+        """
+        if not isinstance(obj, dict):
+            return {"keywords": []}
+        items = obj.get("keywords") or []
+        if not isinstance(items, list):
+            return {"keywords": []}
+
+        jd_lower = (jd_text or "").lower()
+        filtered: List[Dict[str, Any]] = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            kw = it.get("keyword")
+            ctx = it.get("context")
+            st = it.get("skill_type")
+            rs = it.get("relevance_score")
+
+            if not isinstance(kw, str) or not kw.strip():
+                continue
+            if not isinstance(ctx, str) or not ctx.strip():
+                continue
+
+            # Evidence checks
+            ctx_lower = ctx.lower()
+            if ctx_lower not in jd_lower:
+                # Reject if the provided context is not found in the JD verbatim
+                continue
+            if kw.lower() not in ctx_lower:
+                # Reject if the keyword itself is not present in its own context
+                continue
+
+            # Normalize relevance score
+            try:
+                rs_val = float(rs)
+            except Exception:
+                rs_val = 0.6
+            rs_val = max(0.1, min(1.0, rs_val))
+
+            # Normalize skill type
+            st_norm = str(st).strip().lower() if isinstance(st, str) else "hard skill"
+            st_final = "soft skill" if st_norm == "soft skill" else "hard skill"
+
+            filtered.append({
+                "keyword": kw.strip(),
+                "context": ctx.strip(),
+                "relevance_score": rs_val,
+                "skill_type": st_final,
+            })
+
+        return {"keywords": filtered}
+
     try:
         # Attempt to parse the extracted JSON string
         parsed_data = json.loads(structured_data_str)
@@ -78,11 +135,12 @@ def extract_keywords(
             and "keywords" in parsed_data
             and isinstance(parsed_data["keywords"], list)
         ):
-            # Further validation could check individual keyword objects
+            # Evidence-based filtering to eliminate hallucinations
+            verified = _verify_and_filter_keywords(parsed_data, job_description_text)
             logger.info(
-                f"Successfully extracted {len(parsed_data['keywords'])} detailed keywords (initial parse)."
+                f"Successfully extracted {len(verified['keywords'])} detailed keywords after verification (initial parse)."
             )
-            return parsed_data
+            return verified
         else:
             logger.error(f"Parsed keyword JSON has incorrect structure (initial parse): {parsed_data}")
             # If structure is wrong even if JSON is valid, trigger repair attempt
@@ -138,9 +196,10 @@ def extract_keywords(
         # Check if repair was successful
         if repaired_keywords:
             parsed_data = {"keywords": repaired_keywords}
-            logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
-            # Return the successfully repaired data
-            return parsed_data
+            verified = _verify_and_filter_keywords(parsed_data, job_description_text)
+            logger.info(f"JSON repair successful. Salvaged {len(verified['keywords'])} keyword objects after verification.")
+            # Return the successfully repaired and verified data
+            return verified
         else:
             # If repair fails, raise the original error message for clarity, including raw data snippet
             logger.error(f"JSON repair failed. Could not salvage any valid keyword objects from raw data: {structured_data_str[:500]}...")
