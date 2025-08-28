@@ -78,12 +78,10 @@ def extract_keywords(
             and "keywords" in parsed_data
             and isinstance(parsed_data["keywords"], list)
         ):
-            # Post-validate to eliminate hallucinations and enforce evidence
-            cleaned = _validate_and_clean_keywords(job_description_text, parsed_data.get("keywords", []))
             logger.info(
-                f"Successfully extracted {len(cleaned['keywords'])} validated keywords (initial parse)."
+                f"Successfully extracted {len(parsed_data['keywords'])} keywords."
             )
-            return cleaned
+            return parsed_data
         else:
             logger.error(f"Parsed keyword JSON has incorrect structure (initial parse): {parsed_data}")
             # If structure is wrong even if JSON is valid, trigger repair attempt
@@ -139,11 +137,9 @@ def extract_keywords(
         # Check if repair was successful
         if repaired_keywords:
             parsed_data = {"keywords": repaired_keywords}
-            # Post-validate to eliminate hallucinations and enforce evidence
-            cleaned = _validate_and_clean_keywords(job_description_text, parsed_data.get("keywords", []))
-            logger.info(f"JSON repair successful. Salvaged {len(cleaned['keywords'])} validated keyword objects.")
+            logger.info(f"JSON repair successful. Salvaged {len(repaired_keywords)} keyword objects.")
             # Return the successfully repaired data
-            return cleaned
+            return parsed_data
         else:
             # If repair fails, raise the original error message for clarity, including raw data snippet
             logger.error(f"JSON repair failed. Could not salvage any valid keyword objects from raw data: {structured_data_str[:500]}...")
@@ -158,74 +154,4 @@ def extract_keywords(
         # Ensure the original exception type and message are propagated if possible
         raise ValueError(f"Unexpected error during keyword processing: {str(e)}") from e
     # --- END OF JSON Parsing and Repair Block ---
-
-
-def _validate_and_clean_keywords(jd_text: str, keywords: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Enforce evidence-based extraction:
-    - context must be an exact substring of the job description (case-insensitive)
-    - keyword must appear within the context (or elsewhere in the JD text)
-    - skill_type normalized to 'hard skill' or 'soft skill'
-    - relevance_score clamped to [0.1, 1.0]
-    - deduplicate by (keyword, context) pair, case-insensitively
-    Returns a dict with the same schema: {"keywords": [ ... ]}
-    """
-    try:
-        jd_lower = (jd_text or "").lower()
-    except Exception:
-        jd_lower = (jd_text or "")
-
-    cleaned: List[Dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
-
-    for item in keywords or []:
-        if not isinstance(item, dict):
-            continue
-
-        keyword = item.get("keyword")
-        context = item.get("context")
-        if not isinstance(keyword, str) or not isinstance(context, str):
-            continue
-        keyword_norm = keyword.strip()
-        context_norm = context.strip()
-        if not keyword_norm or not context_norm:
-            continue
-
-        # Evidence checks
-        ctx_in_jd = context_norm.lower() in jd_lower
-        kw_in_ctx = keyword_norm.lower() in context_norm.lower()
-        kw_in_jd = keyword_norm.lower() in jd_lower
-        if not ctx_in_jd:
-            # Reject hallucinated/rewritten contexts
-            continue
-        if not (kw_in_ctx or kw_in_jd):
-            # Reject if the keyword itself is not evidenced
-            continue
-
-        # Normalize skill type
-        st_raw = str(item.get("skill_type", "")).strip().lower()
-        skill_type = "hard skill" if st_raw == "hard skill" else ("soft skill" if st_raw == "soft skill" else "hard skill")
-
-        # Clamp relevance score
-        score_raw = item.get("relevance_score", 0.6)
-        try:
-            score_val = float(score_raw)
-        except Exception:
-            score_val = 0.6
-        score_val = max(0.1, min(1.0, score_val))
-
-        sig = (keyword_norm.lower(), context_norm.lower())
-        if sig in seen:
-            continue
-        seen.add(sig)
-
-        cleaned.append({
-            "keyword": keyword_norm,
-            "context": context_norm,
-            "relevance_score": score_val,
-            "skill_type": skill_type,
-        })
-
-    return {"keywords": cleaned}
-
 # --- End Replacement (Whole Function) ---
