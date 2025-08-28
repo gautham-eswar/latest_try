@@ -9,6 +9,8 @@ import sys
 import logging
 import argparse
 from dotenv import load_dotenv
+import hashlib
+import subprocess
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +21,43 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("render_entrypoint")
+
+def _log_git_info():
+    """Log current git branch and short commit hash if available."""
+    branch = None
+    sha_short = None
+    try:
+        branch = subprocess.check_output([
+            "git", "rev-parse", "--abbrev-ref", "HEAD"
+        ], stderr=subprocess.STDOUT).decode().strip()
+    except Exception:
+        pass
+    try:
+        sha_short = subprocess.check_output([
+            "git", "rev-parse", "--short", "HEAD"
+        ], stderr=subprocess.STDOUT).decode().strip()
+    except Exception:
+        pass
+
+    # Fallback to env if git metadata is unavailable in the container
+    env_sha = os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT") or os.getenv("COMMIT_SHA")
+    if not sha_short and env_sha:
+        sha_short = (env_sha or "")[:7]
+
+    logger.info(f"Code version: branch={branch or 'unknown'} commit={sha_short or 'unknown'}")
+
+def _log_prompt_fingerprint():
+    """Log a simple fingerprint of the keyword prompt file for traceability."""
+    prompt_path = os.path.join("Pipeline", "prompts", "extract_keywords.txt")
+    try:
+        with open(prompt_path, "rb") as f:
+            data = f.read()
+        sha1 = hashlib.sha1(data).hexdigest()[:12]
+        head_preview = data.decode(errors="ignore").splitlines()[0:1]
+        preview = head_preview[0] if head_preview else ""
+        logger.info(f"Prompt fingerprint: {prompt_path} sha1={sha1} head='{preview[:80]}'")
+    except Exception as e:
+        logger.info(f"Prompt fingerprint: {prompt_path} unavailable ({e})")
 
 def main():
     """Main entry point for the application when run on Render."""
@@ -37,6 +76,8 @@ def main():
     os.environ["RENDER"] = "true"
     
     logger.info(f"Starting Resume Optimizer service on {args.host}:{args.port}")
+    _log_git_info()
+    _log_prompt_fingerprint()
     
     try:
         # Import and create the Flask application
