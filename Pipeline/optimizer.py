@@ -566,9 +566,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             + "\n\n" +
             f"Next step: prioritize credible evidence for {miss_show} (e.g., a concrete project, metric, or phrasing that maps to the JD)."
         )
-        # Ensure paragraph break renders on the front end
-        _BR = "<br/><br/>"
-        fit_summary = fit_summary.replace("\n\n", _BR)
+        # Keep raw paragraph breaks; frontend should render newlines (e.g., CSS white-space: pre-line)
         fit_summary_narrative = fit_summary
 
         # Optional: Generate a genuine multi-paragraph narrative with GPT
@@ -643,8 +641,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                     narrative_out = paragraphs[0]
                 else:
                     narrative_out = narrative
-                _BR = "<br/><br/>"
-                narrative_out = narrative_out.replace("\n\n", _BR)
+                # Keep raw paragraph breaks; frontend should render newlines (e.g., CSS white-space: pre-line)
                 fit_summary = narrative_out
                 fit_summary_narrative = narrative_out
         except Exception:
