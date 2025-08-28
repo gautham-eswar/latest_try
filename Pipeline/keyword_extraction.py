@@ -36,11 +36,16 @@ def extract_keywords(
     with open("Pipeline/prompts/extract_keywords.txt") as file:
         prompt_content = file.read()
         logger.info(f"Loaded prompt file, first 100 chars: {prompt_content[:100]}")
+        if "@job_description_text" not in prompt_content:
+            logger.error(f"Placeholder @job_description_text not found in prompt file!")
         user_prompt = prompt_content.replace("@job_description_text", job_description_text)
+        if "@job_description_text" in user_prompt:
+            logger.error(f"Placeholder replacement failed! @job_description_text still in prompt")
 
 
     # Log the input being sent (first 100 chars)
     logger.info(f"Sending JD to OpenAI: {job_description_text[:40]}...")
+    logger.info(f"User prompt (last 200 chars): ...{user_prompt[-200:]}")
     raw_result = call_openai_api(system_prompt, user_prompt, max_retries=max_retries)
 
     # Check if the response looks like JSON before trying to parse
