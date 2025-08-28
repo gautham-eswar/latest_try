@@ -1,42 +1,36 @@
 Extract relevant professional keywords from the job description. Follow these instructions EXACTLY:
 
-1) Identify terms across these categories (for guidance only; output is a flat list):
-   - Technical skills: tools, languages, platforms, frameworks (e.g., Python, SQL, Vertex AI, React, AWS)
-   - Domain knowledge: industry-specific concepts and primitives (e.g., zero-knowledge proofs, DeFi, on-chain analytics)
-   - Methodologies/processes: approaches and practices (e.g., A/B testing, agile, model evaluation)
-   - Job functions: specific product/technical activities (e.g., roadmap ownership, developer onboarding) — ONLY if phrased as skill/competency, not generic duties
-   - Qualifications: certifications or concrete credentials (e.g., PMP, CISSP). Exclude degrees/years of experience.
+**Step 1: Identify the Role.**
+- First, scan the job description to identify the specific job title (e.g., "Senior Customer Success Manager", "Software Engineer", "Product Manager").
+- Analyze the rest of the job description *through the lens of this specific role*. This context is critical for determining which keywords are most relevant.
 
-2) For EACH extracted keyword include these fields:
-   - "keyword": The most specific form (prefer multi-word phrases; max 5 words)
+**Step 2: Extract Keywords.**
+- Based on your analysis of the role, identify terms across these categories:
+   - **Technical & Domain Skills**: tools, languages, platforms, industry-specific knowledge (e.g., Python, SQL, Legal Tech, Contract Automation, B2B Enterprise).
+   - **Methodologies & Processes**: approaches and practices (e.g., A/B testing, Agile, Customer Onboarding, Relationship Management).
+   - **Job Functions & Responsibilities**: core activities phrased as a skill (e.g., roadmap ownership, stakeholder management, customer retention).
+   - **Qualifications**: certifications or concrete credentials (e.g., PMP, CISSP). Exclude degrees/years of experience.
+
+**Step 3: Format the Output.**
+- For EACH extracted keyword, you MUST provide these fields:
+   - "keyword": The most specific form (prefer multi-word phrases; max 5 words).
    - "context": The EXACT sentence directly from the JD where it appears. COPY VERBATIM.
      - Do NOT paraphrase, truncate, or summarize.
      - Do NOT use ellipses ("..." or "…").
-     - Prefer full sentence boundaries; if a short fragment is unavoidable, it must still be verbatim.
-   - "relevance_score": Importance on 0.1–1.0 scale (keep numeric float). Mapping:
-       1.0 = explicitly required/essential; 0.8–0.9 = clearly important; 0.6–0.7 = mentioned and relevant; 0.4–0.5 = nice-to-have; 0.1–0.3 = marginal
-   - "skill_type": "hard skill" for tools/technical knowledge/methodologies; "soft skill" for interpersonal/traits
+     - The context must be the full, real sentence.
+   - "relevance_score": Importance on 0.1–1.0 scale (float). 1.0 for required, 0.8-0.9 for highly important, 0.6-0.7 for relevant, 0.5 or less for nice-to-have.
+   - "skill_type": "hard skill" for tools/technical knowledge/methodologies; "soft skill" for interpersonal/traits.
 
-3) Expansion rules (apply strictly when present in the text):
-   - If a phrase includes parentheses or follows "including"/"such as", extract both the parent concept and each specific item.
-     Example: "cloud environments (AWS/Azure/GCP)" → "cloud environments", "AWS", "Azure", "GCP".
-     Example: "tools such as JIRA, Confluence" → "JIRA", "Confluence".
-
-4) Specificity rules:
-   - Prefer the most specific noun phrase (e.g., "zero-knowledge proofs" over "proofs").
-   - Keep acronyms and their expanded forms if both appear (e.g., ZK, ZKP, zero-knowledge proofs).
-
-5) Evidence rule:
-   - Every keyword MUST have direct textual evidence in "context". Do NOT infer terms not present in the JD.
-
-6) Noise control:
-   - Avoid generic soft skills unless explicitly emphasized as requirements.
-   - Do NOT include degrees or years of experience; certifications are allowed.
+**Additional Rules:**
+- **Expansion**: If a phrase includes parentheses or follows "including"/"such as", extract both the parent concept and each specific item.
+- **Specificity**: Prefer the most specific noun phrase.
+- **Evidence**: Every keyword's context MUST be present in the text.
+- **Noise Control**: Avoid generic soft skills unless explicitly emphasized.
 
 Return ONLY valid JSON with this shape:
 {
   "keywords": [
-    { "keyword": "Python", "context": "Experience with Python for...", "relevance_score": 0.9, "skill_type": "hard skill" }
+    { "keyword": "Customer Success", "context": "2+ years in customer success...", "relevance_score": 1.0, "skill_type": "hard skill" }
   ]
 }
 If no keywords are found, return {"keywords": []}.
