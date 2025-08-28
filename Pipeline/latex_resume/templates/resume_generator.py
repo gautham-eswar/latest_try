@@ -936,11 +936,12 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     if objective:
         doc_body_parts.append(_generate_objective_section(objective))
 
-    if education_list:
-        doc_body_parts.append(_generate_education_section(education_list))
-
+    # Order: Experience, then Education
     if experience_list:
         doc_body_parts.append(_generate_experience_section(experience_list, tech_skills, metrics))
+
+    if education_list:
+        doc_body_parts.append(_generate_education_section(education_list))
 
     if projects_list:
         doc_body_parts.append(_generate_projects_section(projects_list, tech_skills, metrics))
