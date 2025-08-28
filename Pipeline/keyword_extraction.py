@@ -34,7 +34,9 @@ def extract_keywords(
     # NOTE: Using the original prompt structure, not the simplified one with markers.
     # Added instruction for failure case.
     with open("Pipeline/prompts/extract_keywords.txt") as file:
-        user_prompt = file.read().replace("@job_description_txt", job_description_text)
+        prompt_content = file.read()
+        logger.info(f"Loaded prompt file, first 100 chars: {prompt_content[:100]}")
+        user_prompt = prompt_content.replace("@job_description_text", job_description_text)
 
 
     # Log the input being sent (first 100 chars)
