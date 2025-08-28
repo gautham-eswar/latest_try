@@ -663,7 +663,124 @@ class SemanticMatcher:
         # Final logging
         log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in final_skills_by_category.items()}
 
-        return final_skills_by_category, log_details
+        # --- Minimal post-processing: enforce category count and minimum size ---
+        consolidated, consolidation_log = self._consolidate_skill_categories(
+            final_skills_by_category, max_categories=7, min_per_category=3
+        )
+        log_details["consolidation"] = consolidation_log
+        log_details["final_skill_counts_by_category"] = {cat: len(sks) for cat, sks in consolidated.items()}
+
+        return consolidated, log_details
+
+    def _consolidate_skill_categories(
+        self,
+        skills_by_category: Dict[str, List[str]],
+        max_categories: int = 7,
+        min_per_category: int = 3,
+    ) -> Tuple[Dict[str, List[str]], List[Dict[str, Any]]]:
+        """
+        Ensure each category has at least `min_per_category` skills and the total number of
+        categories does not exceed `max_categories`. Small categories are merged into the
+        most similar existing category by name token overlap; if no reasonable similarity
+        is found, merge into the largest category.
+
+        Returns the consolidated dict and a log of consolidation operations.
+        """
+        # Defensive copy and deduplicate entries while preserving order per category
+        consolidated: Dict[str, List[str]] = {}
+        for cat, items in (skills_by_category or {}).items():
+            seen_lower: set = set()
+            ordered: List[str] = []
+            for s in items or []:
+                if not isinstance(s, str):
+                    continue
+                key = s.strip()
+                if not key:
+                    continue
+                low = key.lower()
+                if low in seen_lower:
+                    continue
+                seen_lower.add(low)
+                ordered.append(key)
+            consolidated[cat] = ordered
+
+        ops_log: List[Dict[str, Any]] = []
+
+        def _tokens(name: str) -> set:
+            import re
+            return set([t for t in re.split(r"[^a-z0-9+]+", (name or "").lower()) if t])
+
+        def _name_similarity(a: str, b: str) -> float:
+            ta, tb = _tokens(a), _tokens(b)
+            if not ta or not tb:
+                return 0.0
+            inter = len(ta.intersection(tb))
+            union = len(ta.union(tb)) or 1
+            return inter / union
+
+        def _merge_into(src_cat: str, dst_cat: str):
+            src_items = consolidated.get(src_cat, [])
+            dst_items = consolidated.get(dst_cat, [])
+            existing_lower = set([s.lower() for s in dst_items])
+            added = []
+            for s in src_items:
+                if s.lower() not in existing_lower:
+                    dst_items.append(s)
+                    existing_lower.add(s.lower())
+                    added.append(s)
+            consolidated[dst_cat] = dst_items
+            if src_cat in consolidated:
+                del consolidated[src_cat]
+            ops_log.append({
+                "action": "merge_category",
+                "from": src_cat,
+                "to": dst_cat,
+                "moved_skills": added,
+            })
+
+        # Step A: Merge categories below minimum size
+        changed = True
+        while changed:
+            changed = False
+            small_cats = [c for c, items in consolidated.items() if len(items) > 0 and len(items) < min_per_category]
+            for cat in small_cats:
+                candidates = [c for c in consolidated.keys() if c != cat]
+                if not candidates:
+                    continue
+                # Pick the most similar by name; fallback to largest category
+                best = None
+                best_sim = -1.0
+                for cand in candidates:
+                    sim = _name_similarity(cat, cand)
+                    if sim > best_sim:
+                        best = cand
+                        best_sim = sim
+                if best is None:
+                    # Fallback: largest category
+                    best = max(candidates, key=lambda c: len(consolidated.get(c, [])))
+                _merge_into(cat, best)
+                changed = True
+
+        # Step B: Enforce maximum number of categories
+        if len(consolidated) > max_categories:
+            # Keep largest categories; merge the rest into most similar kept category
+            kept = sorted(consolidated.keys(), key=lambda c: len(consolidated[c]), reverse=True)[:max_categories]
+            to_merge = [c for c in consolidated.keys() if c not in kept]
+            for cat in to_merge:
+                # Find most similar among kept
+                best = max(kept, key=lambda c: (_name_similarity(cat, c), len(consolidated[c])))
+                _merge_into(cat, best)
+
+        # Final safety: if any categories remain with < min, and there's another category, merge them
+        final_small = [c for c, items in consolidated.items() if len(items) > 0 and len(items) < min_per_category]
+        for cat in final_small:
+            candidates = [c for c in consolidated.keys() if c != cat]
+            if not candidates:
+                continue
+            best = max(candidates, key=lambda c: (_name_similarity(cat, c), len(consolidated[c])))
+            _merge_into(cat, best)
+
+        return consolidated, ops_log
 
     def get_embedding(self, text: str) -> List[float]:
         """
