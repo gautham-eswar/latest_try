@@ -274,8 +274,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 user_prompt_lines.append(", ".join(flat_skills[:20]))
             user_prompt_lines.append("")
             user_prompt_lines.append(
-                "Write ONE professional summary now that: is 1–2 sentences and ≤ 220 characters total; names up to 3 core strengths most relevant to the role; "
-                "is factual, avoids soft-skill fluff and first-person; avoids company names and unverifiable claims; outputs plain text only."
+                "Write ONE professional summary now that: is 1–2 sentences and ≤ 250 characters total; names up to 3 core strengths most align this candidate to the role; "
+                "is factual, avoids soft-skill fluff and first-person; avoids company names and unverifiable claims; if mentioning candidates career/role always go for the job description role;outputs plain text only."
             )
             user_prompt = "\n".join(user_prompt_lines)
             generated_summary = call_openai_api(system_prompt, user_prompt, max_retries=2)
@@ -287,10 +287,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 for prefix in ("Summary:", "Professional Summary:"):
                     if generated_summary.lower().startswith(prefix.lower()):
                         generated_summary = generated_summary[len(prefix):].strip()
-                # Enforce hard cap ~220 chars
-                if len(generated_summary) > 220:
-                    generated_summary = generated_summary[:217].rstrip() + "..."
-                # Inject into enhanced resume under objective
+                # Do not trim the generated summary; accept model output as-is
                 if generated_summary:
                     enhanced_resume_parsed["objective"] = generated_summary
         except Exception:
