@@ -813,10 +813,21 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     name = _ci_get(current_data_source, "name", default="") or personal_info_raw.get("name", "")
     name = name.upper()
     email = _ci_get(current_data_source, "email", default="") or personal_info_raw.get("email", "")
-    linkedin = _ci_get(current_data_source, "linkedin_url", "linkedin", "website/LinkedIn", default="") or personal_info_raw.get("linkedin", "") or personal_info_raw.get("website/LinkedIn", "")
+    # Prefer explicit fields; if only a combined 'website/LinkedIn' exists, route to the correct slot
+    linkedin = _ci_get(current_data_source, "linkedin_url", "linkedin", default="") or personal_info_raw.get("linkedin", "")
     github = _ci_get(current_data_source, "github_url", "github", default="") or personal_info_raw.get("github", "")
     phone = _ci_get(current_data_source, "phone", default="") or personal_info_raw.get("phone", "")
     website = _ci_get(current_data_source, "website", default="") or personal_info_raw.get("website", "")
+    combined_link = _ci_get(current_data_source, "website/LinkedIn", default="") or personal_info_raw.get("website/LinkedIn", "")
+    if combined_link and not (linkedin and website):
+        cl = str(combined_link).strip()
+        # Heuristic: if looks like LinkedIn, fill linkedin; else treat as website
+        if any(tok in cl.lower() for tok in ["linkedin.com", "/in/", "linkedin"]):
+            if not linkedin:
+                linkedin = cl
+        else:
+            if not website:
+                website = cl
 
     objective = _ci_get(current_data_source, "objective", "summary", "Summary/Objective", default=None)
 

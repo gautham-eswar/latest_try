@@ -466,7 +466,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "  \"initial_judgment\": <string>,\n"
                 "  \"enhanced_judgment\": <string>\n"
                 "} "
-                "Top-level \"initial\" and \"enhanced\" must be the total weighted scores (0–100) as integers. Penalize unverifiable claims; reward concrete, role-relevant evidence."
+                "Top-level \"initial\" and \"enhanced\" must be the total weighted scores (0–100) as integers. Penalize unverifiable claims; reward concrete, role-relevant evidence. "
+                "Before returning, take a holistic read of the JD and each resume; if your holistic estimate for either total differs by more than ±10 from your computed total, adjust that total within ±10 and then return JSON."
             )
             user_prompt = (
                 "JOB_DESCRIPTION:\n" + jd_excerpt + "\n\n" +
