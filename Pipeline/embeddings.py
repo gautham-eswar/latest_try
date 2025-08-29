@@ -273,8 +273,26 @@ class SemanticMatcher:
         for experience_idx, experience in enumerate(resume_data.get("Experience", [])):
             company = experience.get("company", "")
             position = experience.get("title", "")
-            
-            for bullet_idx, bullet in enumerate(experience.get("responsibilities/achievements", [])):
+
+            # Union possible bullet keys and normalize to a flat list of strings
+            raw_lists = [
+                experience.get("responsibilities/achievements", []),
+                experience.get("responsibilities", []),
+                experience.get("achievements", []),
+            ]
+            unified_bullets = []
+            for raw in raw_lists:
+                if not raw:
+                    continue
+                if isinstance(raw, str):
+                    if raw.strip():
+                        unified_bullets.append(raw.strip())
+                elif isinstance(raw, list):
+                    for item in raw:
+                        if isinstance(item, str) and item.strip():
+                            unified_bullets.append(item.strip())
+
+            for bullet_idx, bullet in enumerate(unified_bullets):
                 bullet_points.append({
                     "bullet_text": bullet,
                     "company": company,
@@ -283,7 +301,7 @@ class SemanticMatcher:
                     "experience_idx": experience_idx,
                     "bullet_idx": bullet_idx
                 })
-        
+ 
         # Could also extract from other sections like Projects if needed
         logger.debug(f"Extracted {len(bullet_points)} bullet points from resume.")
         return bullet_points
