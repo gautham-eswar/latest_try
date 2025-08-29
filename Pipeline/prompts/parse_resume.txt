@@ -1,3 +1,8 @@
+IMPORTANT: You MUST follow the specified data types.
+- 'Experience' MUST be a list of objects. Each object MUST have a 'responsibilities' key, which is a list of strings.
+- 'Skills' MUST be an object, where keys are categories and values are lists of strings.
+If a section is empty, return an empty list `[]` or an empty object `{}` as appropriate, but do not omit the key or change the data type.
+
 Parse the following resume text into a structured JSON format. Include the following sections:
 1. Personal Information (name, email, phone, location, website/LinkedIn)
 2. Summary/Objective
