@@ -65,8 +65,33 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
     logger.info(f"--- Stage 2/5: Extracting Keywords ---")
     keywords_data = extract_keywords(job_description_text)
     # Note: Removed strict post-evidence filtering to honor raw LLM extraction per updated spec.
+    try:
+        if keywords_data and isinstance(keywords_data.get("keywords"), list):
+            seen_keywords = set()
+            deduped_list = []
+            # Common job titles/roles to filter out
+            role_labels = {"business analyst", "product manager", "project manager", "consultant", "intern", "manager", "director"}
+            
+            for item in keywords_data["keywords"]:
+                if not isinstance(item, dict) or "keyword" not in item:
+                    continue
+                
+                keyword_norm = item["keyword"].strip().lower()
+                
+                # Skip if empty, already seen, or a role label
+                if not keyword_norm or keyword_norm in seen_keywords or keyword_norm in role_labels:
+                    continue
+                
+                seen_keywords.add(keyword_norm)
+                deduped_list.append(item)
+            
+            keywords_data["keywords"] = deduped_list
+    except Exception as e:
+        logger.warning(f"Keyword sanitization failed: {e}")
+        pass # Fallback to raw output on error
+
     kw_count = len((keywords_data or {}).get("keywords", []))
-    logger.info(f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords (no post-filter).")
+    logger.info(f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords (post-sanitization).")
     update_optimization_job(job_id, {
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
