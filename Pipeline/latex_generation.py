@@ -27,7 +27,7 @@ PROACTIVE_PDF_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 # Constants for page sizing
 DEFAULT_START_HEIGHT = 11.0  # Standard letter size
 DEFAULT_MIN_HEIGHT_INCHES = 11.0  # Default minimum page height (inches)
-MAX_HEIGHT_INCHES = 15.0  # Maximum page height (inches) before falling back to multi-page output
+MAX_HEIGHT_INCHES = 17.0  # Maximum page height (inches) before falling back to multi-page output
 MAX_ITERATIONS_PER_HEIGHT = 2 # Max recompilations for a given height if bibtex is needed.
 HEIGHT_INCREMENT_INCHES = 0.5  # Increment for trying different page heights
 
