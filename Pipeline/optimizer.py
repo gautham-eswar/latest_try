@@ -491,6 +491,18 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             if enhanced_score > max_enhanced_allowed:
                 enhanced_score = max_enhanced_allowed
 
+        # Floor extremely low initial scores when there is some concrete evidence overlap
+        try:
+            has_any_overlap = len(initial_present) > 0 and len(jd_hard) > 0
+            min_initial_floor = 30
+            if has_any_overlap and initial_score < min_initial_floor:
+                initial_score = min_initial_floor
+            # Ensure enhanced is not below initial for user clarity
+            if enhanced_score < initial_score:
+                enhanced_score = initial_score
+        except Exception:
+            pass
+
         fit_scores = {
             "initial": int(initial_score),
             "enhanced": int(enhanced_score),
