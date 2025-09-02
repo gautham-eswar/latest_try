@@ -64,32 +64,9 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
     # --- Stage: Keyword Extraction ---
     logger.info(f"--- Stage 2/5: Extracting Keywords ---")
     keywords_data = extract_keywords(job_description_text)
-    # Lightweight evidence filter: keep only items whose context appears in JD (case-insensitive)
-    try:
-        extracted_list = keywords_data.get("keywords", []) if isinstance(keywords_data, dict) else []
-        jd_lower = (job_description_text or "").lower()
-        filtered_list = []
-        for item in extracted_list:
-            if not isinstance(item, dict):
-                continue
-            ctx = str(item.get("context", "")).strip()
-            kw = str(item.get("keyword", "")).strip()
-            if not ctx:
-                continue
-            # Drop paraphrased/truncated contexts (ellipsis characters)
-            if "..." in ctx or "…" in ctx:
-                continue
-            if ctx.lower() in jd_lower:
-                # Optionally ensure keyword string is evidenced somewhere in JD
-                if not kw or kw.lower() in jd_lower or kw.lower() in ctx.lower():
-                    filtered_list.append(item)
-        if isinstance(keywords_data, dict):
-            keywords_data = {"keywords": filtered_list}
-    except Exception:
-        # On any error, fallback to raw output
-        pass
-    kw_count = len(keywords_data.get("keywords", []))
-    logger.info(f"Job {job_id}: Detailed keyword extraction (post-evidence filter) yielded {kw_count} keywords.")
+    # Note: Removed strict post-evidence filtering to honor raw LLM extraction per updated spec.
+    kw_count = len((keywords_data or {}).get("keywords", []))
+    logger.info(f"Job {job_id}: Detailed keyword extraction yielded {kw_count} keywords (no post-filter).")
     update_optimization_job(job_id, {
         "status": "Semantic Matching",
         "keywords_extracted": keywords_data,
