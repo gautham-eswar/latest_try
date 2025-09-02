@@ -670,12 +670,7 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
 
         # Persist to optimization_jobs for direct-link page loads
         try:
-            update_optimization_job(job_id, {
-                "fit_scores": fit_scores,
-                "fit_summary": fit_summary,
-                "fit_summary_narrative": fit_summary_narrative,
-            })
-            # Also mirror into analysis_data JSON to override any legacy long summaries
+            # Persist all analysis data into the 'analysis_data' JSON column
             try:
                 job_sel = db.table('optimization_jobs').select('analysis_data').eq('id', job_id).execute()
                 current_analysis = {}
