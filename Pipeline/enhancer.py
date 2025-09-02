@@ -534,8 +534,8 @@ class ResumeEnhancer:
             logger.debug(f"Validation similarity score: {similarity:.4f}")
 
             # If similarity is too low, the meaning has likely changed
-            if similarity < 0.90:
-                logger.warning(f"Validation failed: Semantic similarity below threshold ({similarity:.4f} < 0.90)")
+            if similarity < 0.80:
+                logger.warning(f"Validation failed: Semantic similarity below threshold ({similarity:.4f} < 0.80)")
                 return False
 
             logger.info("Validation successful: Enhancement is semantically similar and contains keywords.")

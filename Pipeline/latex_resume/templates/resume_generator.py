@@ -818,6 +818,8 @@ def generate_latex_content(data: Dict[str, Any], template_path: Optional[str] = 
     github = _ci_get(current_data_source, "github_url", "github", default="") or personal_info_raw.get("github", "")
     phone = _ci_get(current_data_source, "phone", default="") or personal_info_raw.get("phone", "")
     website = _ci_get(current_data_source, "website", default="") or personal_info_raw.get("website", "")
+    
+    # Handle combined website/LinkedIn field if individual fields are empty
     combined_link = _ci_get(current_data_source, "website/LinkedIn", default="") or personal_info_raw.get("website/LinkedIn", "")
     if combined_link and not (linkedin and website):
         cl = str(combined_link).strip()

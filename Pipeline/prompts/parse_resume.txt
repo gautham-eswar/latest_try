@@ -18,6 +18,8 @@ Parse the following resume text into a structured JSON format. Include the follo
     - employment_type (full-time, part-time, contract, internship)
     - dates (start_date, end_date or "Present") (If there's only one date, it's the end_date)
     - responsibilities/achievements (as an array of bullet points)
+    - For multi-line bullet points, merge them into a single coherent sentence. Do NOT treat them as separate bullets.
+    - Preserve the full, original text of each bullet point. Do NOT summarize, shorten, or alter them in any way.
 5. Education - For each entry, extract:
     - university (institution name)
     - location (city, state, country)
