@@ -618,7 +618,7 @@ class SemanticMatcher:
     def select_final_technical_skills(self,
                                      resume_skills_structured: Dict[str, Dict[str, Any]],
                                      categorized_jd_hard_skills: List[Dict[str, Any]],
-                                     overall_skill_limit: int = 35) -> Tuple[Dict[str, List[str]], Dict[str, Any]]:
+                                     overall_skill_limit: int = 30) -> Tuple[Dict[str, List[str]], Dict[str, Any]]:
         """
         Selects the final list of technical skills by preserving the original resume's skills
         and appending new, non-duplicate skills from the job description.
@@ -670,12 +670,30 @@ class SemanticMatcher:
                 "decision": f"Appended to category '{category}'.",
             })
 
-        # (Optional) Apply a simple cap to prevent excessive skill additions
-        total_skills = sum(len(skills) for skills in final_skills_by_category.values())
-        if total_skills > overall_skill_limit:
-            # This part could be enhanced with a more sophisticated trimming logic if needed,
-            # but for now, we'll just log it. A simple implementation could trim from the largest categories.
-            log_details["warning"] = f"Total skills ({total_skills}) exceeds limit ({overall_skill_limit}). Consider implementing trimming logic."
+        # Enforce overall cap by trimming newly added skills first, preserving originals
+        def _trim_to_limit(skills_by_cat: Dict[str, List[str]], limit: int) -> None:
+            nonlocal log_details
+            def _count_total() -> int:
+                return sum(len(v) for v in skills_by_cat.values())
+
+            # Priority order for trimming: Additional Technical Skills -> largest categories
+            while _count_total() > limit:
+                # 1) Try trimming from Additional Technical Skills
+                if "Additional Technical Skills" in skills_by_cat and skills_by_cat["Additional Technical Skills"]:
+                    removed = skills_by_cat["Additional Technical Skills"].pop()
+                    log_details.setdefault("trimmed", []).append({"from": "Additional Technical Skills", "removed": removed})
+                    continue
+
+                # 2) Trim from the currently largest category (excluding empty)
+                non_empty = [(c, len(v)) for c, v in skills_by_cat.items() if v]
+                if not non_empty:
+                    break
+                non_empty.sort(key=lambda x: x[1], reverse=True)
+                cat = non_empty[0][0]
+                removed = skills_by_cat[cat].pop()
+                log_details.setdefault("trimmed", []).append({"from": cat, "removed": removed})
+
+        _trim_to_limit(final_skills_by_category, overall_skill_limit)
 
 
         # Final logging
