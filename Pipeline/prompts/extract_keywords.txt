@@ -24,6 +24,7 @@ Your task is to perform a **comprehensive and thorough** extraction of all relev
    - Assign 1.0 only when the JD explicitly signals priority (e.g., “must”, “required”, appears in the job title, or is clearly central/repeated in responsibilities).
    - **"skill_type"**: Strictly "hard skill" (for teachable abilities, tools, domains) or "soft skill" (for interpersonal traits).
    - Soft skill examples: problem solving, written/verbal communication, presentation skills, attention to detail
+   - Resume suitability: Extract only items that belong in a resume as either a Skills entry or the core subject of a bullet point.
 
 - When a sentence lists items (comma-separated, colon-led, or in parentheses/‘including’/‘such as’), extract each specific item as a separate keyword with the same context.
 
