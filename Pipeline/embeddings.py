@@ -656,8 +656,38 @@ class SemanticMatcher:
                     "category_suggestion": jd_skill.get("assigned_category")
                 })
 
-        # 3. Append the new skills to their assigned categories.
-        for new_skill in new_skills_to_add:
+        # 3. Minimal plausibility filter using embedding similarity against existing resume skills
+        try:
+            resume_skill_embeddings: List[List[float]] = []
+            for _cat, data in (resume_skills_structured or {}).items():
+                for skill_info in data.get('skills', []) or []:
+                    emb = skill_info.get("embedding")
+                    if isinstance(emb, list):
+                        resume_skill_embeddings.append(emb)
+
+            def _max_similarity(vec: List[float]) -> float:
+                if not resume_skill_embeddings or not isinstance(vec, list):
+                    return 1.0  # If no baseline, allow pass-through
+                return max(self.cosine_similarity(vec, base) for base in resume_skill_embeddings)
+
+            plausible_threshold = 0.45
+            filtered_new_skills = []
+            for jd_skill in new_skills_to_add:
+                jd_emb = jd_skill.get("embedding")
+                score = _max_similarity(jd_emb)
+                if score >= plausible_threshold:
+                    filtered_new_skills.append(jd_skill)
+                else:
+                    log_details["skill_decisions"].append({
+                        "skill": jd_skill.get("keyword"),
+                        "decision": f"Excluded as implausible (similarity {score:.2f} < {plausible_threshold})."
+                    })
+        except Exception as _e:
+            # On any error, keep original list to avoid over-filtering
+            filtered_new_skills = list(new_skills_to_add)
+
+        # 4. Append the (filtered) new skills to their assigned categories.
+        for new_skill in filtered_new_skills:
             skill_name = new_skill["keyword"]
             category = new_skill.get("assigned_category", "New Skills")
             
@@ -669,6 +699,31 @@ class SemanticMatcher:
                 "skill": skill_name,
                 "decision": f"Appended to category '{category}'.",
             })
+
+        # 5. Enforce per-category cap (max 10). Prefer keeping original resume skills.
+        def _cap_per_category(skills_by_cat: Dict[str, List[str]], cap: int, originals_lower: Set[str]) -> None:
+            nonlocal log_details
+            for cat, items in list(skills_by_cat.items()):
+                if not isinstance(items, list):
+                    continue
+                # Remove JD-added skills first (those not in originals)
+                while len(items) > cap:
+                    # try to remove a JD-added skill from the end first
+                    removed_idx = None
+                    for idx in range(len(items)-1, -1, -1):
+                        if items[idx].strip().lower() not in originals_lower:
+                            removed_idx = idx
+                            break
+                    if removed_idx is None:
+                        # All are original; remove from end to meet cap
+                        removed_idx = len(items) - 1
+                    removed = items.pop(removed_idx)
+                    log_details.setdefault("trimmed_per_category", []).append({
+                        "category": cat,
+                        "removed": removed
+                    })
+
+        _cap_per_category(final_skills_by_category, cap=10, originals_lower=original_skill_names_lower)
 
         # Enforce overall cap by trimming newly added skills first, preserving originals
         def _trim_to_limit(skills_by_cat: Dict[str, List[str]], limit: int) -> None:
