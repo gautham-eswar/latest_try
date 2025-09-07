@@ -71,6 +71,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
             deduped_list = []
             # Common job titles/roles to filter out
             role_labels = {"business analyst", "product manager", "project manager", "consultant", "intern", "manager", "director"}
+            # Compensation and administrative terms to filter out
+            admin_terms = {"salary", "salary range", "compensation", "benefits", "401k", "insurance", "vacation", "pto", "paid time off", "stock options", "equity", "bonus"}
             
             for item in keywords_data["keywords"]:
                 if not isinstance(item, dict) or "keyword" not in item:
@@ -78,8 +80,8 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 
                 keyword_norm = item["keyword"].strip().lower()
                 
-                # Skip if empty, already seen, or a role label
-                if not keyword_norm or keyword_norm in seen_keywords or keyword_norm in role_labels:
+                # Skip if empty, already seen, a role label, or an admin term
+                if not keyword_norm or keyword_norm in seen_keywords or keyword_norm in role_labels or keyword_norm in admin_terms:
                     continue
                 
                 seen_keywords.add(keyword_norm)
@@ -423,6 +425,11 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
         # Ensure monotonicity: enhancement should not reduce matched coverage
         enhanced_present = enhanced_present | initial_present
 
+        # Debug logging for zero scores
+        logger.info(f"Job {job_id}: JD hard skills extracted: {list(jd_hard)[:10]}...")
+        logger.info(f"Job {job_id}: Skills found in initial resume: {list(initial_present)[:10]}...")
+        logger.info(f"Job {job_id}: Total JD skills: {len(jd_hard)}, Found in initial: {len(initial_present)}, Found in enhanced: {len(enhanced_present)}")
+
         denom = max(1, len(jd_hard))
         raw_initial_score = int(round(100 * len(initial_present) / denom))
         raw_enhanced_score = int(round(100 * len(enhanced_present) / denom))
@@ -479,30 +486,41 @@ def enhance_resume(job_id, resume_id, user_id, job_description_text, generate_su
                 "ENHANCED_RESUME_JSON:\n" + json.dumps(_shrink_resume(enhanced_resume_parsed), ensure_ascii=False) + "\n\n" +
                 "Scoring rules are fixed as specified. Output constraints: Strict JSON only, no markdown, no code fences."
             )
+            logger.info(f"Job {job_id}: Attempting GPT-based fit scoring...")
             gpt_resp = call_openai_api(system_prompt, user_prompt, max_retries=2)
             if isinstance(gpt_resp, str):
                 txt = gpt_resp.strip()
+                logger.info(f"Job {job_id}: GPT response received, length: {len(txt)} chars")
                 # Attempt direct JSON parse; fallback to extracting first JSON object
                 data = None
                 try:
                     data = json.loads(txt)
-                except Exception:
+                except Exception as e1:
+                    logger.warning(f"Job {job_id}: Direct JSON parse failed: {e1}")
                     import re as _re
                     m = _re.search(r"\{[\s\S]*\}", txt)
                     if m:
-                        data = json.loads(m.group(0))
+                        try:
+                            data = json.loads(m.group(0))
+                        except Exception as e2:
+                            logger.error(f"Job {job_id}: Regex JSON extraction failed: {e2}")
                 if isinstance(data, dict):
                     ini = int(data.get("initial", raw_initial_score))
                     enh = int(data.get("enhanced", raw_enhanced_score))
                     # Clamp 0–100
                     ini = max(0, min(100, ini))
                     enh = max(0, min(100, enh))
+                    logger.info(f"Job {job_id}: GPT scores - initial: {ini}, enhanced: {enh}")
                     initial_score, enhanced_score = ini, enh
                     gpt_sourced_scores = True
-        except Exception:
+                else:
+                    logger.warning(f"Job {job_id}: GPT response was not a valid dict")
+        except Exception as e:
+            logger.error(f"Job {job_id}: GPT scoring failed with exception: {e}")
             gpt_sourced_scores = False
 
         if not gpt_sourced_scores:
+            logger.warning(f"Job {job_id}: Falling back to heuristic scoring. Raw scores - initial: {raw_initial_score}, enhanced: {raw_enhanced_score}")
             # Heuristic fallback with present-term coverage and conservative display constraints
             # - Enhanced should typically show a 15%–50% improvement where feasible
             # - Enhanced must not exceed 90%

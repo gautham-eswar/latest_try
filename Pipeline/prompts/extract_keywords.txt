@@ -17,7 +17,7 @@ Your task is to perform a **comprehensive and thorough** extraction of all relev
 - For EACH extracted keyword, provide the following fields:
    - **"keyword"**: The most specific, canonical form of the skill (e.g., "Customer Onboarding," "Relationship Management"). Max 5 words.
    - Avoid job titles/role labels (e.g., "Senior Customer Success Manager") as keywords; prefer the underlying skill (e.g., "Customer success").
-   - Do NOT include degree labels or education levels as keywords (e.g., "Bachelor's degree", "Master's degree", "MBA", "PhD").
+   - STRICTLY EXCLUDE: salary information, compensation ranges, benefits, vacation policies, stock options, 401k, insurance, or any administrative/HR details. Only extract skills, tools, methodologies, and qualifications that belong on a resume.
    - **"context"**: The EXACT, VERBATIM sentence from the job description where the keyword appears. Do NOT paraphrase, shorten, or use ellipses (`...`).
    - The context sentence MUST contain the keyword string verbatim.
    - **"relevance_score"**: A float from 0.1 to 1.0, where 1.0 is a mandatory requirement.
